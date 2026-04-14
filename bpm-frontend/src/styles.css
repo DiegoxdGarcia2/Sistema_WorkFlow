@@ -1,8 +1,10 @@
-@import "tailwindcss";
-
 /* ─── BPM Dark Design System ─── */
-@theme {
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 /* ─── Scrollbar ─── */

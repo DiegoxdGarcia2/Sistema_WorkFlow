@@ -7,6 +7,11 @@ export const routes: Routes = [
     pathMatch: 'full',
   },
   {
+    path: 'admin',
+    loadComponent: () =>
+      import('./pages/admin/admin.component').then(m => m.AdminComponent),
+  },
+  {
     path: 'designer',
     loadComponent: () =>
       import('./pages/designer/designer.component').then(m => m.DesignerComponent),
