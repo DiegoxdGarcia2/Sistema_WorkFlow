@@ -1,0 +1,15 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: bpm-inteligente-core
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/bpm_db
+      auto-index-creation: true
+
+logging:
+  level:
+    com.bpm.inteligente: DEBUG
+    org.springframework.data.mongodb: INFO

@@ -1,0 +1,44 @@
+# ══════════════════════════════════════════════════════════════════
+# BPM Inteligente — .gitignore
+# ══════════════════════════════════════════════════════════════════
+
+# ── Contexto del agente IA (NUNCA versionar) ──
+.skills/
+AGENT.md
+mis cosas/
+
+# ── IDEs ──
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# ── Java / Spring Boot ──
+target/
+build/
+.gradle/
+*.class
+*.jar
+*.war
+
+# ── Node / Angular ──
+node_modules/
+dist/
+.angular/
+.cache/
+
+# ── Python / FastAPI ──
+.venv/
+__pycache__/
+*.pyc
+
+# ── Entornos ──
+.env
+*.env.local
+*.env.development.local
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+desktop.ini
