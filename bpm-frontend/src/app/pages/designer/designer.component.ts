@@ -1,12 +1,14 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { PoliticaService } from '../../services/politica.service';
 import { PoliticaDTO } from '../../models/bpm.models';
+import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-designer',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="flex h-[calc(100vh-4rem)]">
       <!-- Sidebar: Lista de Políticas -->
@@ -15,16 +17,21 @@ import { PoliticaDTO } from '../../models/bpm.models';
           <h2 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-4">
             Políticas de Negocio
           </h2>
+          <button (click)="mostrarModalCrear = true"
+                  class="w-full px-4 py-2.5 text-xs font-semibold text-white bg-gradient-to-r from-indigo-500 to-indigo-400 rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all mb-2">
+            + Crear Política
+          </button>
           <button (click)="cargarPoliticas()"
-                  class="w-full px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-indigo-500 to-indigo-400 rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all">
+                  class="w-full px-4 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all">
             🔄 Recargar
           </button>
         </div>
 
         @if (politicaService.politicas().length === 0) {
           <div class="text-center py-8">
+            <p class="text-4xl mb-3">📐</p>
             <p class="text-sm text-slate-500">No hay políticas creadas.</p>
-            <p class="text-xs text-slate-600 mt-1">Usa la API para crear una.</p>
+            <p class="text-xs text-slate-600 mt-1">Crea tu primer flujo de trabajo.</p>
           </div>
         }
 
@@ -44,7 +51,7 @@ import { PoliticaDTO } from '../../models/bpm.models';
               </span>
             </div>
             <p class="text-[11px] text-slate-500">
-              v{{ politica.version }} · {{ politica.calles.length }} calles · {{ politica.transiciones.length }} transiciones
+              v{{ politica.version }} · {{ politica.calles.length }} calles · {{ politica.transiciones.length }} trans.
             </p>
           </div>
         }
@@ -53,7 +60,6 @@ import { PoliticaDTO } from '../../models/bpm.models';
       <!-- Canvas principal -->
       <main class="flex-1 relative bg-slate-950">
         @if (politicaSeleccionada) {
-          <!-- Toolbar -->
           <div class="absolute top-0 left-0 right-0 z-10 border-b border-slate-800 bg-slate-950/80 backdrop-blur-xl px-6 py-3 flex items-center justify-between">
             <div class="flex items-center gap-3">
               <span class="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-sm font-semibold text-slate-200">
@@ -61,17 +67,8 @@ import { PoliticaDTO } from '../../models/bpm.models';
               </span>
               <span class="text-xs text-slate-500">v{{ politicaSeleccionada.version }}</span>
             </div>
-            <div class="flex gap-2">
-              <button class="px-3 py-1.5 text-xs font-semibold text-slate-400 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all">
-                Guardar
-              </button>
-              <button class="px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-indigo-500 to-indigo-400 rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all">
-                Publicar
-              </button>
-            </div>
           </div>
 
-          <!-- Grafo visual -->
           <div class="pt-16 p-8 h-full overflow-auto">
             <div class="grid gap-4">
               @for (calle of politicaSeleccionada.calles; track calle.id) {
@@ -92,12 +89,9 @@ import { PoliticaDTO } from '../../models/bpm.models';
               }
             </div>
 
-            <!-- Transiciones -->
             @if (politicaSeleccionada.transiciones.length > 0) {
               <div class="mt-6 rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
-                <h3 class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">
-                  🔗 Transiciones
-                </h3>
+                <h3 class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">🔗 Transiciones</h3>
                 <div class="space-y-2">
                   @for (t of politicaSeleccionada.transiciones; track t.id) {
                     <div class="flex items-center gap-2 text-xs text-slate-400">
@@ -110,9 +104,6 @@ import { PoliticaDTO } from '../../models/bpm.models';
                                      'bg-purple-500/10 text-purple-400'">
                         {{ t.tipoRuta }}
                       </span>
-                      @if (t.etiqueta) {
-                        <span class="text-slate-500 italic">{{ t.etiqueta }}</span>
-                      }
                     </div>
                   }
                 </div>
@@ -124,29 +115,82 @@ import { PoliticaDTO } from '../../models/bpm.models';
             <div class="text-center">
               <p class="text-4xl mb-4">🖱️</p>
               <p class="text-sm text-slate-500 font-medium">Selecciona una política de la barra lateral</p>
-              <p class="text-xs text-slate-600 mt-1">o crea una nueva desde la API</p>
+              <p class="text-xs text-slate-600 mt-1">o crea una nueva</p>
             </div>
           </div>
         }
       </main>
+
+      <!-- MODAL CREAR POLÍTICA -->
+      @if (mostrarModalCrear) {
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div class="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl p-6">
+            <h3 class="text-lg font-bold mb-4">Crear Nueva Política</h3>
+            @if (errorModal) {
+              <div class="mb-3 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{{ errorModal }}</div>
+            }
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1.5">Nombre</label>
+                <input [(ngModel)]="nuevaPolitica.nombre" placeholder="Ej. Aprobación de Créditos"
+                       class="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500 transition-all">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1.5">Descripción</label>
+                <textarea [(ngModel)]="nuevaPolitica.descripcion" rows="3" placeholder="Describe el flujo de trabajo..."
+                          class="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500 transition-all resize-none"></textarea>
+              </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+              <button (click)="mostrarModalCrear = false; errorModal = ''" class="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 rounded-xl hover:bg-slate-800 transition-all">Cancelar</button>
+              <button (click)="crearPolitica()" class="px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-indigo-400 rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all">Crear</button>
+            </div>
+          </div>
+        </div>
+      }
     </div>
   `,
 })
 export class DesignerComponent implements OnInit {
   politicaSeleccionada: PoliticaDTO | null = null;
+  mostrarModalCrear = false;
+  errorModal = '';
+  nuevaPolitica = { nombre: '', descripcion: '' };
 
-  constructor(public politicaService: PoliticaService) {}
+  constructor(public politicaService: PoliticaService, private auth: AuthService) {}
 
   ngOnInit(): void {
     this.cargarPoliticas();
   }
 
   cargarPoliticas(): void {
-    this.politicaService.listarPorTenant('tenant-demo-001').subscribe();
+    const tenantId = this.auth.usuario()?.tenantId;
+    if (tenantId) {
+      this.politicaService.listarPorTenant(tenantId).subscribe();
+    }
   }
 
   seleccionar(politica: PoliticaDTO): void {
     this.politicaSeleccionada = politica;
+  }
+
+  crearPolitica(): void {
+    this.errorModal = '';
+    const tenantId = this.auth.usuario()?.tenantId;
+    if (!tenantId) return;
+
+    this.politicaService.crear({
+      tenantId: tenantId,
+      nombre: this.nuevaPolitica.nombre,
+      descripcion: this.nuevaPolitica.descripcion,
+    }).subscribe({
+      next: () => {
+        this.mostrarModalCrear = false;
+        this.nuevaPolitica = { nombre: '', descripcion: '' };
+        this.cargarPoliticas();
+      },
+      error: (err) => this.errorModal = err.error?.message || 'Error al crear política.',
+    });
   }
 
   getActividadIcon(tipo: string): string {

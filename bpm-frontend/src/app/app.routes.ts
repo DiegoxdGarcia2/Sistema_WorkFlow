@@ -1,24 +1,29 @@
 import { Routes } from '@angular/router';
+import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
+  { path: '', redirectTo: 'login', pathMatch: 'full' },
   {
-    path: '',
-    redirectTo: 'funcionario',
-    pathMatch: 'full',
+    path: 'login',
+    loadComponent: () => import('./pages/login/login.component').then(m => m.LoginComponent),
+  },
+  {
+    path: 'registro',
+    loadComponent: () => import('./pages/register-tenant/register-tenant.component').then(m => m.RegisterTenantComponent),
   },
   {
     path: 'admin',
-    loadComponent: () =>
-      import('./pages/admin/admin.component').then(m => m.AdminComponent),
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/admin/admin.component').then(m => m.AdminComponent),
   },
   {
     path: 'designer',
-    loadComponent: () =>
-      import('./pages/designer/designer.component').then(m => m.DesignerComponent),
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/designer/designer.component').then(m => m.DesignerComponent),
   },
   {
     path: 'funcionario',
-    loadComponent: () =>
-      import('./pages/funcionario/funcionario.component').then(m => m.FuncionarioComponent),
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/funcionario/funcionario.component').then(m => m.FuncionarioComponent),
   },
 ];

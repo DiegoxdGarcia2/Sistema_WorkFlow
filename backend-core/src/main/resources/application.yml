@@ -6,7 +6,7 @@ spring:
     name: bpm-inteligente-core
   data:
     mongodb:
-      uri: mongodb+srv://diegogarciacab18_db_user:SrJEy1wMp7IxDpH2@sistemaworkflowdb.xbal0oe.mongodb.net/bpm_db?retryWrites=true&w=majority
+      uri: ${MONGO_URI}
       auto-index-creation: true
 
 logging:

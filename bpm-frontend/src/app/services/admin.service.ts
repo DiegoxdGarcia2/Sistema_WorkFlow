@@ -9,7 +9,7 @@ export interface TenantDTO {
   actualizadoEn: string;
 }
 
-export interface UsuarioDTO {
+export interface UsuarioListDTO {
   id: string;
   tenantId: string;
   nombre: string;
@@ -18,12 +18,19 @@ export interface UsuarioDTO {
   creadoEn: string;
 }
 
+export interface CrearUsuarioRequest {
+  nombre: string;
+  email: string;
+  password: string;
+  rol: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminService {
   private readonly baseUrl = 'http://localhost:8080/api';
 
   tenants = signal<TenantDTO[]>([]);
-  usuarios = signal<UsuarioDTO[]>([]);
+  usuarios = signal<UsuarioListDTO[]>([]);
 
   constructor(private http: HttpClient) {}
 
@@ -33,9 +40,13 @@ export class AdminService {
     );
   }
 
-  cargarUsuarios(tenantId: string): Observable<UsuarioDTO[]> {
-    return this.http.get<UsuarioDTO[]>(`${this.baseUrl}/usuarios/tenant/${tenantId}`).pipe(
+  cargarUsuarios(tenantId: string): Observable<UsuarioListDTO[]> {
+    return this.http.get<UsuarioListDTO[]>(`${this.baseUrl}/usuarios/tenant/${tenantId}`).pipe(
       tap(data => this.usuarios.set(data))
     );
+  }
+
+  crearUsuario(tenantId: string, req: CrearUsuarioRequest): Observable<UsuarioListDTO> {
+    return this.http.post<UsuarioListDTO>(`${this.baseUrl}/usuarios/tenant/${tenantId}`, req);
   }
 }
