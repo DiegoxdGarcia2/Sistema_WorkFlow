@@ -25,6 +25,9 @@ public class Usuario {
 
     private String tenantId;
     private String nombre;
+    private String apellido;
+    private String telefono;
+    private String cargo;
 
     @Indexed(unique = true)
     private String email;
@@ -33,5 +36,10 @@ public class Usuario {
     private RolUsuario rol;
 
     @Builder.Default
+    private boolean activo = true;
+
+    @Builder.Default
     private Instant creadoEn = Instant.now();
+
+    private Instant actualizadoEn;
 }

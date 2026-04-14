@@ -8,8 +8,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
@@ -30,11 +30,11 @@ public class PoliticaDTO {
     private int version;
     private boolean estaActiva;
 
-    @NotNull(message = "Las calles son obligatorias")
-    private List<Calle> calles;
+    @Builder.Default
+    private List<Calle> calles = new ArrayList<>();
 
-    @NotNull(message = "Las transiciones son obligatorias")
-    private List<Transicion> transiciones;
+    @Builder.Default
+    private List<Transicion> transiciones = new ArrayList<>();
 
     private Instant creadoEn;
     private Instant actualizadoEn;

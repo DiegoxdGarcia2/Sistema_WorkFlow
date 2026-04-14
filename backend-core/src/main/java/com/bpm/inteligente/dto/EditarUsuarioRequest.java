@@ -1,26 +1,24 @@
 package com.bpm.inteligente.dto;
 
 import com.bpm.inteligente.domain.enums.RolUsuario;
+import jakarta.validation.constraints.Email;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UsuarioDTO {
+public class EditarUsuarioRequest {
 
-    private String id;
-    private String tenantId;
-    private String tenantNombre;
     private String nombre;
     private String apellido;
+
+    @Email(message = "Email inválido")
     private String email;
+
     private String telefono;
     private String cargo;
     private RolUsuario rol;
-    private boolean activo;
-    private String creadoEn;
+    private Boolean activo;
 }

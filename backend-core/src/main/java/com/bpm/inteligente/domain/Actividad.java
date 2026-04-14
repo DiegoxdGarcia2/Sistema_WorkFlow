@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -18,4 +20,7 @@ public class Actividad {
     private boolean esInicial;
     private boolean esFinal;
     private int orden;
+
+    /** JSON Schema del formulario dinámico para esta actividad */
+    private Map<String, Object> esquemaFormulario;
 }

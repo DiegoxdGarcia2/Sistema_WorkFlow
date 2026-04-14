@@ -16,6 +16,7 @@ export interface Actividad {
   esInicial: boolean;
   esFinal: boolean;
   orden: number;
+  esquemaFormulario?: Record<string, any>;
 }
 
 export interface Calle {

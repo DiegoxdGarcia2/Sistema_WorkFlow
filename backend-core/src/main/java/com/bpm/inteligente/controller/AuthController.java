@@ -7,6 +7,7 @@ import com.bpm.inteligente.dto.*;
 import com.bpm.inteligente.exception.BusinessRuleException;
 import com.bpm.inteligente.repository.TenantRepository;
 import com.bpm.inteligente.repository.UsuarioRepository;
+import com.bpm.inteligente.service.AuditService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,6 +22,7 @@ public class AuthController {
 
     private final UsuarioRepository usuarioRepo;
     private final TenantRepository tenantRepo;
+    private final AuditService auditService;
 
     @PostMapping("/login")
     public UsuarioDTO login(@Valid @RequestBody LoginRequest request) {
@@ -31,16 +33,28 @@ public class AuthController {
             throw new BusinessRuleException("Credenciales inválidas.");
         }
 
+        if (!user.isActivo()) {
+            throw new BusinessRuleException("Su cuenta ha sido suspendida. Contacte al administrador.");
+        }
+
         String tenantNombre = tenantRepo.findById(user.getTenantId())
                 .map(Tenant::getNombre).orElse("Desconocido");
+
+        auditService.registrar(user.getTenantId(), user.getId(), user.getNombre(),
+                "LOGIN", "Usuario", user.getId(), "Inicio de sesión exitoso");
 
         return UsuarioDTO.builder()
                 .id(user.getId())
                 .tenantId(user.getTenantId())
                 .tenantNombre(tenantNombre)
                 .nombre(user.getNombre())
+                .apellido(user.getApellido())
                 .email(user.getEmail())
+                .telefono(user.getTelefono())
+                .cargo(user.getCargo())
                 .rol(user.getRol())
+                .activo(user.isActivo())
+                .creadoEn(user.getCreadoEn() != null ? user.getCreadoEn().toString() : null)
                 .build();
     }
 
@@ -65,6 +79,10 @@ public class AuthController {
                 .rol(RolUsuario.ADMINISTRADOR)
                 .build());
 
+        auditService.registrar(tenant.getId(), admin.getId(), admin.getNombre(),
+                "REGISTRO_EMPRESA", "Tenant", tenant.getId(),
+                "Registró empresa '" + tenant.getNombre() + "'");
+
         return UsuarioDTO.builder()
                 .id(admin.getId())
                 .tenantId(tenant.getId())
@@ -72,6 +90,7 @@ public class AuthController {
                 .nombre(admin.getNombre())
                 .email(admin.getEmail())
                 .rol(admin.getRol())
+                .activo(true)
                 .build();
     }
 }

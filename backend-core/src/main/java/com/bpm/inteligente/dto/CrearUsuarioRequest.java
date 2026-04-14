@@ -13,15 +13,21 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CrearUsuarioRequest {
 
-    @NotBlank
+    @NotBlank(message = "El nombre es obligatorio")
     private String nombre;
 
-    @NotBlank @Email
+    private String apellido;
+
+    @NotBlank(message = "El email es obligatorio")
+    @Email(message = "Email inválido")
     private String email;
 
-    @NotBlank
+    @NotBlank(message = "La contraseña es obligatoria")
     private String password;
 
-    @NotNull
+    private String telefono;
+    private String cargo;
+
+    @NotNull(message = "El rol es obligatorio")
     private RolUsuario rol;
 }
