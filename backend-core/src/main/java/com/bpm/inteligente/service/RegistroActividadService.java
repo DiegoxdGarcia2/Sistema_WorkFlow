@@ -98,10 +98,18 @@ public class RegistroActividadService {
     }
 
     /**
-     * Bandeja de tareas: obtener registros pendientes asignados a un funcionario.
+     * Bandeja de tareas: obtener registros PENDIENTE + EN_PROGRESO asignados a un funcionario.
      */
     public List<RegistroActividad> bandejaPendientes(String userId) {
-        return registroRepo.findByEjecutadoPorAndEstado(userId, EstadoRegistro.PENDIENTE);
+        return registroRepo.findByEjecutadoPorAndEstadoIn(
+                userId, List.of(EstadoRegistro.PENDIENTE, EstadoRegistro.EN_PROGRESO));
+    }
+
+    /**
+     * Tareas sin asignar en estado PENDIENTE (disponibles para cualquier funcionario del tenant).
+     */
+    public List<RegistroActividad> tareasNoAsignadas() {
+        return registroRepo.findByEjecutadoPorIsNullAndEstado(EstadoRegistro.PENDIENTE);
     }
 
     // ══════════════════════════════════════════════════════════════

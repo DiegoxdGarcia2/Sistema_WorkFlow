@@ -37,6 +37,10 @@ import { AuthService } from './services/auth.service';
                  class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all">
                 📋 Funcionario
               </a>
+              <a routerLink="/tracking" routerLinkActive="bg-sky-500/15 text-sky-400"
+                 class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all">
+                📍 Tracking
+              </a>
             </div>
             <div class="flex items-center gap-3">
               <div class="text-right">

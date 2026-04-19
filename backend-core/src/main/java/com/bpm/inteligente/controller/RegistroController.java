@@ -59,6 +59,13 @@ public class RegistroController {
                 .toList();
     }
 
+    @GetMapping("/sin-asignar")
+    public List<RegistroActividadDTO> tareasNoAsignadas() {
+        return registroService.tareasNoAsignadas().stream()
+                .map(r -> DomainMapper.toDTO(r, resolverNombreActividad(r)))
+                .toList();
+    }
+
     // ── Helper ──────────────────────────────────────────────────
 
     private String resolverNombreActividad(RegistroActividad registro) {

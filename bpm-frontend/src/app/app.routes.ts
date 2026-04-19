@@ -27,4 +27,13 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/funcionario/funcionario.component').then(m => m.FuncionarioComponent),
   },
+  // ── Portal del Cliente (público, sin autenticación) ──
+  {
+    path: 'tracking',
+    loadComponent: () => import('./pages/tracking/tracking.component').then(m => m.TrackingComponent),
+  },
+  {
+    path: 'tracking/:id',
+    loadComponent: () => import('./pages/tracking/tracking.component').then(m => m.TrackingComponent),
+  },
 ];

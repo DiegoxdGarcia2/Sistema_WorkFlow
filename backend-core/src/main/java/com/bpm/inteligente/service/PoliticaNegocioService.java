@@ -3,7 +3,9 @@ package com.bpm.inteligente.service;
 import com.bpm.inteligente.domain.Actividad;
 import com.bpm.inteligente.domain.Calle;
 import com.bpm.inteligente.domain.PoliticaNegocio;
+import com.bpm.inteligente.domain.Transicion;
 import com.bpm.inteligente.domain.enums.TipoActividad;
+import com.bpm.inteligente.domain.enums.TipoRuta;
 import com.bpm.inteligente.exception.BusinessRuleException;
 import com.bpm.inteligente.exception.ResourceNotFoundException;
 import com.bpm.inteligente.repository.PoliticaNegocioRepository;
@@ -13,7 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -23,8 +27,9 @@ public class PoliticaNegocioService {
     private final TenantRepository tenantRepo;
 
     /**
-     * Crea una nueva política validando existencia del tenant
-     * y coherencia mínima del grafo (al menos un INICIO y un FIN).
+     * Crea una nueva política. Si viene vacía (sin calles/actividades),
+     * auto-genera una estructura base con 1 calle, INICIO→FIN y 1 transición.
+     * La validación de grafo se aplica solo al ACTIVAR, no al crear.
      */
     @Transactional
     public PoliticaNegocio crear(PoliticaNegocio politica) {
@@ -33,7 +38,12 @@ public class PoliticaNegocioService {
             throw new ResourceNotFoundException("Tenant", "id", politica.getTenantId());
         }
 
-        // 2. Validar unicidad tenant + nombre + version
+        // 2. Auto-asignar versión si no viene
+        if (politica.getVersion() <= 0) {
+            politica.setVersion(1);
+        }
+
+        // 3. Validar unicidad tenant + nombre + version
         if (politicaRepo.existsByTenantIdAndNombreAndVersion(
                 politica.getTenantId(), politica.getNombre(), politica.getVersion())) {
             throw new BusinessRuleException(
@@ -41,8 +51,11 @@ public class PoliticaNegocioService {
                             politica.getNombre(), politica.getVersion()));
         }
 
-        // 3. Validar estructura del grafo
-        validarEstructuraGrafo(politica);
+        // 4. Auto-generar estructura base si viene vacía
+        if (politica.getCalles() == null || politica.getCalles().isEmpty() || 
+            politica.getCalles().stream().allMatch(c -> c.getActividades() == null || c.getActividades().isEmpty())) {
+            generarEstructuraBase(politica);
+        }
 
         politica.setCreadoEn(Instant.now());
         politica.setActualizadoEn(Instant.now());
@@ -66,9 +79,6 @@ public class PoliticaNegocioService {
         existente.setDescripcion(datosActualizados.getDescripcion());
         existente.setCalles(datosActualizados.getCalles());
         existente.setTransiciones(datosActualizados.getTransiciones());
-
-        validarEstructuraGrafo(existente);
-
         existente.setActualizadoEn(Instant.now());
         return politicaRepo.save(existente);
     }
@@ -86,6 +96,18 @@ public class PoliticaNegocioService {
         return politicaRepo.save(politica);
     }
 
+    /**
+     * Elimina una política que NO esté activa.
+     */
+    @Transactional
+    public void eliminar(String politicaId) {
+        PoliticaNegocio politica = buscarPorId(politicaId);
+        if (politica.isEstaActiva()) {
+            throw new BusinessRuleException("No se puede eliminar una política activa.");
+        }
+        politicaRepo.deleteById(politicaId);
+    }
+
     public PoliticaNegocio buscarPorId(String id) {
         return politicaRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("PoliticaNegocio", "id", id));
@@ -100,6 +122,46 @@ public class PoliticaNegocioService {
     }
 
     // ── Helpers privados ─────────────────────────────────────────
+
+    /**
+     * Auto-genera una estructura mínima válida: 1 calle con INICIO→FIN.
+     */
+    private void generarEstructuraBase(PoliticaNegocio politica) {
+        String inicioId = UUID.randomUUID().toString();
+        String finId = UUID.randomUUID().toString();
+
+        Actividad inicio = Actividad.builder()
+                .id(inicioId)
+                .nombre("Inicio del Proceso")
+                .tipo(TipoActividad.INICIO)
+                .esInicial(true).esFinal(false).orden(0)
+                .build();
+
+        Actividad fin = Actividad.builder()
+                .id(finId)
+                .nombre("Fin del Proceso")
+                .tipo(TipoActividad.FIN)
+                .esInicial(false).esFinal(true).orden(1)
+                .build();
+
+        Calle calleGeneral = Calle.builder()
+                .id(UUID.randomUUID().toString())
+                .nombre("General")
+                .orden(0)
+                .actividades(new ArrayList<>(List.of(inicio, fin)))
+                .build();
+
+        Transicion transicion = Transicion.builder()
+                .id(UUID.randomUUID().toString())
+                .origenId(inicioId)
+                .destinoId(finId)
+                .tipoRuta(TipoRuta.SECUENCIAL)
+                .prioridad(0)
+                .build();
+
+        politica.setCalles(new ArrayList<>(List.of(calleGeneral)));
+        politica.setTransiciones(new ArrayList<>(List.of(transicion)));
+    }
 
     /**
      * Valida que el grafo tenga al menos un nodo INICIO y un nodo FIN.

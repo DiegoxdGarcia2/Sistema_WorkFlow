@@ -6,7 +6,7 @@ spring:
     name: bpm-inteligente-core
   data:
     mongodb:
-      uri: ${MONGO_URI}
+      uri: ${MONGO_URI:mongodb://localhost:27017/bpm_inteligente}
       auto-index-creation: true
 
 logging:

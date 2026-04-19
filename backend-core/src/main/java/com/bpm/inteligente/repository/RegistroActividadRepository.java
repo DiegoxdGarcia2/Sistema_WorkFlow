@@ -13,4 +13,10 @@ public interface RegistroActividadRepository extends MongoRepository<RegistroAct
     List<RegistroActividad> findByTramiteIdAndEstado(String tramiteId, EstadoRegistro estado);
 
     List<RegistroActividad> findByEjecutadoPorAndEstado(String ejecutadoPor, EstadoRegistro estado);
+
+    /** Tareas asignadas a un usuario en múltiples estados */
+    List<RegistroActividad> findByEjecutadoPorAndEstadoIn(String ejecutadoPor, List<EstadoRegistro> estados);
+
+    /** Tareas sin asignar (ejecutadoPor == null) en un estado específico */
+    List<RegistroActividad> findByEjecutadoPorIsNullAndEstado(EstadoRegistro estado);
 }

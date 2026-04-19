@@ -36,6 +36,12 @@ public class PoliticaController {
         return DomainMapper.toDTO(politicaService.activar(id));
     }
 
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void eliminar(@PathVariable String id) {
+        politicaService.eliminar(id);
+    }
+
     @GetMapping("/{id}")
     public PoliticaDTO buscarPorId(@PathVariable String id) {
         return DomainMapper.toDTO(politicaService.buscarPorId(id));

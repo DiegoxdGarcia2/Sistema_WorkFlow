@@ -6,6 +6,7 @@ import {
   RegistroActividadDTO,
   IniciarTramiteRequest,
   CompletarTareaRequest,
+  TrackingDTO,
 } from '../models/bpm.models';
 
 @Injectable({ providedIn: 'root' })
@@ -62,5 +63,21 @@ export class WorkflowService {
     return this.http
       .patch<RegistroActividadDTO>(`${this.registrosUrl}/completar`, request)
       .pipe(tap(() => this.cargarBandejaPendientes(userId).subscribe()));
+  }
+
+  // ── Portal del Cliente: Tracking ────────────────────────────
+
+  getTracking(tramiteId: string): Observable<TrackingDTO> {
+    return this.http.get<TrackingDTO>(`${this.tramitesUrl}/${tramiteId}/tracking`);
+  }
+
+  // ── Tareas sin asignar (para cualquier funcionario) ─────────
+
+  tareasNoAsignadas = signal<RegistroActividadDTO[]>([]);
+
+  cargarTareasNoAsignadas(): Observable<RegistroActividadDTO[]> {
+    return this.http
+      .get<RegistroActividadDTO[]>(`${this.registrosUrl}/sin-asignar`)
+      .pipe(tap(data => this.tareasNoAsignadas.set(data)));
   }
 }

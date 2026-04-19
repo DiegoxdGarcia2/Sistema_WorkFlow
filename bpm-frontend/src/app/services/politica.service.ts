@@ -37,4 +37,8 @@ export class PoliticaService {
   activar(id: string): Observable<PoliticaDTO> {
     return this.http.patch<PoliticaDTO>(`${this.baseUrl}/${id}/activar`, {});
   }
+
+  eliminar(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/${id}`);
+  }
 }

@@ -87,3 +87,21 @@ export interface CompletarTareaRequest {
   datosFormulario: Record<string, any>;
   notas: string;
 }
+
+// ── Tracking (Portal del Cliente) ──
+
+export interface PasoTimeline {
+  registroId: string;
+  actividadNombre: string;
+  calleNombre: string;
+  estado: string;
+  ejecutadoPor: string | null;
+  notas: string;
+  asignadoEn: string | null;
+  completadoEn: string | null;
+}
+
+export interface TrackingDTO {
+  tramite: TramiteDTO;
+  timeline: PasoTimeline[];
+}
