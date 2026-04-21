@@ -1,15 +1,18 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './guards/auth.guard';
 import { roleGuard } from './guards/role.guard';
+import { loggedInGuard } from './guards/logged-in.guard';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'login', pathMatch: 'full' },
   {
     path: 'login',
+    canActivate: [loggedInGuard],
     loadComponent: () => import('./pages/login/login.component').then(m => m.LoginComponent),
   },
   {
     path: 'registro',
+    canActivate: [loggedInGuard],
     loadComponent: () => import('./pages/register-tenant/register-tenant.component').then(m => m.RegisterTenantComponent),
   },
   {
