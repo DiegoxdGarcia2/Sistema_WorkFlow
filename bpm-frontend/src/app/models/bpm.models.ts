@@ -17,12 +17,24 @@ export interface Actividad {
   esFinal: boolean;
   orden: number;
   esquemaFormulario?: Record<string, any>;
+
+  // Estilo visual
+  color?: string;
+  descripcion?: string;
+  ancho?: number;
+  alto?: number;
+  fontSize?: 'sm' | 'md' | 'lg';
+
+  // Posición en canvas
+  posX?: number;
+  posY?: number;
 }
 
 export interface Calle {
   id: string;
   nombre: string;
   orden: number;
+  color?: string;
   actividades: Actividad[];
 }
 
@@ -34,6 +46,11 @@ export interface Transicion {
   condicion: string;
   etiqueta: string;
   prioridad: number;
+
+  // Estilo visual
+  color?: string;
+  tipoLinea?: 'solida' | 'punteada' | 'discontinua';
+  grosor?: number;
 }
 
 // ── DTOs (coinciden con backend) ──
@@ -41,12 +58,25 @@ export interface Transicion {
 export interface PoliticaDTO {
   id: string;
   tenantId: string;
+  proyectoId?: string;
   nombre: string;
   descripcion: string;
   version: number;
   estaActiva: boolean;
   calles: Calle[];
   transiciones: Transicion[];
+  creadoEn: string;
+  actualizadoEn: string;
+}
+
+export interface ProyectoDTO {
+  id: string;
+  tenantId: string;
+  nombre: string;
+  descripcion: string;
+  color: string;
+  responsable: string;
+  estado: 'ACTIVO' | 'ARCHIVADO';
   creadoEn: string;
   actualizadoEn: string;
 }

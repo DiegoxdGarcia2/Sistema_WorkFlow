@@ -25,4 +25,14 @@ public class Transicion {
 
     @Builder.Default
     private int prioridad = 0;
+
+    /** Estilo visual de la conexión */
+    @Builder.Default
+    private String color = "#475569";
+
+    @Builder.Default
+    private String tipoLinea = "solida"; // "solida", "punteada", "discontinua"
+
+    @Builder.Default
+    private int grosor = 2;
 }

@@ -23,6 +23,8 @@ public class PoliticaDTO {
     @NotBlank(message = "El tenantId es obligatorio")
     private String tenantId;
 
+    private String proyectoId;
+
     @NotBlank(message = "El nombre es obligatorio")
     private String nombre;
 

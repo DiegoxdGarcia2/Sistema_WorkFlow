@@ -1,0 +1,197 @@
+/* ══════════════════════════════════════════════════════════════
+   BPM Designer — Professional Canvas Styles v2
+   ══════════════════════════════════════════════════════════════ */
+
+:host { display: block; height: calc(100vh - 4rem); }
+
+/* ── Canvas ── */
+.dot-grid {
+  background-image: radial-gradient(circle, #334155 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-color: #020617;
+}
+
+/* ── Lanes (Table/Grid style) ── */
+.lane-bg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transition: background-color 0.25s ease, border-color 0.25s ease;
+  pointer-events: none;
+  border-right: 2px solid rgba(51, 65, 85, 0.5);
+  border-left: 2px solid rgba(51, 65, 85, 0.5);
+}
+.lane-bg:not(:first-child) { border-left: none; }
+.lane-bg .lane-fill {
+  position: absolute;
+  inset: 0;
+  opacity: 0.06;
+}
+.lane-bg.drop-target {
+  border-color: rgba(99, 102, 241, 0.5);
+}
+.lane-bg.drop-target .lane-fill { opacity: 0.12; }
+
+/* Lane header row (table-header style) */
+.lane-header-row {
+  display: flex;
+  position: sticky;
+  top: 52px;
+  z-index: 15;
+  border-bottom: 2px solid rgba(51, 65, 85, 0.5);
+  background: rgba(2, 6, 23, 0.92);
+  backdrop-filter: blur(16px);
+}
+.lane-header-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-right: 2px solid rgba(51, 65, 85, 0.5);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.lane-header-cell:first-child { border-left: 2px solid rgba(51, 65, 85, 0.5); }
+.lane-header-cell:hover { background: rgba(51, 65, 85, 0.15); }
+.lane-header-cell.active { background: rgba(99, 102, 241, 0.08); }
+
+/* ── Node Cards ── */
+.node-card {
+  position: absolute;
+  cursor: grab;
+  user-select: none;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+.node-card:active { cursor: grabbing; }
+.node-card:hover { transform: scale(1.02); }
+.node-card.dragging { opacity: 0.85; z-index: 50 !important; transform: scale(1.04); }
+.node-card.selected {
+  border-color: rgba(99, 102, 241, 0.6) !important;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.15), 0 0 40px rgba(99, 102, 241, 0.06);
+}
+.node-card.conn-source {
+  border-color: rgba(16, 185, 129, 0.6) !important;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
+}
+
+/* ── Connection Handles (top/bottom) ── */
+.node-handle {
+  width: 11px; height: 11px; border-radius: 50%;
+  position: absolute; left: 50%; transform: translateX(-50%);
+  border: 2px solid #475569; background: #1e293b;
+  transition: all 0.15s ease; z-index: 3;
+  cursor: crosshair; opacity: 0;
+}
+.node-handle-top { top: -6px; }
+.node-handle-bottom { bottom: -6px; }
+.node-card:hover .node-handle,
+.node-card.selected .node-handle { opacity: 1; }
+.node-handle:hover {
+  border-color: #818cf8; background: #312e81;
+  box-shadow: 0 0 8px rgba(129, 140, 248, 0.5);
+  transform: translateX(-50%) scale(1.3);
+}
+
+/* ── SVG Connections ── */
+.conn-hit {
+  stroke: transparent; stroke-width: 18;
+  fill: none; cursor: pointer; pointer-events: stroke;
+}
+.conn-path {
+  fill: none; pointer-events: none;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+}
+.conn-path.conn-selected {
+  filter: drop-shadow(0 0 6px rgba(129, 140, 248, 0.4));
+}
+
+/* ── Connection Mode ── */
+.canvas-connection-mode { cursor: crosshair !important; }
+.canvas-connection-mode .node-card { cursor: crosshair !important; }
+.temp-conn-line {
+  stroke: #818cf8; stroke-width: 2;
+  stroke-dasharray: 8 4; fill: none;
+  pointer-events: none; opacity: 0.7;
+}
+
+/* ── Properties Tabs ── */
+.tab-btn {
+  padding: 6px 12px; font-size: 11px; font-weight: 600;
+  border-radius: 8px; transition: all 0.15s ease;
+  color: #64748b; background: transparent;
+  border: 1px solid transparent; cursor: pointer;
+}
+.tab-btn:hover { color: #94a3b8; background: rgba(51, 65, 85, 0.3); }
+.tab-btn.active {
+  color: #c7d2fe; background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+/* ── Toolbox ── */
+.toolbox-item {
+  transition: all 0.15s ease; cursor: pointer;
+}
+.toolbox-item:hover {
+  transform: translateX(4px);
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+/* ── Toast ── */
+.toast { animation: slideIn 0.3s ease; }
+@keyframes slideIn {
+  from { transform: translate(-50%, -20px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+/* ── Scrollbar ── */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Color swatch ── */
+.color-swatch {
+  width: 28px; height: 28px; border-radius: 8px;
+  cursor: pointer; transition: all 0.15s ease;
+  border: 2px solid transparent;
+}
+.color-swatch:hover { transform: scale(1.15); }
+.color-swatch.active {
+  border-color: white;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5);
+  transform: scale(1.15);
+}
+
+/* ── Range Slider ── */
+input[type="range"] {
+  -webkit-appearance: none; width: 100%; height: 6px;
+  border-radius: 3px; background: #1e293b; outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px;
+  border-radius: 50%; background: #818cf8; cursor: pointer;
+  border: 2px solid #020617;
+}
+
+/* ── Save status indicator ── */
+.save-indicator {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 600;
+  padding: 4px 10px; border-radius: 8px;
+  transition: all 0.3s ease;
+}
+.save-indicator.saving { color: #fbbf24; }
+.save-indicator.saved { color: #34d399; }
+
+/* ── Panel section divider ── */
+.panel-section {
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+}
+.panel-section-title {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #475569;
+  margin-bottom: 8px;
+}

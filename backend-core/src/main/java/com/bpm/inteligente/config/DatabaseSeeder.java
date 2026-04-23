@@ -28,6 +28,7 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final TramiteService tramiteService;
     private final RegistroActividadService registroService;
     private final RegistroActividadRepository registroRepo;
+    private final ProyectoRepository proyectoRepo;
 
     @Override
     public void run(String... args) {
@@ -58,19 +59,28 @@ public class DatabaseSeeder implements CommandLineRunner {
         Usuario clienteCre2 = crearUsuario(cre.getId(), "Laura Torres", "laura@gmail.com", "cliente123", RolUsuario.CLIENTE);
         log.info("✅ CRE: 8 usuarios creados");
 
+        // ── Proyecto CRE ──
+        Proyecto proyectoCre = proyectoRepo.save(Proyecto.builder()
+                .id(uid()).tenantId(cre.getId()).nombre("Servicios Eléctricos")
+                .descripcion("Procesos de gestión de servicios eléctricos")
+                .estado("ACTIVO").responsable(disenadorCre.getNombre())
+                .creadoEn(Instant.now()).actualizadoEn(Instant.now())
+                .build());
+        log.info("✅ Proyecto '{}' creado", proyectoCre.getNombre());
+
         // ── Política 1: Instalación de Medidor (compleja, con FORK/JOIN) ──
-        PoliticaNegocio p1 = crearPoliticaInstalacionMedidor(cre.getId());
+        PoliticaNegocio p1 = crearPoliticaInstalacionMedidor(cre.getId(), proyectoCre.getId());
         log.info("✅ Política '{}' creada con {} calles, {} nodos, {} transiciones",
                 p1.getNombre(), p1.getCalles().size(),
                 p1.getCalles().stream().mapToInt(c -> c.getActividades().size()).sum(),
                 p1.getTransiciones().size());
 
         // ── Política 2: Reclamo por Facturación ──
-        PoliticaNegocio p2 = crearPoliticaReclamo(cre.getId());
+        PoliticaNegocio p2 = crearPoliticaReclamo(cre.getId(), proyectoCre.getId());
         log.info("✅ Política '{}' creada y activada", p2.getNombre());
 
         // ── Política 3: Cambio de Titular (borrador) ──
-        PoliticaNegocio p3 = crearPoliticaCambioTitular(cre.getId());
+        PoliticaNegocio p3 = crearPoliticaCambioTitular(cre.getId(), proyectoCre.getId());
         log.info("✅ Política '{}' creada como borrador", p3.getNombre());
 
         // ── Trámites con datos realistas ──
@@ -158,16 +168,24 @@ public class DatabaseSeeder implements CommandLineRunner {
         Usuario clienteBanco3 = crearUsuario(banco.getId(), "Mateo Gutiérrez", "mateo@gmail.com", "cliente123", RolUsuario.CLIENTE);
         log.info("✅ BND: 8 usuarios creados");
 
+        // ── Proyecto Banco ──
+        Proyecto proyectoBanco = proyectoRepo.save(Proyecto.builder()
+                .id(uid()).tenantId(banco.getId()).nombre("Productos Financieros")
+                .descripcion("Procesos de productos financieros del banco")
+                .estado("ACTIVO").responsable(disenadorBanco.getNombre())
+                .creadoEn(Instant.now()).actualizadoEn(Instant.now())
+                .build());
+
         // ── Política 4: Aprobación de Crédito Personal ──
-        PoliticaNegocio p4 = crearPoliticaCredito(banco.getId());
+        PoliticaNegocio p4 = crearPoliticaCredito(banco.getId(), proyectoBanco.getId());
         log.info("✅ Política '{}' creada y activada", p4.getNombre());
 
         // ── Política 5: Apertura de Cuenta Empresarial ──
-        PoliticaNegocio p5 = crearPoliticaCuentaEmpresarial(banco.getId());
+        PoliticaNegocio p5 = crearPoliticaCuentaEmpresarial(banco.getId(), proyectoBanco.getId());
         log.info("✅ Política '{}' creada y activada", p5.getNombre());
 
         // ── Política 6: Solicitud de Tarjeta de Crédito (borrador) ──
-        PoliticaNegocio p6 = crearPoliticaTarjeta(banco.getId());
+        PoliticaNegocio p6 = crearPoliticaTarjeta(banco.getId(), proyectoBanco.getId());
         log.info("✅ Política '{}' creada como borrador", p6.getNombre());
 
         // Trámites Banco
@@ -222,24 +240,24 @@ public class DatabaseSeeder implements CommandLineRunner {
     // FACTORIES DE POLÍTICAS
     // ══════════════════════════════════════════════════════════════
 
-    private PoliticaNegocio crearPoliticaInstalacionMedidor(String tenantId) {
+    private PoliticaNegocio crearPoliticaInstalacionMedidor(String tenantId, String proyectoId) {
         String a1 = uid(), a2 = uid(), a3 = uid(), a4 = uid(), a5 = uid(), a6 = uid();
 
         return politicaRepo.save(PoliticaNegocio.builder()
-                .id(uid()).tenantId(tenantId)
+                .id(uid()).tenantId(tenantId).proyectoId(proyectoId)
                 .nombre("Instalación de Medidor Eléctrico")
                 .descripcion("Flujo completo para la instalación de un nuevo medidor eléctrico residencial o comercial, incluyendo inspección técnica y facturación.")
                 .version(1).estaActiva(true)
                 .calles(List.of(
-                        calle("Atención al Cliente", 0, List.of(
+                        calle("Atención al Cliente", 0, "#6366f1", List.of(
                                 actividad(a1, "Recepción de Solicitud", TipoActividad.INICIO, true, false, 0),
                                 actividad(a6, "Entrega de Medidor", TipoActividad.FIN, false, true, 1)
                         )),
-                        calle("Departamento Técnico", 1, List.of(
+                        calle("Departamento Técnico", 1, "#22c55e", List.of(
                                 actividad(a2, "Inspección de Terreno", TipoActividad.TAREA, false, false, 0),
                                 actividad(a3, "Evaluación Técnica", TipoActividad.DECISION, false, false, 1)
                         )),
-                        calle("Finanzas", 2, List.of(
+                        calle("Finanzas", 2, "#f97316", List.of(
                                 actividad(a4, "Cálculo de Presupuesto", TipoActividad.TAREA, false, false, 0),
                                 actividad(a5, "Emisión de Factura", TipoActividad.TAREA, false, false, 1)
                         ))
@@ -255,23 +273,23 @@ public class DatabaseSeeder implements CommandLineRunner {
                 .build());
     }
 
-    private PoliticaNegocio crearPoliticaReclamo(String tenantId) {
+    private PoliticaNegocio crearPoliticaReclamo(String tenantId, String proyectoId) {
         String a1 = uid(), a2 = uid(), a3 = uid(), a4 = uid();
 
         return politicaRepo.save(PoliticaNegocio.builder()
-                .id(uid()).tenantId(tenantId)
+                .id(uid()).tenantId(tenantId).proyectoId(proyectoId)
                 .nombre("Reclamo por Facturación")
                 .descripcion("Proceso para gestionar reclamos de clientes por errores o inconformidades en su factura mensual de electricidad.")
                 .version(1).estaActiva(true)
                 .calles(List.of(
-                        calle("Mesa de Partes", 0, List.of(
+                        calle("Mesa de Partes", 0, "#8b5cf6", List.of(
                                 actividad(a1, "Registro del Reclamo", TipoActividad.INICIO, true, false, 0)
                         )),
-                        calle("Back Office Comercial", 1, List.of(
+                        calle("Back Office Comercial", 1, "#06b6d4", List.of(
                                 actividad(a2, "Investigación de Consumo", TipoActividad.TAREA, false, false, 0),
                                 actividad(a3, "Resolución y Respuesta", TipoActividad.TAREA, false, false, 1)
                         )),
-                        calle("Atención al Cliente", 2, List.of(
+                        calle("Atención al Cliente", 2, "#22c55e", List.of(
                                 actividad(a4, "Notificación al Cliente", TipoActividad.FIN, false, true, 0)
                         ))
                 ))
@@ -283,22 +301,22 @@ public class DatabaseSeeder implements CommandLineRunner {
                 .build());
     }
 
-    private PoliticaNegocio crearPoliticaCambioTitular(String tenantId) {
+    private PoliticaNegocio crearPoliticaCambioTitular(String tenantId, String proyectoId) {
         String a1 = uid(), a2 = uid(), a3 = uid();
 
         return politicaRepo.save(PoliticaNegocio.builder()
-                .id(uid()).tenantId(tenantId)
+                .id(uid()).tenantId(tenantId).proyectoId(proyectoId)
                 .nombre("Cambio de Titular de Servicio")
                 .descripcion("Proceso para transferir la titularidad de un servicio eléctrico de un cliente a otro.")
-                .version(1).estaActiva(false) // BORRADOR
+                .version(1).estaActiva(false)
                 .calles(List.of(
-                        calle("Ventanilla", 0, List.of(
+                        calle("Ventanilla", 0, "#f97316", List.of(
                                 actividad(a1, "Recepción de Documentos", TipoActividad.INICIO, true, false, 0)
                         )),
-                        calle("Legal", 1, List.of(
+                        calle("Legal", 1, "#e11d48", List.of(
                                 actividad(a2, "Verificación Legal", TipoActividad.TAREA, false, false, 0)
                         )),
-                        calle("Sistemas", 2, List.of(
+                        calle("Sistemas", 2, "#3b82f6", List.of(
                                 actividad(a3, "Actualización en Sistema", TipoActividad.FIN, false, true, 0)
                         ))
                 ))
@@ -309,27 +327,27 @@ public class DatabaseSeeder implements CommandLineRunner {
                 .build());
     }
 
-    private PoliticaNegocio crearPoliticaCredito(String tenantId) {
+    private PoliticaNegocio crearPoliticaCredito(String tenantId, String proyectoId) {
         String a1 = uid(), a2 = uid(), a3 = uid(), a4 = uid(), a5 = uid(), a6 = uid(), a7 = uid();
 
         return politicaRepo.save(PoliticaNegocio.builder()
-                .id(uid()).tenantId(tenantId)
+                .id(uid()).tenantId(tenantId).proyectoId(proyectoId)
                 .nombre("Aprobación de Crédito Personal")
                 .descripcion("Flujo integral para la solicitud, evaluación, aprobación y desembolso de créditos personales a clientes del banco.")
                 .version(1).estaActiva(true)
                 .calles(List.of(
-                        calle("Plataforma de Atención", 0, List.of(
+                        calle("Plataforma de Atención", 0, "#6366f1", List.of(
                                 actividad(a1, "Recepción de Solicitud", TipoActividad.INICIO, true, false, 0),
                                 actividad(a7, "Entrega de Contrato", TipoActividad.FIN, false, true, 1)
                         )),
-                        calle("Análisis de Riesgos", 1, List.of(
+                        calle("Análisis de Riesgos", 1, "#f59e0b", List.of(
                                 actividad(a2, "Verificación en Central de Riesgo", TipoActividad.TAREA, false, false, 0),
                                 actividad(a3, "Evaluación del Score Crediticio", TipoActividad.DECISION, false, false, 1)
                         )),
-                        calle("Comité de Créditos", 2, List.of(
+                        calle("Comité de Créditos", 2, "#22c55e", List.of(
                                 actividad(a4, "Aprobación del Comité", TipoActividad.TAREA, false, false, 0)
                         )),
-                        calle("Operaciones", 3, List.of(
+                        calle("Operaciones", 3, "#06b6d4", List.of(
                                 actividad(a5, "Generación de Contrato", TipoActividad.TAREA, false, false, 0),
                                 actividad(a6, "Desembolso de Fondos", TipoActividad.TAREA, false, false, 1)
                         ))
@@ -346,24 +364,24 @@ public class DatabaseSeeder implements CommandLineRunner {
                 .build());
     }
 
-    private PoliticaNegocio crearPoliticaCuentaEmpresarial(String tenantId) {
+    private PoliticaNegocio crearPoliticaCuentaEmpresarial(String tenantId, String proyectoId) {
         String a1 = uid(), a2 = uid(), a3 = uid(), a4 = uid(), a5 = uid();
 
         return politicaRepo.save(PoliticaNegocio.builder()
-                .id(uid()).tenantId(tenantId)
+                .id(uid()).tenantId(tenantId).proyectoId(proyectoId)
                 .nombre("Apertura de Cuenta Empresarial")
                 .descripcion("Proceso para la apertura de cuentas corrientes para personas jurídicas, incluyendo verificación de documentos legales.")
                 .version(1).estaActiva(true)
                 .calles(List.of(
-                        calle("Banca Empresarial", 0, List.of(
+                        calle("Banca Empresarial", 0, "#8b5cf6", List.of(
                                 actividad(a1, "Recepción de Documentos", TipoActividad.INICIO, true, false, 0),
                                 actividad(a5, "Activación de Cuenta", TipoActividad.FIN, false, true, 1)
                         )),
-                        calle("Compliance", 1, List.of(
+                        calle("Compliance", 1, "#e11d48", List.of(
                                 actividad(a2, "Due Diligence KYC", TipoActividad.TAREA, false, false, 0),
                                 actividad(a3, "Verificación Anti-Lavado", TipoActividad.TAREA, false, false, 1)
                         )),
-                        calle("Operaciones Bancarias", 2, List.of(
+                        calle("Operaciones Bancarias", 2, "#3b82f6", List.of(
                                 actividad(a4, "Configuración de Cuenta", TipoActividad.TAREA, false, false, 0)
                         ))
                 ))
@@ -376,22 +394,22 @@ public class DatabaseSeeder implements CommandLineRunner {
                 .build());
     }
 
-    private PoliticaNegocio crearPoliticaTarjeta(String tenantId) {
+    private PoliticaNegocio crearPoliticaTarjeta(String tenantId, String proyectoId) {
         String a1 = uid(), a2 = uid(), a3 = uid();
 
         return politicaRepo.save(PoliticaNegocio.builder()
-                .id(uid()).tenantId(tenantId)
+                .id(uid()).tenantId(tenantId).proyectoId(proyectoId)
                 .nombre("Solicitud de Tarjeta de Crédito")
                 .descripcion("Proceso para solicitar y aprobar tarjetas de crédito para clientes existentes del banco.")
-                .version(1).estaActiva(false) // BORRADOR
+                .version(1).estaActiva(false)
                 .calles(List.of(
-                        calle("Atención", 0, List.of(
+                        calle("Atención", 0, "#6366f1", List.of(
                                 actividad(a1, "Solicitud del Cliente", TipoActividad.INICIO, true, false, 0)
                         )),
-                        calle("Riesgos", 1, List.of(
+                        calle("Riesgos", 1, "#f97316", List.of(
                                 actividad(a2, "Análisis Crediticio", TipoActividad.TAREA, false, false, 0)
                         )),
-                        calle("Emisión", 2, List.of(
+                        calle("Emisión", 2, "#22c55e", List.of(
                                 actividad(a3, "Emisión de Tarjeta", TipoActividad.FIN, false, true, 0)
                         ))
                 ))
@@ -419,8 +437,8 @@ public class DatabaseSeeder implements CommandLineRunner {
         return Actividad.builder().id(id).nombre(nombre).tipo(tipo).esInicial(esInicial).esFinal(esFinal).orden(orden).build();
     }
 
-    private Calle calle(String nombre, int orden, List<Actividad> actividades) {
-        return Calle.builder().id(uid()).nombre(nombre).orden(orden).actividades(new ArrayList<>(actividades)).build();
+    private Calle calle(String nombre, int orden, String color, List<Actividad> actividades) {
+        return Calle.builder().id(uid()).nombre(nombre).orden(orden).color(color).actividades(new ArrayList<>(actividades)).build();
     }
 
     private Transicion transicion(String origenId, String destinoId, TipoRuta tipo, String etiqueta) {

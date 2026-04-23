@@ -19,5 +19,8 @@ public class Calle {
     private int orden;
 
     @Builder.Default
+    private String color = "#475569"; // Slate por defecto
+
+    @Builder.Default
     private List<Actividad> actividades = new ArrayList<>();
 }

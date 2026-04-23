@@ -23,6 +23,11 @@ export const routes: Routes = [
   {
     path: 'designer',
     canActivate: [authGuard, roleGuard(['ADMINISTRADOR', 'DISENADOR'])],
+    loadComponent: () => import('./pages/designer/projects-hub.component').then(m => m.ProjectsHubComponent),
+  },
+  {
+    path: 'designer/editor',
+    canActivate: [authGuard, roleGuard(['ADMINISTRADOR', 'DISENADOR'])],
     loadComponent: () => import('./pages/designer/designer.component').then(m => m.DesignerComponent),
   },
   {
