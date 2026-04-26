@@ -27,6 +27,8 @@ public class CrearUsuarioRequest {
 
     private String telefono;
     private String cargo;
+    private String departamento;
+    private String departamentoId;
 
     @NotNull(message = "El rol es obligatorio")
     private RolUsuario rol;

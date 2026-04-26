@@ -17,6 +17,9 @@ public class Calle {
     private String id;
     private String nombre;
     private int orden;
+    @Builder.Default
+    private int ancho = 270;
+    private String departamentoId;
 
     @Builder.Default
     private String color = "#475569"; // Slate por defecto

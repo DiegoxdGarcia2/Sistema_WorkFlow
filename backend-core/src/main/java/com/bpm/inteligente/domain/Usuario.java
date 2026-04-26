@@ -23,11 +23,14 @@ public class Usuario {
     @Id
     private String id;
 
+    @Indexed
     private String tenantId;
     private String nombre;
     private String apellido;
     private String telefono;
     private String cargo;
+    private String departamento;
+    private String departamentoId;
 
     @Indexed(unique = true)
     private String email;

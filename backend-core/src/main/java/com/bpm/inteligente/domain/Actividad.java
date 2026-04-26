@@ -37,4 +37,6 @@ public class Actividad {
 
     /** JSON Schema del formulario dinámico para esta actividad */
     private Map<String, Object> esquemaFormulario;
+
+    private String plantillaId;
 }

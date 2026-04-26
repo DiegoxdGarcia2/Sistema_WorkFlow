@@ -24,6 +24,7 @@ public class RegistroActividadDTO {
     private Map<String, Object> esquemaFormulario;
     private Map<String, Object> datosFormulario;
     private String notas;
+    private java.util.List<com.bpm.inteligente.domain.RegistroActividad.ArchivoInfo> archivos;
     private Instant asignadoEn;
     private Instant completadoEn;
 }

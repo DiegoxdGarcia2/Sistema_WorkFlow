@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap } from 'rxjs';
+import { Observable, tap, forkJoin, map as rxMap } from 'rxjs';
 import {
   TramiteDTO,
   RegistroActividadDTO,
@@ -16,9 +16,17 @@ export class WorkflowService {
 
   /** Signals reactivos */
   tareasPendientes = signal<RegistroActividadDTO[]>([]);
+  historial = signal<RegistroActividadDTO[]>([]);
   tramites = signal<TramiteDTO[]>([]);
 
   constructor(private http: HttpClient) {}
+
+  limpiarEstado() {
+    this.tareasPendientes.set([]);
+    this.historial.set([]);
+    this.tramites.set([]);
+    this.tareasNoAsignadas.set([]);
+  }
 
   // ── Trámites ──────────────────────────────────────────────
 
@@ -45,6 +53,35 @@ export class WorkflowService {
   cargarBandejaPendientes(userId: string): Observable<RegistroActividadDTO[]> {
     return this.http
       .get<RegistroActividadDTO[]>(`${this.registrosUrl}/pendientes/${userId}`)
+      .pipe(tap(data => this.tareasPendientes.set(data)));
+  }
+
+  cargarBandejaUnificada(userId: string, deptoId?: string): Observable<RegistroActividadDTO[]> {
+    const personales$ = this.http.get<RegistroActividadDTO[]>(`${this.registrosUrl}/pendientes/${userId}`);
+    
+    if (!deptoId) {
+      return personales$.pipe(tap(data => this.tareasPendientes.set(data)));
+    }
+
+    const depto$ = this.http.get<RegistroActividadDTO[]>(`${this.registrosUrl}/sin-asignar-departamento/${deptoId}`);
+
+    return forkJoin({ personales: personales$, depto: depto$ }).pipe(
+      tap(({ personales, depto }) => {
+        const map = new Map();
+        [...personales, ...depto].forEach(t => map.set(t.id, t));
+        this.tareasPendientes.set(Array.from(map.values()));
+      }),
+      rxMap(res => {
+        const map = new Map();
+        [...res.personales, ...res.depto].forEach(t => map.set(t.id, t));
+        return Array.from(map.values());
+      })
+    );
+  }
+
+  cargarBandejaDepartamento(deptoId: string): Observable<RegistroActividadDTO[]> {
+    return this.http
+      .get<RegistroActividadDTO[]>(`${this.registrosUrl}/bandeja-departamento/${deptoId}`)
       .pipe(tap(data => this.tareasPendientes.set(data)));
   }
 
@@ -79,5 +116,17 @@ export class WorkflowService {
     return this.http
       .get<RegistroActividadDTO[]>(`${this.registrosUrl}/sin-asignar`)
       .pipe(tap(data => this.tareasNoAsignadas.set(data)));
+  }
+
+  cargarTareasNoAsignadasDepartamento(deptoId: string): Observable<RegistroActividadDTO[]> {
+    return this.http
+      .get<RegistroActividadDTO[]>(`${this.registrosUrl}/sin-asignar-departamento/${deptoId}`)
+      .pipe(tap(data => this.tareasNoAsignadas.set(data)));
+  }
+
+  cargarHistorial(userId: string): Observable<RegistroActividadDTO[]> {
+    return this.http
+      .get<RegistroActividadDTO[]>(`${this.registrosUrl}/historial/${userId}`)
+      .pipe(tap(data => this.historial.set(data)));
   }
 }

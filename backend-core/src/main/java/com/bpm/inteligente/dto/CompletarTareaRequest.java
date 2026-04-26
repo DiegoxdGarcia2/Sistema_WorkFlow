@@ -17,5 +17,6 @@ public class CompletarTareaRequest {
 
     private Map<String, Object> esquemaFormulario;
     private Map<String, Object> datosFormulario;
+    private java.util.List<com.bpm.inteligente.domain.RegistroActividad.ArchivoInfo> archivos;
     private String notas;
 }

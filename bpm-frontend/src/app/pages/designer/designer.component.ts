@@ -5,13 +5,29 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { PoliticaService } from '../../services/politica.service';
 import { PoliticaDTO, Actividad, Calle, Transicion, TipoActividad, TipoRuta } from '../../models/bpm.models';
 import { AuthService } from '../../services/auth.service';
+import { AdminService, Departamento } from '../../services/admin.service';
+import { FormularioService, FormularioTemplate } from '../../services/formulario.service';
+import { FormBuilderComponent } from '../admin/form-builder.component';
+import { signal } from '@angular/core';
 
-interface FormField { key: string; label: string; type: string; required: boolean; options?: string[]; }
+interface FormField { 
+  key: string; 
+  label: string; 
+  type: string; 
+  required: boolean; 
+  options?: string[]; 
+  validations: {
+    min?: number;
+    max?: number;
+    pattern?: string;
+    customMsg?: string;
+  };
+}
 
 @Component({
   selector: 'app-designer',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, FormBuilderComponent],
   templateUrl: './designer.component.html',
   styleUrls: ['./designer.component.css'],
 })
@@ -50,18 +66,45 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
   // ── Drag ──
   isDragging = false;
-  dragNodeKey = '';
+  dragNodeId = '';
   dragOffsetX = 0;
   dragOffsetY = 0;
   dragOriginCi = -1;
   dragOriginAi = -1;
   hoveredLaneIdx = -1;
   nodePositions: Record<string, { x: number; y: number }> = {};
+  hoveredNodeId: string | null = null;
+  
+  // ── Drag Handle to Connect ──
+  isCreatingConn = false;
+  tempConnSource: Actividad | null = null;
+  tempConnAnchor: 'top' | 'bottom' | 'left' | 'right' = 'bottom';
+  mostrarFormManager = false;
+
+  // ── Drag Connection End ──
+  isDraggingConn = false;
+  dragConnId = '';
+  dragConnEnd: 'origen' | 'destino' | null = null;
 
   // ── Lane Drag Reorder ──
   isDraggingLane = false;
   dragLaneIdx = -1;
   dragLaneOverIdx = -1;
+
+  // ── Alignment Guides ──
+  guides: { x?: number, y?: number }[] = [];
+
+  // ── Lane Resizing ──
+  isResizingLane = false;
+  resizeLaneIdx = -1;
+  resizeStartX = 0;
+  resizeStartW = 0;
+
+  // ── Simulation ──
+  showRightPanel = true;
+  isSimulating = false;
+  activeSimNodes: string[] = [];
+  simLog: string[] = [];
 
   // ── Connection Mode ──
   connMode = { active: false, tipo: 'SECUENCIAL' as TipoRuta, sourceId: null as string | null };
@@ -77,6 +120,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   nuevaPolitica = { nombre: '', descripcion: '' };
   mostrarModalAddCalle = false;
   nuevaCalleNombre = '';
+  nuevaCalleDeptoId = '';
   nuevaCalleColor = '#475569';
   mostrarConfirmEliminar = false;
 
@@ -105,9 +149,12 @@ export class DesignerComponent implements OnInit, OnDestroy {
     { tipo: 'PARALELA', label: 'Paralela', desc: 'Flujo paralelo', dash: '4 4' },
   ];
 
+
   constructor(
     public politicaService: PoliticaService,
-    private auth: AuthService,
+    public auth: AuthService,
+    public adminSvc: AdminService,
+    public fs: FormularioService,
     private route: ActivatedRoute,
     private router: Router,
   ) {}
@@ -118,7 +165,15 @@ export class DesignerComponent implements OnInit, OnDestroy {
       this.projectName = p['projectName'] || null;
     });
     this.cargarPoliticas();
+    const tid = this.auth.usuario()?.tenantId;
+    if (tid) {
+      this.adminSvc.cargarDepartamentos(tid).subscribe(deps => this.departamentos.set(deps));
+      this.fs.listarPorTenant(tid).subscribe(data => this.templates.set(data));
+    }
   }
+
+  templates = signal<FormularioTemplate[]>([]);
+  departamentos = signal<Departamento[]>([]);
   ngOnDestroy(): void { if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer); }
 
   @HostListener('document:keydown.escape')
@@ -169,32 +224,58 @@ export class DesignerComponent implements OnInit, OnDestroy {
     if (!this.sel) return;
     this.nodePositions = {};
     for (let ci = 0; ci < this.sel.calles.length; ci++) {
+      const laneX = this.getLaneX(ci);
+      const laneW = this.sel.calles[ci].ancho || this.LW;
+      
       for (let ai = 0; ai < this.sel.calles[ci].actividades.length; ai++) {
         const act = this.sel.calles[ci].actividades[ai];
         const w = act.ancho || this.NW;
-        if (act.posX != null && act.posY != null && act.posX > 0) {
-          this.nodePositions[`${ci}-${ai}`] = { x: act.posX, y: act.posY };
+        
+        if (act.posX != null && act.posY != null) {
+          this.nodePositions[act.id] = { x: act.posX, y: act.posY };
         } else {
-          this.nodePositions[`${ci}-${ai}`] = {
-            x: ci * this.LW + (this.LW - w) / 2,
-            y: this.TOP + ai * (this.NH + this.NG),
-          };
+          // Default layout: column centered in lane, rows based on index
+          const initialX = laneX + (laneW - w) / 2;
+          const initialY = this.TOP + ai * (this.NH + this.NG);
+          this.nodePositions[act.id] = { x: initialX, y: initialY };
+          act.posX = initialX;
+          act.posY = initialY;
         }
       }
     }
   }
 
-  getNodoPos(ci: number, ai: number): { x: number; y: number } {
-    return this.nodePositions[`${ci}-${ai}`] || { x: ci * this.LW + 30, y: this.TOP + ai * 136 };
+  getNodoPos(actId: string): { x: number; y: number } {
+    return this.nodePositions[actId] || { x: 0, y: 0 };
   }
-  getLaneX(ci: number): number { return ci * this.LW; }
+  getLaneX(ci: number): number { 
+    if (!this.sel) return ci * this.LW;
+    let x = 0;
+    for (let i = 0; i < ci; i++) {
+      x += (this.sel.calles[i].ancho || this.LW);
+    }
+    return x;
+  }
 
-  getCanvasW(): number { return Math.max((this.sel?.calles.length || 1) * this.LW + 40, 600); }
+  getCanvasW(): number { 
+    if (!this.sel) return 800;
+    let totalW = 0;
+    for (const c of this.sel.calles) totalW += (c.ancho || this.LW);
+    return Math.max(totalW + 100, 800);
+  }
   getCanvasH(): number {
-    if (!this.sel) return 600;
+    if (!this.sel) return 800;
+    let maxY = 0;
+    // Calculate based on actual node positions
+    for (const id in this.nodePositions) {
+      maxY = Math.max(maxY, this.nodePositions[id].y + this.NH);
+    }
+    // Also consider the default vertical layout for lanes
     let maxN = 1;
     for (const c of this.sel.calles) maxN = Math.max(maxN, c.actividades.length);
-    return Math.max(this.TOP + maxN * (this.NH + this.NG) + 120, 600);
+    const defaultY = this.TOP + maxN * (this.NH + this.NG) + 120;
+    
+    return Math.max(maxY + 300, defaultY, 800); // Extra margin for adding more nodes
   }
 
   // ── Node Interaction ──
@@ -212,8 +293,8 @@ export class DesignerComponent implements OnInit, OnDestroy {
           id: crypto.randomUUID(), origenId: this.connMode.sourceId, destinoId: act.id,
           tipoRuta: this.connMode.tipo, condicion: '', etiqueta: '', prioridad: 0,
           color: '#475569', tipoLinea: 'solida', grosor: 2,
+          origenAnchor: 'bottom', destinoAnchor: 'top'
         });
-        this.showToast('Conexión creada', 'success');
         this.cancelConnMode();
         this.triggerAutoSave();
       }
@@ -243,8 +324,10 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
   // ── Auto-change callback (called from template via ngModelChange) ──
   onNodeChange(): void {
-    this.generateLayout();
-    this.triggerAutoSave();
+    if (this.nodoSeleccionado) {
+      this.generateLayout();
+      this.triggerAutoSave();
+    }
   }
   onNodeLaneChange(newCi: number): void {
     if (newCi !== this.editCalleIdx) {
@@ -280,16 +363,17 @@ export class DesignerComponent implements OnInit, OnDestroy {
     this.editCalleIdx = targetCi;
     this.editActIdx = this.sel.calles[targetCi].actividades.length - 1;
     this.generateLayout();
-    this.showToast(`Movido a ${this.sel.calles[targetCi].nombre}`, 'success');
   }
 
   // ── Drag ──
   onNodoMouseDown(e: MouseEvent, ci: number, ai: number): void {
     if (this.connMode.active) return;
+    const act = this.sel!.calles[ci].actividades[ai];
+    if (!act) return;
     e.preventDefault();
-    const key = `${ci}-${ai}`, pos = this.nodePositions[key];
+    const pos = this.nodePositions[act.id];
     if (!pos) return;
-    this.dragNodeKey = key;
+    this.dragNodeId = act.id;
     this.dragOriginCi = ci;
     this.dragOriginAi = ai;
     this.dragOffsetX = e.clientX - pos.x;
@@ -311,48 +395,207 @@ export class DesignerComponent implements OnInit, OnDestroy {
     this.mouseX = e.clientX - rect.left + scroll.scrollLeft;
     this.mouseY = e.clientY - rect.top + scroll.scrollTop;
 
-    if (!this.isDragging || !this.dragNodeKey) return;
-    // Only move the dragged node, never connected nodes
-    this.nodePositions[this.dragNodeKey] = { x: this.mouseX - (this.NW / 2), y: this.mouseY - (this.NH / 2) };
-    // Update only this node's position reference — do NOT trigger generateLayout
+    if (this.isResizingLane && this.resizeLaneIdx !== -1 && this.sel) {
+      const dx = e.clientX - this.resizeStartX;
+      const newW = Math.max(200, this.resizeStartW + dx);
+      const oldW = this.sel.calles[this.resizeLaneIdx].ancho || this.LW;
+      const deltaStep = newW - oldW;
+
+      this.sel.calles[this.resizeLaneIdx].ancho = newW;
+      
+      // Desplazar todos los nodos de las calles siguientes para que mantengan su posición visual relativa
+      for (let i = this.resizeLaneIdx + 1; i < this.sel.calles.length; i++) {
+        for (const act of this.sel.calles[i].actividades) {
+          if (act.posX != null) act.posX += deltaStep;
+        }
+      }
+      
+      this.generateLayout();
+      return;
+    }
+
+    if (this.isCreatingConn && this.tempConnSource) {
+      // Temp connection line follows mouse
+      return;
+    }
+
+    if (this.isDraggingConn && this.dragConnId && this.dragConnEnd) {
+      this.hoveredLaneIdx = Math.floor(this.mouseX / this.LW);
+      return;
+    }
+
+    if (!this.isDragging || !this.dragNodeId) return;
+
+    const newX = this.mouseX - (this.NW / 2);
+    const newY = this.mouseY - (this.NH / 2);
+    const snappedX = Math.round(newX / 12) * 12;
+    const snappedY = Math.round(newY / 12) * 12;
+
+    this.nodePositions[this.dragNodeId] = { x: snappedX, y: snappedY };
+
+    // Guides
+    this.guides = [];
+    const others = this.getAllActividades().filter(a => a.id !== this.dragNodeId);
+    for (const other of others) {
+      const oPos = this.getNodoPos(other.id);
+      const ow = other.ancho || this.NW;
+      if (Math.abs(snappedX + this.NW/2 - (oPos.x + ow/2)) < 6) this.guides.push({ x: oPos.x + ow/2 });
+      if (Math.abs(snappedY + this.NH/2 - (oPos.y + this.NH/2)) < 6) this.guides.push({ y: oPos.y + this.NH/2 });
+    }
+    
     this.hoveredLaneIdx = Math.floor(this.mouseX / this.LW);
     if (this.hoveredLaneIdx < 0) this.hoveredLaneIdx = 0;
     if (this.sel && this.hoveredLaneIdx >= this.sel.calles.length) this.hoveredLaneIdx = this.sel.calles.length - 1;
   }
 
   onCanvasMouseUp(): void {
-    if (this.isDragging && this.sel && this.dragNodeKey) {
+    if (this.isResizingLane) {
+      this.isResizingLane = false;
+      this.triggerAutoSave();
+      return;
+    }
+
+    if (this.isCreatingConn && this.sel && this.tempConnSource) {
+      if (this.hoveredNodeId && this.hoveredNodeId !== this.tempConnSource.id) {
+        // Create connection
+        const newTrans: Transicion = {
+          id: crypto.randomUUID(), origenId: this.tempConnSource.id, destinoId: this.hoveredNodeId,
+          tipoRuta: 'SECUENCIAL', condicion: '', etiqueta: '', prioridad: 0,
+          color: '#475569', tipoLinea: 'solida', grosor: 2,
+          origenAnchor: this.tempConnAnchor,
+          destinoAnchor: this.calculateBestAnchor(this.tempConnSource.id, this.hoveredNodeId, true)
+        };
+        this.sel.transiciones.push(newTrans);
+        this.triggerAutoSave();
+        this.showToast('Conexión creada', 'success');
+      }
+      this.isCreatingConn = false;
+      this.tempConnSource = null;
+      return;
+    }
+
+    if (this.isDraggingConn && this.sel && this.dragConnId && this.dragConnEnd) {
+      // Find node under mouse
+      let foundNodeId = '';
+      for (const c of this.sel.calles) {
+        for (const a of c.actividades) {
+          const pos = this.getNodoPos(a.id);
+          const w = a.ancho || this.NW;
+          const h = a.alto || this.NH;
+          if (this.mouseX >= pos.x && this.mouseX <= pos.x + w && this.mouseY >= pos.y && this.mouseY <= pos.y + h) {
+            foundNodeId = a.id; break;
+          }
+        }
+        if (foundNodeId) break;
+      }
+
+      if (foundNodeId) {
+        const t = this.sel.transiciones.find(tx => tx.id === this.dragConnId);
+        if (t) {
+          const pos = this.getNodoPos(foundNodeId);
+          const a = this.getAllActividades().find(act => act.id === foundNodeId);
+          const w = a?.ancho || this.NW;
+          const h = a?.alto || this.NH;
+          
+          // Detect closest anchor
+          const distTop = Math.hypot(this.mouseX - (pos.x + w/2), this.mouseY - pos.y);
+          const distBot = Math.hypot(this.mouseX - (pos.x + w/2), this.mouseY - (pos.y + h));
+          const distL   = Math.hypot(this.mouseX - pos.x, this.mouseY - (pos.y + h/2));
+          const distR   = Math.hypot(this.mouseX - (pos.x + w), this.mouseY - (pos.y + h/2));
+          
+          const min = Math.min(distTop, distBot, distL, distR);
+          let anchor: 'top' | 'bottom' | 'left' | 'right' = 'top';
+          if (min === distTop) anchor = 'top';
+          else if (min === distBot) anchor = 'bottom';
+          else if (min === distL)   anchor = 'left';
+          else if (min === distR)   anchor = 'right';
+
+          if (this.dragConnEnd === 'origen') {
+            t.origenId = foundNodeId;
+            t.origenAnchor = anchor;
+          } else {
+            t.destinoId = foundNodeId;
+            t.destinoAnchor = anchor;
+          }
+          this.triggerAutoSave();
+        }
+      }
+      this.isDraggingConn = false;
+      this.dragConnId = '';
+      this.dragConnEnd = null;
+      return;
+    }
+
+    if (this.isDragging && this.sel && this.dragNodeId) {
       const targetLane = this.hoveredLaneIdx;
       if (targetLane >= 0 && targetLane !== this.dragOriginCi) {
         const node = this.sel.calles[this.dragOriginCi].actividades.splice(this.dragOriginAi, 1)[0];
-        // Snap into new lane center
-        const newAi = this.sel.calles[targetLane].actividades.length;
-        node.posX = targetLane * this.LW + (this.LW - (node.ancho || this.NW)) / 2;
-        node.posY = this.mouseY - this.NH / 2;
+        // Move to new lane
         this.sel.calles[targetLane].actividades.push(node);
-        this.showToast(`Movido a ${this.sel.calles[targetLane].nombre}`, 'success');
       }
       this.persistPositions();
       this.generateLayout();
       this.triggerAutoSave();
       setTimeout(() => this.isDragging = false, 50);
     }
-    this.dragNodeKey = '';
+    this.guides = [];
+    this.dragNodeId = '';
     this.hoveredLaneIdx = -1;
     this.dragOriginCi = -1;
   }
 
+  onLaneResizeMouseDown(e: MouseEvent, ci: number): void {
+    e.stopPropagation(); e.preventDefault();
+    this.isResizingLane = true;
+    this.resizeLaneIdx = ci;
+    this.resizeStartX = e.clientX;
+    this.resizeStartW = this.sel?.calles[ci].ancho || this.LW;
+  }
+
+  onHandleMouseDown(e: MouseEvent, act: Actividad, anchor: 'top' | 'bottom' | 'left' | 'right'): void {
+    e.stopPropagation(); e.preventDefault();
+    this.isCreatingConn = true;
+    this.tempConnSource = act;
+    this.tempConnAnchor = anchor;
+  }
+
+  onConnHandleMouseDown(e: MouseEvent, transId: string, end: 'origen' | 'destino'): void {
+    e.stopPropagation(); e.preventDefault();
+    this.isDraggingConn = true;
+    this.dragConnId = transId;
+    this.dragConnEnd = end;
+  }
+
+  setAnchor(trans: Transicion, end: 'origen' | 'destino', anchor: 'top' | 'bottom' | 'left' | 'right'): void {
+    if (end === 'origen') trans.origenAnchor = anchor;
+    else trans.destinoAnchor = anchor;
+    this.triggerAutoSave();
+  }
+
   private persistPositions(): void {
     if (!this.sel) return;
-    for (let ci = 0; ci < this.sel.calles.length; ci++) {
-      for (let ai = 0; ai < this.sel.calles[ci].actividades.length; ai++) {
-        const pos = this.nodePositions[`${ci}-${ai}`];
+    this.sel.calles.forEach((calle, ci) => {
+      const laneX = this.getLaneX(ci);
+      const laneW = calle.ancho || this.LW;
+      const minX = laneX + 20; // Margen interno
+      const maxX = laneX + laneW - 20;
+
+      for (const act of calle.actividades) {
+        const pos = this.nodePositions[act.id];
         if (pos) {
-          this.sel.calles[ci].actividades[ai].posX = pos.x;
-          this.sel.calles[ci].actividades[ai].posY = pos.y;
+          const w = act.ancho || this.NW;
+          // Ajustar posX para que no quede entre dos calles
+          let x = pos.x;
+          if (x < minX) x = minX;
+          if (x + w > maxX) x = maxX - w;
+          
+          act.posX = x;
+          act.posY = pos.y;
+          // Actualizar el tracker visual para que no haya salto al soltar
+          this.nodePositions[act.id] = { x, y: pos.y };
         }
       }
-    }
+    });
   }
 
   // ── Connection Mode ──
@@ -364,45 +607,101 @@ export class DesignerComponent implements OnInit, OnDestroy {
   cancelConnMode(): void { this.connMode = { active: false, tipo: 'SECUENCIAL', sourceId: null }; }
 
   getSourceCenter(): { x: number; y: number } | null {
+    if (this.isCreatingConn && this.tempConnSource) {
+      return this.findNodeAnchor(this.tempConnSource.id, this.tempConnAnchor, false);
+    }
     if (!this.connMode.sourceId || !this.sel) return null;
-    return this.findNodeCenter(this.connMode.sourceId);
+    return this.findNodeAnchor(this.connMode.sourceId, 'bottom', false);
   }
 
   // ── SVG Connections ──
-  getConnectionPaths(): { id: string; path: string; origenId: string; destinoId: string; label: string; labelX: number; labelY: number; color: string; dash: string; width: number; trans: Transicion }[] {
+  getConnectionPaths(): any[] {
     if (!this.sel) return [];
     return this.sel.transiciones.map(t => {
-      const from = this.findNodeCenter(t.origenId);
-      const to = this.findNodeCenter(t.destinoId);
+      // Calculate best anchors if they are 'auto' or undefined
+      const fromAnchor = t.origenAnchor || this.calculateBestAnchor(t.origenId, t.destinoId, false);
+      const toAnchor = t.destinoAnchor || this.calculateBestAnchor(t.origenId, t.destinoId, true);
+
+      const from = this.findNodeAnchor(t.origenId, fromAnchor, false);
+      const to = this.findNodeAnchor(t.destinoId, toAnchor, true);
       if (!from || !to) return null;
-      const y1 = from.y + this.NH / 2;
-      const y2 = to.y - this.NH / 2;
-      const x1 = from.x, x2 = to.x;
-      const midY = (y1 + y2) / 2;
+
+      const x1 = from.x, y1 = from.y;
+      const x2 = to.x, y2 = to.y;
+
+      // Handle dragging visually
+      const dx1 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'origen') ? this.mouseX : x1;
+      const dy1 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'origen') ? this.mouseY : y1;
+      const dx2 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'destino') ? this.mouseX : x2;
+      const dy2 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'destino') ? this.mouseY : y2;
+
+      const midY = (dy1 + dy2) / 2;
+      const midX = (dx1 + dx2) / 2;
+      
       let path: string;
-      if (y2 > y1) {
-        path = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
+      const anchor1 = fromAnchor;
+      const anchor2 = toAnchor;
+
+      if (anchor1 === 'bottom' && anchor2 === 'top' && dy2 > dy1) {
+        path = `M ${dx1} ${dy1} C ${dx1} ${midY}, ${dx2} ${midY}, ${dx2} ${dy2}`;
+      } else if (anchor1 === 'right' && anchor2 === 'left' && dx2 > dx1) {
+        path = `M ${dx1} ${dy1} C ${midX} ${dy1}, ${midX} ${dy2}, ${dx2} ${dy2}`;
+      } else if (anchor1 === 'top' && anchor2 === 'bottom' && dy1 > dy2) {
+         path = `M ${dx1} ${dy1} C ${dx1} ${midY}, ${dx2} ${midY}, ${dx2} ${dy2}`;
       } else {
-        const off = 60;
-        path = `M ${x1} ${y1} C ${x1 + off} ${y1 + off}, ${x2 + off} ${y2 - off}, ${x2} ${y2}`;
+        const offset = Math.min(Math.abs(dx1 - dx2), Math.abs(dy1 - dy2), 50);
+        path = `M ${dx1} ${dy1} C ${anchor1==='right'?dx1+offset:anchor1==='left'?dx1-offset:dx1} ${anchor1==='bottom'?dy1+offset:anchor1==='top'?dy1-offset:dy1},
+                                 ${anchor2==='right'?dx2+offset:anchor2==='left'?dx2-offset:dx2} ${anchor2==='bottom'?dy2+offset:anchor2==='top'?dy2-offset:dy2},
+                                 ${dx2} ${dy2}`;
       }
+
       const dash = t.tipoLinea === 'punteada' ? '4 4' : t.tipoLinea === 'discontinua' ? '10 5' : '';
       return {
         id: t.id, path, origenId: t.origenId, destinoId: t.destinoId,
-        label: t.etiqueta || '', labelX: (x1 + x2) / 2, labelY: midY - 8,
+        x1: dx1, y1: dy1, x2: dx2, y2: dy2,
+        label: t.etiqueta || '', labelX: midX, labelY: midY - 8,
         color: t.color || '#475569', dash, width: t.grosor || 2, trans: t,
       };
-    }).filter(Boolean) as any[];
+    }).filter(Boolean);
   }
 
-  findNodeCenter(actId: string): { x: number; y: number } | null {
+  private calculateBestAnchor(sourceId: string, targetId: string, isDest: boolean): 'top' | 'bottom' | 'left' | 'right' {
+    const sPos = this.getNodoPos(sourceId);
+    const tPos = this.getNodoPos(targetId);
+    if (!sPos || !tPos) return isDest ? 'top' : 'bottom';
+
+    const dx = tPos.x - sPos.x;
+    const dy = tPos.y - sPos.y;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // Horizontal preference
+      if (isDest) return dx > 0 ? 'left' : 'right';
+      return dx > 0 ? 'right' : 'left';
+    } else {
+      // Vertical preference
+      if (isDest) return dy > 0 ? 'top' : 'bottom';
+      return dy > 0 ? 'bottom' : 'top';
+    }
+  }
+
+  findNodeAnchor(actId: string, anchor?: 'top' | 'bottom' | 'left' | 'right', isDest = false): { x: number; y: number } | null {
     if (!this.sel) return null;
-    for (let ci = 0; ci < this.sel.calles.length; ci++) {
-      const ai = this.sel.calles[ci].actividades.findIndex(a => a.id === actId);
-      if (ai >= 0) {
-        const pos = this.getNodoPos(ci, ai);
-        const w = this.sel.calles[ci].actividades[ai].ancho || this.NW;
-        return { x: pos.x + w / 2, y: pos.y + this.NH / 2 };
+    for (const c of this.sel.calles) {
+      const a = c.actividades.find(act => act.id === actId);
+      if (a) {
+        const pos = this.getNodoPos(actId);
+        const w = a.ancho || this.NW;
+        const h = a.alto || this.NH;
+        const type = anchor || (isDest ? 'top' : 'bottom');
+        
+        // Small padding to ensure arrow touches boundary but doesn't overlap border too much
+        const pad = 2;
+        switch(type) {
+          case 'top':    return { x: pos.x + w/2, y: pos.y - pad };
+          case 'bottom': return { x: pos.x + w/2, y: pos.y + h + pad };
+          case 'left':   return { x: pos.x - pad, y: pos.y + h/2 };
+          case 'right':  return { x: pos.x + w + pad, y: pos.y + h/2 };
+        }
       }
     }
     return null;
@@ -431,8 +730,8 @@ export class DesignerComponent implements OnInit, OnDestroy {
     const body: any = { tenantId: tid, nombre: this.nuevaPolitica.nombre, descripcion: this.nuevaPolitica.descripcion };
     if (this.projectId) body.proyectoId = this.projectId;
     this.politicaService.crear(body).subscribe({
-      next: (created) => { this.mostrarModalCrear = false; this.nuevaPolitica = { nombre: '', descripcion: '' }; this.cargarPoliticas(); this.seleccionar(created); this.showToast('Política creada', 'success'); },
-      error: (e) => this.errorCrear = e.error?.message || 'Error al crear.',
+      next: (created: PoliticaDTO) => { this.mostrarModalCrear = false; this.nuevaPolitica = { nombre: '', descripcion: '' }; this.cargarPoliticas(); this.seleccionar(created); this.showToast('Política creada', 'success'); },
+      error: (e: any) => this.errorCrear = e.error?.message || 'Error al crear.',
     });
   }
   guardarPolitica(): void {
@@ -444,7 +743,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
     const selTransId = this.transicionSeleccionada?.id;
     const selCalleId = this.calleSeleccionada?.id;
     this.politicaService.actualizar(this.sel.id, this.sel).subscribe({
-      next: (u) => {
+      next: (u: PoliticaDTO) => {
         this.sel = JSON.parse(JSON.stringify(u));
         this.generateLayout();
         this.cargarPoliticas();
@@ -463,7 +762,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
         this.saveStatus = 'saved';
         setTimeout(() => { if (this.saveStatus === 'saved') this.saveStatus = 'idle'; }, 2000);
       },
-      error: (e) => { this.saveStatus = 'error'; this.showToast(e.error?.message || 'Error al guardar', 'error'); },
+      error: (e: any) => { this.saveStatus = 'error'; this.showToast(e.error?.message || 'Error al guardar', 'error'); },
     });
   }
 
@@ -484,23 +783,57 @@ export class DesignerComponent implements OnInit, OnDestroy {
     this.dragLaneOverIdx = ci;
   }
   onLaneHeaderDrop(ci: number): void {
-    if (!this.sel || this.dragLaneIdx < 0 || this.dragLaneIdx === ci) { this.isDraggingLane = false; this.dragLaneIdx = -1; this.dragLaneOverIdx = -1; return; }
-    const lane = this.sel.calles.splice(this.dragLaneIdx, 1)[0];
-    this.sel.calles.splice(ci, 0, lane);
-    // Reset ALL node positions so they recalculate into correct lane columns
-    for (const calle of this.sel.calles) {
-      for (const act of calle.actividades) {
-        act.posX = undefined;
-        act.posY = undefined;
-      }
+    if (!this.sel || this.dragLaneIdx < 0 || this.dragLaneIdx === ci) {
+      this.isDraggingLane = false;
+      this.dragLaneIdx = -1;
+      this.dragLaneOverIdx = -1;
+      return;
     }
-    this.sel.calles.forEach((c, i) => c.orden = i);
-    this.generateLayout();
+
+    const oldIdx = this.dragLaneIdx;
+    const newIdx = ci;
+    if (oldIdx === newIdx) {
+      this.isDraggingLane = false;
+      this.dragLaneIdx = -1;
+      this.dragLaneOverIdx = -1;
+      return;
+    }
+    
+    // 1. Mapear posiciones X actuales por ID de calle antes de mover
+    const oldLaneXMap: Record<string, number> = {};
+    this.sel.calles.forEach((c, i) => {
+      oldLaneXMap[c.id] = this.getLaneX(i);
+    });
+
+    // 2. Reordenar el array
+    const laneToMove = this.sel.calles.splice(oldIdx, 1)[0];
+    this.sel.calles.splice(newIdx, 0, laneToMove);
+
+    // 3. Aplicar el desplazamiento a los nodos
+    this.sel.calles.forEach((c, i) => {
+      c.orden = i;
+      const oldX = oldLaneXMap[c.id];
+      const newX = this.getLaneX(i);
+      const delta = newX - oldX;
+
+      if (delta !== 0) {
+        for (const act of c.actividades) {
+          if (act.posX != null) {
+            act.posX += delta;
+            // IMPORTANTE: También actualizar nodePositions para que generateLayout no lo sobrescriba
+            if (this.nodePositions[act.id]) {
+              this.nodePositions[act.id].x += delta;
+            }
+          }
+        }
+      }
+    });
+
     this.triggerAutoSave();
-    this.showToast('Orden actualizado', 'success');
     this.isDraggingLane = false;
     this.dragLaneIdx = -1;
     this.dragLaneOverIdx = -1;
+    // No llamamos a generateLayout() aquí para evitar recalcular lo que ya movimos manualmente
   }
   onLaneHeaderDragEnd(): void {
     this.isDraggingLane = false;
@@ -523,19 +856,19 @@ export class DesignerComponent implements OnInit, OnDestroy {
     };
     if (this.sel.proyectoId) body.proyectoId = this.sel.proyectoId;
     this.politicaService.crear(body).subscribe({
-      next: (created) => {
+      next: (created: PoliticaDTO) => {
         this.cargarPoliticas();
         this.seleccionar(created);
         this.showToast(`Versión ${body.version} creada (borrador)`, 'success');
       },
-      error: (e) => this.showToast(e.error?.message || 'Error al crear versión', 'error'),
+      error: (e: any) => this.showToast(e.error?.message || 'Error al crear versión', 'error'),
     });
   }
   activarPolitica(): void {
     if (!this.sel) return;
     this.politicaService.activar(this.sel.id).subscribe({
-      next: (u) => { this.sel = JSON.parse(JSON.stringify(u)); this.cargarPoliticas(); this.showToast('Política publicada', 'success'); },
-      error: (e) => this.showToast(e.error?.message || 'Error al activar', 'error'),
+      next: (u: PoliticaDTO) => { this.sel = JSON.parse(JSON.stringify(u)); this.cargarPoliticas(); this.showToast('Política publicada', 'success'); },
+      error: (e: any) => this.showToast(e.error?.message || 'Error al activar', 'error'),
     });
   }
   confirmarEliminar(): void { this.mostrarConfirmEliminar = true; }
@@ -543,15 +876,27 @@ export class DesignerComponent implements OnInit, OnDestroy {
     if (!this.sel) return;
     this.politicaService.eliminar(this.sel.id).subscribe({
       next: () => { this.sel = null; this.nodoSeleccionado = null; this.mostrarConfirmEliminar = false; this.cargarPoliticas(); this.showToast('Política eliminada', 'success'); },
-      error: (e) => { this.mostrarConfirmEliminar = false; this.showToast(e.error?.message || 'Error al eliminar', 'error'); },
+      error: (e: any) => { this.mostrarConfirmEliminar = false; this.showToast(e.error?.message || 'Error al eliminar', 'error'); },
     });
   }
 
   // ── CRUD: Calles ──
   agregarCalle(): void {
-    if (!this.sel || !this.nuevaCalleNombre.trim()) return;
-    this.sel.calles.push({ id: crypto.randomUUID(), nombre: this.nuevaCalleNombre.trim(), orden: this.sel.calles.length, color: this.nuevaCalleColor, actividades: [] });
+    if (!this.sel) return;
+    const depto = this.adminSvc.departamentos().find(d => d.id === this.nuevaCalleDeptoId);
+    const nombre = this.nuevaCalleNombre.trim() || depto?.nombre || 'Nueva Calle';
+    
+    this.sel.calles.push({ 
+      id: crypto.randomUUID(), 
+      nombre, 
+      departamentoId: this.nuevaCalleDeptoId,
+      orden: this.sel.calles.length, 
+      color: this.nuevaCalleColor, 
+      actividades: [] 
+    });
+    
     this.nuevaCalleNombre = '';
+    this.nuevaCalleDeptoId = '';
     this.nuevaCalleColor = '#475569';
     this.mostrarModalAddCalle = false;
     this.generateLayout();
@@ -605,16 +950,36 @@ export class DesignerComponent implements OnInit, OnDestroy {
   // ── Form Builder ──
   loadFormFields(): void {
     if (!this.nodoSeleccionado?.esquemaFormulario) { this.formFields = []; return; }
-    this.formFields = (this.nodoSeleccionado.esquemaFormulario as any).fields || [];
+    const fields = (this.nodoSeleccionado.esquemaFormulario as any).fields || [];
+    // Asegurar que tengan el objeto validations inicializado para ngModel
+    this.formFields = fields.map((f: any) => ({
+      ...f,
+      validations: f.validations || {}
+    }));
   }
   addFormField(): void {
-    this.formFields.push({ key: `field_${Date.now()}`, label: '', type: 'text', required: false });
+    this.formFields.push({ 
+      key: `field_${Date.now()}`, 
+      label: '', 
+      type: 'text', 
+      required: false,
+      validations: {
+        min: undefined,
+        max: undefined
+      } 
+    });
+    this.saveFormFields();
+    this.triggerAutoSave();
   }
-  removeFormField(i: number): void { this.formFields.splice(i, 1); }
+  removeFormField(i: number): void { 
+    this.formFields.splice(i, 1);
+    this.saveFormFields();
+    this.triggerAutoSave();
+  }
   saveFormFields(): void {
     if (!this.sel || !this.nodoSeleccionado) return;
     const act = this.sel.calles[this.editCalleIdx].actividades[this.editActIdx];
-    act.esquemaFormulario = { fields: this.formFields };
+    act.esquemaFormulario = { fields: [...this.formFields] };
   }
 
   // ── Helpers ──
@@ -634,4 +999,135 @@ export class DesignerComponent implements OnInit, OnDestroy {
     this.toastMsg = msg; this.toastType = type;
     setTimeout(() => this.toastMsg = '', 3000);
   }
+
+  getSalidasNodo(nodeId: string): Transicion[] {
+    if (!this.sel) return [];
+    return this.sel.transiciones.filter(t => t.origenId === nodeId);
+  }
+
+  getNombreNodo(nodeId: string): string {
+    if (!this.sel) return 'Desconocido';
+    for (const c of this.sel.calles) {
+      const a = c.actividades.find(act => act.id === nodeId);
+      if (a) return a.nombre;
+    }
+    return 'Desconocido';
+  }
+
+  eliminarTransicion(id: string): void {
+    if (!this.sel) return;
+    this.sel.transiciones = this.sel.transiciones.filter(t => t.id !== id);
+    this.triggerAutoSave();
+  }
+
+  onNodeMouseEnter(id: string): void { this.hoveredNodeId = id; }
+  onNodeMouseLeave(): void { this.hoveredNodeId = null; }
+
+  // ── Simulation Logic ──
+  startSimulation(): void {
+    if (!this.sel) return;
+    this.isSimulating = true;
+    this.nodoSeleccionado = null;
+    this.transicionSeleccionada = null;
+    this.calleSeleccionada = null;
+    this.activeSimNodes = [];
+    this.simLog = ['Simulación lista. Haz clic en Inicio.'];
+    
+    const inicio = this.getAllActividades().find(a => a.tipo === 'INICIO');
+    if (inicio) {
+      this.activeSimNodes = [inicio.id];
+    }
+  }
+
+  stopSimulation(): void {
+    this.isSimulating = false;
+    this.activeSimNodes = [];
+    this.simLog = [];
+  }
+
+  avanzarSimulacion(nodeId: string): void {
+    if (!this.isSimulating || !this.sel) return;
+    
+    const act = this.getAllActividades().find(a => a.id === nodeId);
+    if (!act || !this.activeSimNodes.includes(nodeId)) return;
+
+    const trans = this.sel.transiciones.filter(t => t.origenId === nodeId);
+    
+    if (trans.length === 0) {
+      if (act.tipo === 'FIN') {
+        this.simLog.push(`✓ ${act.nombre}: Flujo completado.`);
+        this.activeSimNodes = this.activeSimNodes.filter(id => id !== nodeId);
+        // Auto-stop after a small delay if no nodes left
+        if (this.activeSimNodes.length === 0) {
+          setTimeout(() => {
+            if (confirm('Simulación terminada con éxito. ¿Deseas salir?')) {
+               this.stopSimulation();
+            }
+          }, 800);
+        }
+      } else {
+        this.simLog.push(`! ${act.nombre}: No tiene conexiones de salida.`);
+      }
+      return;
+    }
+
+    if (act.tipo === 'DECISION') {
+      this.simLog.push(`? ${act.nombre}: Esperando decisión manual...`);
+      return;
+    }
+
+    // Move forward automatically if not a decision
+    const nextIds = trans.map(t => t.destinoId);
+    this.activeSimNodes = [...this.activeSimNodes.filter(id => id !== nodeId), ...nextIds];
+    
+    nextIds.forEach(nid => {
+      const nextAct = this.getNombreNodo(nid);
+      this.simLog.push(`${act.nombre} → ${nextAct}`);
+      
+      // Recursive auto-advance for technical nodes (FORK, JOIN, MERGE)
+      const targetAct = this.getAllActividades().find(a => a.id === nid);
+      if (targetAct && (targetAct.tipo === 'FORK' || targetAct.tipo === 'JOIN' || targetAct.tipo === 'MERGE')) {
+        setTimeout(() => this.avanzarSimulacion(nid), 600);
+      }
+    });
+  }
+
+  pickSimPath(transId: string): void {
+    const t = this.sel?.transiciones.find(x => x.id === transId);
+    if (!t) return;
+    
+    // Remove the source node from active and add the target
+    this.activeSimNodes = [...this.activeSimNodes.filter(id => id !== t.origenId), t.destinoId];
+    this.simLog.push(`Decisión: [${t.etiqueta || 'Siguiente'}] → ${this.getNombreNodo(t.destinoId)}`);
+    
+    // Recursive auto-advance if target is technical node
+    const targetAct = this.getAllActividades().find(a => a.id === t.destinoId);
+    if (targetAct && (targetAct.tipo === 'FORK' || targetAct.tipo === 'JOIN' || targetAct.tipo === 'MERGE')) {
+      setTimeout(() => this.avanzarSimulacion(t.destinoId), 600);
+    }
+  }
+
+  // --- FORM TEMPLATE HANDLING ---
+  cargarPlantilla(templateId: string) {
+    if (!this.nodoSeleccionado) return;
+    const t = this.templates().find(x => x.id === templateId);
+    if (!t) return;
+
+    // Snapshot of fields
+    const fields = t.campos.map(c => ({
+      key: c.key,
+      label: c.label,
+      type: c.type,
+      required: c.required,
+      options: c.options ? [...c.options] : undefined,
+      validations: c.validations ? { ...c.validations } : {}
+    }));
+
+    this.nodoSeleccionado.plantillaId = t.id;
+    this.nodoSeleccionado.esquemaFormulario = { fields };
+    this.formFields = fields;
+    this.onNodeChange();
+  }
+
+  getDeptos() { return this.adminSvc.departamentos(); }
 }

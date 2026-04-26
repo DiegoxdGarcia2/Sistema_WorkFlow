@@ -121,6 +121,38 @@ public class PoliticaNegocioService {
         return politicaRepo.findByTenantIdAndEstaActiva(tenantId, true);
     }
 
+    public List<PoliticaNegocio> listarIniciablesPorUsuario(String tenantId, String departamentoId, String rol) {
+        List<PoliticaNegocio> activas = listarActivasPorTenant(tenantId);
+        
+        // El rol desde el frontend es ADMINISTRADOR
+        if ("ADMINISTRADOR".equals(rol) || "ADMIN".equals(rol)) return activas;
+
+        return activas.stream().filter(p -> {
+            // Buscar actividad inicial
+            Actividad inicio = p.getCalles().stream()
+                    .flatMap(c -> c.getActividades().stream())
+                    .filter(a -> a.getTipo() == TipoActividad.INICIO)
+                    .findFirst().orElse(null);
+
+            if (inicio == null) return false;
+
+            // Buscar calle que contiene ese inicio
+            Calle calleInicio = p.getCalles().stream()
+                    .filter(c -> c.getActividades().stream().anyMatch(a -> a.getId().equals(inicio.getId())))
+                    .findFirst().orElse(null);
+
+            if (calleInicio == null) return false;
+            
+            String deptoCalle = calleInicio.getDepartamentoId();
+            
+            // Si la calle no tiene departamento asignado, el trámite está mal configurado o restringido.
+            // No permitimos que aparezca en la lista de iniciables para evitar errores en UX.
+            if (deptoCalle == null || deptoCalle.isEmpty() || deptoCalle.equals("null")) return false;
+
+            return deptoCalle.equals(departamentoId);
+        }).toList();
+    }
+
     // ── Helpers privados ─────────────────────────────────────────
 
     /**

@@ -26,8 +26,13 @@ public class UsuarioController {
 
     @GetMapping("/tenant/{tenantId}")
     public List<Usuario> listarPorTenant(@PathVariable String tenantId) {
-        return usuarioRepo.findAll().stream()
-                .filter(u -> u.getTenantId().equals(tenantId))
+        return usuarioRepo.findByTenantId(tenantId);
+    }
+
+    @GetMapping("/tenant/{tenantId}/rol/{rol}")
+    public List<Usuario> listarPorTenantYRol(@PathVariable String tenantId, @PathVariable String rol) {
+        return usuarioRepo.findByTenantId(tenantId).stream()
+                .filter(u -> u.getRol().name().equalsIgnoreCase(rol))
                 .toList();
     }
 
@@ -55,6 +60,8 @@ public class UsuarioController {
                 .password(req.getPassword())
                 .telefono(req.getTelefono())
                 .cargo(req.getCargo())
+                .departamento(req.getDepartamento())
+                .departamentoId(req.getDepartamentoId())
                 .rol(req.getRol())
                 .build());
 
@@ -87,6 +94,8 @@ public class UsuarioController {
         }
         if (req.getTelefono() != null) user.setTelefono(req.getTelefono());
         if (req.getCargo() != null) user.setCargo(req.getCargo());
+        if (req.getDepartamento() != null) user.setDepartamento(req.getDepartamento());
+        if (req.getDepartamentoId() != null) user.setDepartamentoId(req.getDepartamentoId());
         if (req.getRol() != null) user.setRol(req.getRol());
         if (req.getActivo() != null) user.setActivo(req.getActivo());
         user.setActualizadoEn(Instant.now());

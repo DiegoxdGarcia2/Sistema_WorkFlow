@@ -31,6 +31,7 @@ public class Proyecto {
     private String color = "#6366f1"; // Indigo por defecto
 
     private String responsable;       // Nombre del responsable del proyecto
+    private String responsableId;     // ID del responsable del proyecto
 
     @Builder.Default
     private String estado = "ACTIVO"; // ACTIVO, ARCHIVADO

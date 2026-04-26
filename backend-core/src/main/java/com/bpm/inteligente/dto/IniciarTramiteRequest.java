@@ -12,4 +12,6 @@ public class IniciarTramiteRequest {
 
     @NotBlank(message = "El politicaId es obligatorio")
     private String politicaId;
+
+    private String usuarioId;
 }

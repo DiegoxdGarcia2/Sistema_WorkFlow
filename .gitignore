@@ -42,3 +42,16 @@ __pycache__/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ── Logs & Debugging ──
+*.log
+*_log.txt
+server_log.txt
+hs_err_pid*.log
+test_audit.js
+path.txt
+
+# ── Archivos Locales & Legacy ──
+backend-core/uploads/
+bpm-frontend/proxy.conf.json
+Lanzar-BPM.bat

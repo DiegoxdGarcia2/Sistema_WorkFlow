@@ -35,4 +35,7 @@ public class Transicion {
 
     @Builder.Default
     private int grosor = 2;
+
+    private String origenAnchor;
+    private String destinoAnchor;
 }

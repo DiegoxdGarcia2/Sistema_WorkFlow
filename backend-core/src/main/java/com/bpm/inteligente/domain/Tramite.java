@@ -26,6 +26,7 @@ public class Tramite {
     @Indexed
     private String politicaId;
 
+    @Indexed
     private String tenantId;
 
     @Builder.Default

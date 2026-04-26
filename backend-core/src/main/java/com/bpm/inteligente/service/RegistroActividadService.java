@@ -8,6 +8,7 @@ import com.bpm.inteligente.exception.BusinessRuleException;
 import com.bpm.inteligente.exception.ResourceNotFoundException;
 import com.bpm.inteligente.repository.RegistroActividadRepository;
 import com.bpm.inteligente.repository.TramiteRepository;
+import com.bpm.inteligente.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ public class RegistroActividadService {
     private final RegistroActividadRepository registroRepo;
     private final TramiteRepository tramiteRepo;
     private final PoliticaNegocioService politicaService;
+    private final UsuarioRepository usuarioRepo;
 
     /**
      * El funcionario toma una tarea pendiente y pasa a EN_PROGRESO.
@@ -37,7 +39,11 @@ public class RegistroActividadService {
                     "Solo se pueden tomar tareas en estado PENDIENTE. Estado actual: " + registro.getEstado());
         }
 
-        registro.setEjecutadoPor(userId);
+        Usuario user = usuarioRepo.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario", "id", userId));
+
+        registro.setEjecutadoPorId(userId);
+        registro.setEjecutadoPor(user.getNombre() + " " + user.getApellido());
         registro.setEstado(EstadoRegistro.EN_PROGRESO);
         return registroRepo.save(registro);
     }
@@ -54,6 +60,7 @@ public class RegistroActividadService {
             String registroId,
             Map<String, Object> esquemaFormulario,
             Map<String, Object> datosFormulario,
+            List<RegistroActividad.ArchivoInfo> archivos,
             String notas) {
 
         RegistroActividad registro = buscarPorId(registroId);
@@ -72,6 +79,7 @@ public class RegistroActividadService {
         // 2. Guardar formulario dinámico y marcar como HECHO
         registro.setEsquemaFormulario(esquemaFormulario);
         registro.setDatosFormulario(datosFormulario);
+        registro.setArchivos(archivos != null ? archivos : new java.util.ArrayList<>());
         registro.setNotas(notas != null ? notas : "");
         registro.setEstado(EstadoRegistro.HECHO);
         registro.setCompletadoEn(Instant.now());
@@ -101,7 +109,9 @@ public class RegistroActividadService {
      * Bandeja de tareas: obtener registros PENDIENTE + EN_PROGRESO asignados a un funcionario.
      */
     public List<RegistroActividad> bandejaPendientes(String userId) {
-        return registroRepo.findByEjecutadoPorAndEstadoIn(
+        // Buscamos tanto por ID como por nombre (para retrocompatibilidad si es necesario, 
+        // pero principalmente por ID ahora)
+        return registroRepo.findByEjecutadoPorIdAndEstadoIn(
                 userId, List.of(EstadoRegistro.PENDIENTE, EstadoRegistro.EN_PROGRESO));
     }
 
@@ -110,6 +120,28 @@ public class RegistroActividadService {
      */
     public List<RegistroActividad> tareasNoAsignadas() {
         return registroRepo.findByEjecutadoPorIsNullAndEstado(EstadoRegistro.PENDIENTE);
+    }
+
+    /**
+     * Bandeja de tareas por departamento.
+     */
+    public List<RegistroActividad> bandejaPorDepartamento(String deptoId) {
+        return registroRepo.findByDepartamentoIdAndEstadoIn(
+                deptoId, List.of(EstadoRegistro.PENDIENTE, EstadoRegistro.EN_PROGRESO));
+    }
+
+    /**
+     * Tareas sin asignar por departamento.
+     */
+    public List<RegistroActividad> tareasNoAsignadasPorDepartamento(String deptoId) {
+        return registroRepo.findByDepartamentoIdAndEjecutadoPorIsNullAndEstado(deptoId, EstadoRegistro.PENDIENTE);
+    }
+
+    /**
+     * Historial de tareas completadas por un usuario.
+     */
+    public List<RegistroActividad> historialPorUsuario(String userId) {
+        return registroRepo.findByEjecutadoPorIdAndEstadoOrderByCompletadoEnDesc(userId, EstadoRegistro.HECHO);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -152,12 +184,23 @@ public class RegistroActividadService {
                 continue; // No se crea registro para nodos FIN
             }
 
+            // Buscar a qué calle pertenece esta actividad para saber el departamento
+            String deptoId = politica.getCalles().stream()
+                    .filter(c -> c.getActividades().stream().anyMatch(a -> a.getId().equals(destino.getId())))
+                    .findFirst()
+                    .map(Calle::getDepartamentoId)
+                    .orElse(null);
+
             // Crear registro pendiente para la actividad destino
             RegistroActividad nuevoRegistro = RegistroActividad.builder()
                     .id(UUID.randomUUID().toString())
                     .tramiteId(tramite.getId())
+                    .tenantId(tramite.getTenantId())
                     .actividadId(destino.getId())
+                    .departamentoId(deptoId)
                     .estado(EstadoRegistro.PENDIENTE)
+                    .asignadoEn(Instant.now())
+                    .esquemaFormulario(destino.getEsquemaFormulario()) // Copiar esquema de la plantilla/actividad
                     .build();
             registroRepo.save(nuevoRegistro);
         }

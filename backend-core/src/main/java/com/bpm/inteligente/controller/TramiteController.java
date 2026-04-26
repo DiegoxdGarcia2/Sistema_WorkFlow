@@ -14,11 +14,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/tramites")
+@CrossOrigin(origins = "*", allowedHeaders = "*")
 @RequiredArgsConstructor
 public class TramiteController {
 
@@ -29,16 +31,36 @@ public class TramiteController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public TramiteDTO iniciar(@Valid @RequestBody IniciarTramiteRequest request) {
-        Tramite tramite = tramiteService.iniciar(request.getPoliticaId());
+        Tramite tramite = tramiteService.iniciar(request.getPoliticaId(), request.getUsuarioId());
         PoliticaNegocio politica = politicaService.buscarPorId(tramite.getPoliticaId());
         return DomainMapper.toDTO(tramite, politica.getNombre());
     }
 
-    @PatchMapping("/{id}/cancelar")
-    public TramiteDTO cancelar(@PathVariable String id) {
-        Tramite tramite = tramiteService.cancelar(id);
-        PoliticaNegocio politica = politicaService.buscarPorId(tramite.getPoliticaId());
-        return DomainMapper.toDTO(tramite, politica.getNombre());
+    @PostMapping("/{id}/cancelar")
+    @CrossOrigin(origins = "*", allowedHeaders = "*")
+    public TramiteDTO cancelar(@PathVariable("id") String id) {
+        try {
+            System.out.println("🛑 Recibida solicitud de cancelación para trámite: " + id);
+            if (id == null || id.isEmpty()) {
+                throw new IllegalArgumentException("El ID del trámite no puede ser nulo o vacío");
+            }
+            Tramite tramite = tramiteService.cancelar(id);
+            
+            String nombrePolitica = "Trámite desconocido";
+            try {
+                PoliticaNegocio politica = politicaService.buscarPorId(tramite.getPoliticaId());
+                if (politica != null) nombrePolitica = politica.getNombre();
+            } catch (Exception e) {
+                System.err.println("⚠️ No se pudo obtener el nombre de la política al cancelar: " + e.getMessage());
+            }
+
+            System.out.println("✅ Trámite " + id + " cancelado exitosamente.");
+            return DomainMapper.toDTO(tramite, nombrePolitica);
+        } catch (Exception e) {
+            System.err.println("❌ ERROR al cancelar trámite " + id + ": " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        }
     }
 
     @GetMapping("/{id}")
@@ -60,6 +82,16 @@ public class TramiteController {
                 .toList();
     }
 
+    @GetMapping("/monitor/tenant/{tenantId}")
+    public List<com.bpm.inteligente.dto.MonitorTramiteDTO> monitor(@PathVariable String tenantId) {
+        return tramiteService.obtenerMonitorTramites(tenantId);
+    }
+
+    @GetMapping("/historial/tenant/{tenantId}")
+    public List<com.bpm.inteligente.dto.MonitorTramiteDTO> historial(@PathVariable String tenantId) {
+        return tramiteService.obtenerHistorialTramites(tenantId);
+    }
+
     // ══════════════════════════════════════════════════════════════
     // ENDPOINT PÚBLICO: Portal del Cliente — Tracking de Trámites
     // ══════════════════════════════════════════════════════════════
@@ -78,7 +110,11 @@ public class TramiteController {
         List<RegistroActividad> registros = registroService.listarPorTramite(id);
 
         List<TrackingDTO.PasoTimeline> timeline = registros.stream()
-                .sorted(Comparator.comparing(RegistroActividad::getAsignadoEn))
+                .sorted((a, b) -> {
+                    Instant t1 = a.getAsignadoEn() != null ? a.getAsignadoEn() : Instant.MIN;
+                    Instant t2 = b.getAsignadoEn() != null ? b.getAsignadoEn() : Instant.MIN;
+                    return t1.compareTo(t2);
+                })
                 .map(r -> {
                     String actNombre = resolverNombreActividad(politica, r.getActividadId());
                     String calleNombre = resolverCalleDeActividad(politica, r.getActividadId());
@@ -92,6 +128,9 @@ public class TramiteController {
                             .notas(r.getNotas())
                             .asignadoEn(r.getAsignadoEn() != null ? r.getAsignadoEn().toString() : null)
                             .completadoEn(r.getCompletadoEn() != null ? r.getCompletadoEn().toString() : null)
+                            .datosFormulario(r.getDatosFormulario())
+                            .esquemaFormulario(r.getEsquemaFormulario())
+                            .archivos(r.getArchivos())
                             .build();
                 })
                 .toList();

@@ -64,9 +64,26 @@ public final class DomainMapper {
                 .estado(entity.getEstado())
                 .esquemaFormulario(entity.getEsquemaFormulario())
                 .datosFormulario(entity.getDatosFormulario())
+                .archivos(entity.getArchivos())
                 .notas(entity.getNotas())
                 .asignadoEn(entity.getAsignadoEn())
                 .completadoEn(entity.getCompletadoEn())
+                .build();
+    }
+
+    public static TenantDTO toDTO(com.bpm.inteligente.domain.Tenant entity) {
+        return TenantDTO.builder()
+                .id(entity.getId())
+                .nombre(entity.getNombre())
+                .nit(entity.getNit())
+                .direccion(entity.getDireccion())
+                .industria(entity.getIndustria())
+                .sitioWeb(entity.getSitioWeb())
+                .telefonoInstitucional(entity.getTelefonoInstitucional())
+                .emailContacto(entity.getEmailContacto())
+                .logoUrl(entity.getLogoUrl())
+                .lema(entity.getLema())
+                .creadoEn(entity.getCreadoEn())
                 .build();
     }
 }

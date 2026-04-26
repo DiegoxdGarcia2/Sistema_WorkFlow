@@ -22,6 +22,12 @@ export class PoliticaService {
     return this.http.get<PoliticaDTO[]>(`${this.baseUrl}/tenant/${tenantId}/activas`);
   }
 
+  listarIniciables(tenantId: string, departamentoId: string, rol: string): Observable<PoliticaDTO[]> {
+    return this.http.get<PoliticaDTO[]>(`${this.baseUrl}/tenant/${tenantId}/iniciables`, {
+      params: { departamentoId, rol }
+    });
+  }
+
   buscarPorId(id: string): Observable<PoliticaDTO> {
     return this.http.get<PoliticaDTO>(`${this.baseUrl}/${id}`);
   }

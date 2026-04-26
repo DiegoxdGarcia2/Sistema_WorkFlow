@@ -19,6 +19,8 @@ public class EditarUsuarioRequest {
 
     private String telefono;
     private String cargo;
+    private String departamento;
+    private String departamentoId;
     private RolUsuario rol;
     private Boolean activo;
 }

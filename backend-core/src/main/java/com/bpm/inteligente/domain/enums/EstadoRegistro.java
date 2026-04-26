@@ -4,5 +4,6 @@ public enum EstadoRegistro {
     PENDIENTE,
     EN_PROGRESO,
     HECHO,
-    BLOQUEADO
+    BLOQUEADO,
+    CANCELADO
 }

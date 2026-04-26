@@ -5,7 +5,9 @@ import { Router } from '@angular/router';
 import { ProyectoService } from '../../services/proyecto.service';
 import { PoliticaService } from '../../services/politica.service';
 import { AuthService } from '../../services/auth.service';
+import { AdminService, UsuarioListDTO } from '../../services/admin.service';
 import { ProyectoDTO, PoliticaDTO } from '../../models/bpm.models';
+import { effect, computed, signal } from '@angular/core';
 
 @Component({
   selector: 'app-projects-hub',
@@ -19,7 +21,7 @@ import { ProyectoDTO, PoliticaDTO } from '../../models/bpm.models';
     .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
   `],
   template: `
-    <div class="min-h-full bg-slate-950 text-slate-100 font-sans">
+    <div class="min-h-full bg-premium text-slate-100 font-sans">
       <!-- Header -->
       <div class="border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-20">
         <div class="max-w-7xl mx-auto px-8 py-5 flex items-center justify-between">
@@ -54,13 +56,13 @@ import { ProyectoDTO, PoliticaDTO } from '../../models/bpm.models';
             <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
               <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
             </div>
-            <div><p class="text-2xl font-bold">{{ totalPoliticas }}</p><p class="text-xs text-slate-500">Políticas Totales</p></div>
+            <div><p class="text-2xl font-bold">{{ totalPoliticas() }}</p><p class="text-xs text-slate-500">Políticas Totales</p></div>
           </div>
           <div class="flex items-center gap-4 p-5 rounded-2xl border border-slate-800/60 bg-slate-900/40 ring-1 ring-white/5">
             <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-600 to-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
               <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             </div>
-            <div><p class="text-2xl font-bold">{{ politicasActivas }}</p><p class="text-xs text-slate-500">Políticas Activas</p></div>
+            <div><p class="text-2xl font-bold">{{ politicasActivas() }}</p><p class="text-xs text-slate-500">Políticas Activas</p></div>
           </div>
         </div>
 
@@ -117,7 +119,7 @@ import { ProyectoDTO, PoliticaDTO } from '../../models/bpm.models';
           }
 
           <!-- Sin proyecto: políticas sueltas -->
-          @if (politicasSinProyecto.length > 0) {
+          @if (politicasSinProyecto().length > 0) {
             <div (click)="abrirSinProyecto()" class="card-hover group relative rounded-2xl border border-dashed border-slate-700/60 bg-slate-900/20 ring-1 ring-white/5 cursor-pointer overflow-hidden">
               <div class="h-1.5 w-full bg-slate-700"></div>
               <div class="p-6">
@@ -126,7 +128,7 @@ import { ProyectoDTO, PoliticaDTO } from '../../models/bpm.models';
                 </div>
                 <h3 class="text-base font-bold text-slate-400 mb-1">Sin Proyecto</h3>
                 <p class="text-xs text-slate-600 mb-4">Políticas no asignadas a ningún proyecto.</p>
-                <span class="text-[10px] text-slate-600">{{ politicasSinProyecto.length }} políticas</span>
+                <span class="text-[10px] text-slate-600">{{ politicasSinProyecto().length }} políticas</span>
               </div>
             </div>
           }
@@ -162,8 +164,19 @@ import { ProyectoDTO, PoliticaDTO } from '../../models/bpm.models';
                 <textarea [(ngModel)]="formProyecto.descripcion" rows="3" placeholder="Describe el propósito de este proyecto..." class="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-200 placeholder-slate-600 focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all resize-none"></textarea>
               </div>
               <div>
-                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Responsable</label>
-                <input [(ngModel)]="formProyecto.responsable" placeholder="Ej. Juan Pérez" class="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-200 placeholder-slate-600 focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all">
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Responsable del Proyecto *</label>
+                <div class="relative group">
+                  <select [(ngModel)]="formProyecto.responsable"
+                          class="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-200 focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all appearance-none">
+                    <option value="">Seleccionar Diseñador...</option>
+                    @for (d of disenadores(); track d.id) {
+                      <option [value]="d.nombre + ' ' + d.apellido">{{ d.nombre }} {{ d.apellido }}</option>
+                    }
+                  </select>
+                  <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </div>
+                </div>
               </div>
               <div>
                 <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Color del Proyecto</label>
@@ -204,31 +217,57 @@ export class ProjectsHubComponent implements OnInit {
   formProyecto = { nombre: '', descripcion: '', responsable: '', color: '#6366f1' };
   coloresProyecto = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#475569'];
 
-  allPoliticas: PoliticaDTO[] = [];
-  politicasSinProyecto: PoliticaDTO[] = [];
+  allPoliticas = signal<PoliticaDTO[]>([]);
+  politicasSinProyecto = signal<PoliticaDTO[]>([]);
+  disenadores = signal<UsuarioListDTO[]>([]);
 
-  get totalPoliticas(): number { return this.allPoliticas.length; }
-  get politicasActivas(): number { return this.allPoliticas.filter(p => p.estaActiva).length; }
+  totalPoliticas = computed(() => this.allPoliticas().length);
+  politicasActivas = computed(() => this.allPoliticas().filter(p => p.estaActiva).length);
 
   constructor(
     public proyectoService: ProyectoService,
     private politicaService: PoliticaService,
     private auth: AuthService,
+    private adminService: AdminService,
     private router: Router,
-  ) {}
+  ) {
+    // Reaccionar a cambios en el usuario
+    effect(() => {
+      const user = this.auth.usuario();
+      if (user?.tenantId) {
+        this.cargarDatos(user.tenantId);
+      }
+    });
+  }
 
   ngOnInit(): void {
-    const tid = this.auth.usuario()?.tenantId;
-    if (!tid) return;
-    this.proyectoService.listarPorTenant(tid).subscribe(() => this.cargando = false);
-    this.politicaService.listarPorTenant(tid).subscribe(pols => {
-      this.allPoliticas = pols;
-      this.politicasSinProyecto = pols.filter(p => !p.proyectoId);
+    const user = this.auth.usuario();
+    if (user?.tenantId) {
+      this.cargarDatos(user.tenantId);
+    }
+  }
+
+  private cargarDatos(tid: string): void {
+    this.cargando = true;
+    this.proyectoService.listarPorTenant(tid).subscribe({
+      next: () => this.cargando = false,
+      error: () => this.cargando = false
+    });
+
+    this.politicaService.listarPorTenant(tid).subscribe({
+      next: pols => {
+        this.allPoliticas.set(pols);
+        this.politicasSinProyecto.set(pols.filter(p => !p.proyectoId));
+      }
+    });
+
+    this.adminService.getUsuariosPorRol(tid, 'DISENADOR').subscribe({
+      next: users => this.disenadores.set(users)
     });
   }
 
   contarPoliticasProyecto(proyectoId: string): number {
-    return this.allPoliticas.filter(p => p.proyectoId === proyectoId).length;
+    return this.allPoliticas().filter(p => p.proyectoId === proyectoId).length;
   }
 
   abrirProyecto(p: ProyectoDTO): void {

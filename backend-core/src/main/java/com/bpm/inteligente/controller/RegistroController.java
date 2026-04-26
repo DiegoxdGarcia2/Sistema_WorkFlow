@@ -40,6 +40,7 @@ public class RegistroController {
                 request.getRegistroId(),
                 request.getEsquemaFormulario(),
                 request.getDatosFormulario(),
+                request.getArchivos(),
                 request.getNotas());
         String actNombre = resolverNombreActividad(registro);
         return DomainMapper.toDTO(registro, actNombre);
@@ -62,6 +63,27 @@ public class RegistroController {
     @GetMapping("/sin-asignar")
     public List<RegistroActividadDTO> tareasNoAsignadas() {
         return registroService.tareasNoAsignadas().stream()
+                .map(r -> DomainMapper.toDTO(r, resolverNombreActividad(r)))
+                .toList();
+    }
+
+    @GetMapping("/bandeja-departamento/{deptoId}")
+    public List<RegistroActividadDTO> bandejaPorDepartamento(@PathVariable String deptoId) {
+        return registroService.bandejaPorDepartamento(deptoId).stream()
+                .map(r -> DomainMapper.toDTO(r, resolverNombreActividad(r)))
+                .toList();
+    }
+
+    @GetMapping("/sin-asignar-departamento/{deptoId}")
+    public List<RegistroActividadDTO> tareasNoAsignadasPorDepartamento(@PathVariable String deptoId) {
+        return registroService.tareasNoAsignadasPorDepartamento(deptoId).stream()
+                .map(r -> DomainMapper.toDTO(r, resolverNombreActividad(r)))
+                .toList();
+    }
+
+    @GetMapping("/historial/{userId}")
+    public List<RegistroActividadDTO> historialPorUsuario(@PathVariable String userId) {
+        return registroService.historialPorUsuario(userId).stream()
                 .map(r -> DomainMapper.toDTO(r, resolverNombreActividad(r)))
                 .toList();
     }

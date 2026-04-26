@@ -1,4 +1,7 @@
-<div class="flex h-full bg-slate-950 text-slate-100 font-sans overflow-hidden">
+<div class="flex h-full bg-premium text-slate-100 font-sans overflow-hidden relative">
+  <!-- Fondo con gradiente sutil -->
+  <div class="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-500/5 blur-[120px] rounded-full pointer-events-none"></div>
+  <div class="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-sky-500/5 blur-[100px] rounded-full pointer-events-none"></div>
 
   <!-- LEFT SIDEBAR -->
   <aside class="sidebar-left w-[280px] flex-shrink-0 border-r border-slate-800 bg-slate-950 flex flex-col overflow-hidden">
@@ -91,49 +94,109 @@
           <button (click)="cancelConnMode()" class="text-indigo-400 hover:text-white font-bold">ESC</button>
         </div>
       </div>
+
+      <!-- Form Manager -->
+      <div *ngIf="sel" class="border-t border-slate-800/60 px-4 py-3 mt-auto">
+        <button (click)="mostrarFormManager = true" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-indigo-400 hover:border-indigo-500/30 transition-all shadow-sm">
+          <div class="w-7 h-7 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <span class="text-[11px] font-bold uppercase tracking-wider">Gestor de Formularios</span>
+        </button>
+      </div>
+
     </div>
   </aside>
 
-  <!-- CENTER CANVAS -->
-  <main class="flex-1 relative overflow-auto dot-grid" [ngClass]="{'canvas-connection-mode': connMode.active}"
-        (mousedown)="onCanvasBgClick($event)" (mousemove)="onCanvasMouseMove($event)" (mouseup)="onCanvasMouseUp()">
-
-    <div *ngIf="sel" class="relative" [style.width.px]="getCanvasW()" [style.min-height.px]="getCanvasH()">
-      <!-- Toolbar -->
-      <div class="sticky top-0 z-20 flex items-center justify-between px-4 py-3 backdrop-blur-xl bg-slate-950/70 border-b border-slate-800/30">
-        <div class="flex items-center gap-2">
-          <div class="w-2 h-2 rounded-full" [ngClass]="sel.estaActiva ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></div>
-          <span class="text-xs font-bold text-slate-200">{{ sel.nombre }}</span>
-          <span class="text-[10px] text-slate-500 font-mono">v{{ sel.version }}</span>
-          <span *ngIf="sel.estaActiva" class="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold">READ-ONLY</span>
+  <!-- CENTER CANVAS & TOOLBAR -->
+  <main class="flex-1 flex flex-col overflow-hidden relative" [ngClass]="{'canvas-connection-mode': connMode.active}">
+    
+    <!-- DESIGNER TOOLBAR (Fixed to Viewport) -->
+    <div *ngIf="sel" class="h-14 shrink-0 flex items-center justify-between px-6 backdrop-blur-xl bg-slate-950/40 border-b border-slate-800/40 z-40 relative">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-2.5 h-2.5 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.3)] shrink-0" [ngClass]="sel.estaActiva ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></div>
+        <div class="flex flex-col min-w-0">
+          <span class="text-[11px] font-bold text-slate-100 uppercase tracking-wider truncate">{{ sel.nombre }}</span>
+          <span class="text-[9px] text-slate-500 font-mono truncate">Versión {{ sel.version }} · {{ contarNodos(sel) }} objetos</span>
         </div>
-        <div class="flex items-center gap-2">
-          <!-- Save status -->
-          <div *ngIf="saveStatus !== 'idle'" class="save-indicator" [ngClass]="saveStatus">
-            <span *ngIf="saveStatus === 'saving'">&#9679; Guardando...</span>
-            <span *ngIf="saveStatus === 'saved'">&#10003; Guardado</span>
-            <span *ngIf="saveStatus === 'error'">&#10007; Error</span>
+        <span *ngIf="sel.estaActiva" class="ml-2 text-[8px] px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold uppercase tracking-widest shrink-0">Publicada</span>
+      </div>
+
+      <!-- MIDDLE: Save Status Indicator -->
+      <div class="absolute left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none">
+        <div *ngIf="saveStatus !== 'idle'" class="save-pill animate-in fade-in slide-in-from-top-2 duration-300" [ngClass]="saveStatus">
+          <div class="flex items-center gap-2">
+            <div class="w-1.5 h-1.5 rounded-full" 
+                 [ngClass]="{'bg-amber-400 animate-pulse': saveStatus==='saving', 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)]': saveStatus==='saved', 'bg-red-400': saveStatus==='error'}">
+            </div>
+            <span class="text-[9px] font-bold tracking-wider uppercase" 
+                  [ngClass]="{'text-amber-400/90': saveStatus==='saving', 'text-emerald-400/90': saveStatus==='saved', 'text-red-400/90': saveStatus==='error'}">
+              {{ saveStatus === 'saving' ? 'Sincronizando...' : (saveStatus === 'saved' ? 'Cambios Guardados' : 'Error de Conexión') }}
+            </span>
           </div>
         </div>
       </div>
 
-      <!-- Lane Headers (table-style) -->
-      <div class="lane-header-row">
+      <div class="flex items-center gap-3 shrink-0">
+        <!-- Simulation Mode Indicator -->
+        <div *ngIf="isSimulating" class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 animate-in fade-in zoom-in duration-300">
+          <div class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></div>
+          <span class="text-[9px] font-bold text-indigo-400 uppercase tracking-[0.2em]">En Simulación</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button (click)="isSimulating ? stopSimulation() : startSimulation()"
+                  class="px-4 py-1.5 rounded-xl text-[10px] font-bold transition-all flex items-center gap-2 shadow-lg shadow-indigo-500/10 hover:scale-[1.02] active:scale-[0.98]"
+                  [ngClass]="isSimulating ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-indigo-600 text-white hover:bg-indigo-700'">
+            <svg *ngIf="!isSimulating" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="m7 4 12 8-12 8V4z"/></svg>
+            <svg *ngIf="isSimulating" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+            {{ isSimulating ? 'Detener' : 'Simular' }}
+          </button>
+
+          <div class="w-px h-5 bg-slate-800/80 mx-1"></div>
+
+          <button (click)="showRightPanel = !showRightPanel" 
+                  class="w-8 h-8 flex items-center justify-center rounded-xl transition-all border border-transparent"
+                  [ngClass]="showRightPanel ? 'bg-slate-800 text-indigo-400 border-slate-700/50' : 'bg-slate-900/50 text-slate-500 hover:text-slate-300 hover:bg-slate-800'"
+                  [title]="showRightPanel ? 'Ocultar Propiedades' : 'Mostrar Propiedades'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCROLLABLE CANVAS AREA -->
+    <div class="flex-1 overflow-auto relative dot-grid" 
+         (mousedown)="onCanvasBgClick($event)" (mousemove)="onCanvasMouseMove($event)" (mouseup)="onCanvasMouseUp()">
+      
+      <div *ngIf="sel" class="relative" [style.width.px]="getCanvasW()" [style.min-height.px]="getCanvasH()">
+        <!-- Lane Headers (table-style) -->
+        <div class="lane-header-row sticky top-0 z-20">
         <div *ngFor="let calle of sel.calles; let ci = index" class="lane-header-cell"
-             [style.width.px]="LW" [style.border-left-color]="calle.color || '#475569'"
+             [style.width.px]="calle.ancho || LW" [style.color]="calle.color || '#475569'"
              [ngClass]="{'active': calleSeleccionada?.id === calle.id, 'opacity-50': isDraggingLane && dragLaneIdx === ci, 'border-l-indigo-400': isDraggingLane && dragLaneOverIdx === ci && dragLaneIdx !== ci}"
-             (click)="seleccionarCalle(ci, $event)"
-             [attr.draggable]="!sel.estaActiva"
-             (dragstart)="onLaneHeaderDragStart(ci)"
-             (dragover)="onLaneHeaderDragOver(ci, $event)"
-             (drop)="onLaneHeaderDrop(ci)"
-             (dragend)="onLaneHeaderDragEnd()">
-          <div class="flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" class="cursor-grab"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
-            <div class="w-1 h-6 rounded-full" [style.background]="calle.color || '#475569'"></div>
-            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-300">{{ calle.nombre }}</span>
+             (click)="seleccionarCalle(ci, $event)">
+          
+          <div class="flex items-center gap-2 overflow-hidden">
+            <div class="cursor-grab shrink-0 p-1 -m-1 flex items-center justify-center transition-colors hover:bg-slate-700/40 rounded" 
+                 draggable="true"
+                 (dragstart)="onLaneHeaderDragStart(ci)" 
+                 (dragover)="onLaneHeaderDragOver(ci, $event)" 
+                 (drop)="onLaneHeaderDrop(ci)" 
+                 (dragend)="onLaneHeaderDragEnd()"
+                 (dragend)="onLaneHeaderDragEnd()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <div class="w-2 h-2 rounded-full shadow-[0_0_12px_rgba(currentColor,0.6)]" [style.background]="calle.color || '#475569'"></div>
+              <span class="text-[11px] font-bold uppercase tracking-wider text-slate-300 truncate pointer-events-none">{{ calle.nombre }}</span>
+            </div>
           </div>
-          <button *ngIf="!sel.estaActiva" (click)="eliminarCalle(ci); $event.stopPropagation()" class="w-5 h-5 rounded flex items-center justify-center text-red-500/40 hover:text-red-400 hover:bg-red-500/10 transition-all">
+          
+          <!-- Resize Handle -->
+          <div class="lane-resize-handle" (mousedown)="onLaneResizeMouseDown($event, ci)"></div>
+
+          <button *ngIf="!sel.estaActiva" (click)="eliminarCalle(ci); $event.stopPropagation()" class="w-5 h-5 rounded flex items-center justify-center text-red-500/40 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0">
             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
         </div>
@@ -141,49 +204,58 @@
 
       <!-- Lane Backgrounds (table grid) -->
       <div *ngFor="let calle of sel.calles; let ci = index" class="lane-bg"
-           [style.left.px]="getLaneX(ci)" [style.width.px]="LW" [style.top.px]="0"
+           [style.left.px]="getLaneX(ci)" [style.width.px]="calle.ancho || LW" [style.top.px]="0"
+           [style.color]="calle.color || '#475569'"
            [ngClass]="{'drop-target': hoveredLaneIdx === ci && isDragging && dragOriginCi !== ci}">
         <div class="lane-fill" [style.background]="calle.color || '#475569'"></div>
       </div>
 
-      <!-- SVG Connections -->
+      <!-- Base SVG Connections -->
       <svg class="absolute inset-0 w-full h-full pointer-events-none z-[5]" [style.height.px]="getCanvasH()">
         <defs>
-          <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#475569"/></marker>
-          <marker id="arrow-sel" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#818cf8"/></marker>
+          <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="currentColor"/></marker>
         </defs>
         <ng-container *ngFor="let conn of getConnectionPaths(); trackBy: trackByConnId">
-          <!-- Hit area -->
+          <!-- Hit area (Invisible but wider for easier clicking) -->
           <path [attr.d]="conn.path" class="conn-hit" (click)="selectTransicion(conn.trans)" style="pointer-events: stroke"/>
           <!-- Visible path -->
           <path [attr.d]="conn.path" class="conn-path"
-                [attr.stroke]="transicionSeleccionada?.id === conn.id ? '#818cf8' : conn.color"
+                [attr.stroke]="conn.color"
                 [attr.stroke-width]="conn.width"
                 [attr.stroke-dasharray]="conn.dash"
-                [attr.marker-end]="transicionSeleccionada?.id === conn.id ? 'url(#arrow-sel)' : 'url(#arrow)'"
+                [attr.marker-end]="'url(#arrow)'"
+                [style.color]="conn.color"
                 [ngClass]="{'conn-selected': transicionSeleccionada?.id === conn.id}"/>
           <!-- Label -->
           <text *ngIf="conn.label" [attr.x]="conn.labelX" [attr.y]="conn.labelY" fill="#94a3b8" font-size="10" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="500">{{ conn.label }}</text>
         </ng-container>
         <!-- Temp connection line -->
-        <line *ngIf="connMode.active && connMode.sourceId && getSourceCenter()" class="temp-conn-line"
-              [attr.x1]="getSourceCenter()!.x" [attr.y1]="getSourceCenter()!.y + NH/2"
-              [attr.x2]="mouseX" [attr.y2]="mouseY"/>
+        <line *ngIf="(connMode.active || isCreatingConn) && getSourceCenter()" class="temp-conn-line"
+              [attr.x1]="getSourceCenter()!.x" [attr.y1]="getSourceCenter()!.y"
+              [attr.x2]="mouseX" [attr.y2]="mouseY"
+              stroke="#6366f1" stroke-width="2" stroke-dasharray="4 4"/>
       </svg>
 
       <!-- Nodes -->
       <ng-container *ngFor="let calle of sel.calles; let ci = index; trackBy: trackById">
         <div *ngFor="let act of calle.actividades; let ai = index; trackBy: trackById"
              class="node-card rounded-2xl z-10"
-             [ngClass]="{'selected': nodoSeleccionado?.id === act.id, 'dragging': isDragging && dragNodeKey === ci+'-'+ai, 'conn-source': connMode.sourceId === act.id}"
-             [style.left.px]="getNodoPos(ci, ai).x" [style.top.px]="getNodoPos(ci, ai).y"
+             [ngClass]="{'selected': nodoSeleccionado?.id === act.id, 'dragging': isDragging && dragNodeId === act.id, 'conn-source': connMode.sourceId === act.id, 'sim-active': activeSimNodes.includes(act.id)}"
+             [style.left.px]="getNodoPos(act.id).x" [style.top.px]="getNodoPos(act.id).y"
              [style.width.px]="act.ancho || NW"
-             [style.background]="'rgba(15,23,42,0.9)'"
+             [style.background]="act.color ? act.color + '20' : 'rgba(15,23,42,0.92)'"
              [style.backdrop-filter]="'blur(20px)'"
-             [style.border]="'1px solid ' + (nodoSeleccionado?.id === act.id ? 'rgba(99,102,241,0.5)' : act.color ? act.color + '40' : 'rgba(51,65,85,0.6)')"
-             (mousedown)="onNodoMouseDown($event, ci, ai)" (click)="seleccionarNodo(ci, ai, $event)">
-          <!-- Top handle -->
-          <div class="node-handle node-handle-top"></div>
+             [style.border-color]="act.color || 'rgba(51,65,85,0.6)'"
+             (mousedown)="onNodoMouseDown($event, ci, ai)" (click)="isSimulating ? avanzarSimulacion(act.id) : seleccionarNodo(ci, ai, $event)"
+             (mouseenter)="onNodeMouseEnter(act.id)" (mouseleave)="onNodeMouseLeave()">
+          
+          <div *ngIf="activeSimNodes.includes(act.id)" class="sim-badge">ACTIVO</div>
+
+          <!-- Handles -->
+          <div class="node-handle node-handle-top" (mousedown)="onHandleMouseDown($event, act, 'top')"></div>
+          <div class="node-handle node-handle-bottom" (mousedown)="onHandleMouseDown($event, act, 'bottom')"></div>
+          <div class="node-handle node-handle-left" (mousedown)="onHandleMouseDown($event, act, 'left')"></div>
+          <div class="node-handle node-handle-right" (mousedown)="onHandleMouseDown($event, act, 'right')"></div>
           <!-- Content -->
           <div class="flex items-center gap-2.5 px-4 pt-3 pb-2">
             <div class="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md" [style.background]="getAccentBg(act.tipo)" [style.color]="getAccent(act.tipo)">
@@ -201,10 +273,28 @@
               <p class="text-[9px] font-semibold uppercase tracking-[0.15em] mt-0.5" [style.color]="getAccent(act.tipo)">{{ getCategory(act.tipo) }}</p>
             </div>
           </div>
-          <!-- Bottom handle -->
-          <div class="node-handle node-handle-bottom"></div>
         </div>
       </ng-container>
+
+      <!-- Interaction Layer (High Z-Index for Handles and Guides) -->
+      <svg class="absolute inset-0 w-full h-full pointer-events-none z-[40]" [style.height.px]="getCanvasH()">
+        <!-- Alignment Guides -->
+        <ng-container *ngFor="let g of guides">
+          <line *ngIf="g.x !== undefined" [attr.x1]="g.x" y1="0" [attr.x2]="g.x" [attr.y2]="getCanvasH()" class="alignment-guide"/>
+          <line *ngIf="g.y !== undefined" x1="0" [attr.y1]="g.y" [attr.x2]="getCanvasW()" [attr.y2]="g.y" class="alignment-guide"/>
+        </ng-container>
+
+        <ng-container *ngFor="let conn of getConnectionPaths(); trackBy: trackByConnId">
+           <ng-container *ngIf="transicionSeleccionada?.id === conn.id">
+             <circle class="conn-endpoint-handle" [attr.cx]="conn.x1" [attr.cy]="conn.y1" r="6" 
+                     [style.fill]="conn.color" style="pointer-events: all; stroke: white; stroke-width: 2;"
+                     (mousedown)="onConnHandleMouseDown($event, conn.id, 'origen')"/>
+             <circle class="conn-endpoint-handle" [attr.cx]="conn.x2" [attr.cy]="conn.y2" r="6" 
+                     [style.fill]="conn.color" style="pointer-events: all; stroke: white; stroke-width: 2;"
+                     (mousedown)="onConnHandleMouseDown($event, conn.id, 'destino')"/>
+           </ng-container>
+        </ng-container>
+      </svg>
 
       <!-- Info bar -->
       <div class="fixed bottom-4 left-[296px] z-20 px-3 py-1.5 rounded-lg backdrop-blur-xl bg-slate-900/70 border border-slate-800 text-[10px] text-slate-400 font-mono">
@@ -218,20 +308,25 @@
         <div class="w-20 h-20 mx-auto rounded-3xl bg-slate-900/60 border border-slate-800 flex items-center justify-center mb-5 shadow-2xl">
           <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-slate-600"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>
         </div>
-        <h2 class="text-lg font-bold text-slate-300 mb-1">Selecciona una Politica</h2>
-        <p class="text-sm text-slate-500 max-w-xs">Elige una politica de la barra lateral o crea una nueva.</p>
+        <h2 class="text-lg font-bold text-slate-300 mb-1">Selecciona una Política</h2>
+        <p class="text-sm text-slate-500 max-w-xs">Elige una política de la barra lateral o crea una nueva.</p>
       </div>
     </div>
 
-    <!-- Toast -->
-    <div *ngIf="toastMsg" class="toast fixed top-16 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-xl border shadow-2xl text-xs font-semibold"
+    </div> <!-- Close scrollable canvas area (line 140) -->
+
+    <!-- Global designer overlays -->
+    <div *ngIf="toastMsg" class="toast fixed top-20 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-xl border shadow-2xl text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-300"
          [ngClass]="toastType === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'">
       {{ toastMsg }}
     </div>
   </main>
 
-  <!-- RIGHT SIDEBAR -->
-  <aside *ngIf="nodoSeleccionado && sel" class="sidebar-right w-[320px] flex-shrink-0 border-l border-slate-800 bg-slate-950 flex flex-col overflow-hidden">
+  <!-- RIGHT SIDEBARS (GROUPED) -->
+  <div *ngIf="showRightPanel" class="flex-shrink-0 flex flex-col h-full border-l border-slate-800 bg-slate-950 shadow-2xl z-30 overflow-hidden">
+    
+    <!-- RIGHT SIDEBAR: Node Properties -->
+    <aside *ngIf="nodoSeleccionado && sel && !transicionSeleccionada && !calleSeleccionada" class="sidebar-right w-[320px] flex-1 flex flex-col overflow-hidden">
     <div class="px-5 py-4 border-b border-slate-800/60 flex items-center justify-between">
       <div class="flex items-center gap-2.5">
         <div class="w-8 h-8 rounded-xl flex items-center justify-center shadow-md" [style.background]="getAccentBg(nodoSeleccionado.tipo)" [style.color]="getAccent(nodoSeleccionado.tipo)">
@@ -285,27 +380,76 @@
       </ng-container>
       <!-- TAB: Formulario -->
       <ng-container *ngIf="activeTab==='formulario'">
+        <div class="space-y-4">
+          <!-- Template Selector -->
+          <div *ngIf="!sel.estaActiva">
+            <label class="block text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500 mb-2">Usar Plantilla</label>
+            <div class="flex gap-2">
+              <select #tplSelect class="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 outline-none focus:border-indigo-500/50">
+                <option value="">Seleccionar...</option>
+                <option *ngFor="let t of templates()" [value]="t.id">{{ t.nombre }}</option>
+              </select>
+              <button (click)="cargarPlantilla(tplSelect.value)" class="px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-bold hover:bg-indigo-500/20 transition-all">Cargar</button>
+            </div>
+          </div>
+
+          <div class="h-px bg-slate-800/60 my-2"></div>
+
+          <p class="text-[10px] font-bold text-slate-500 uppercase px-1 tracking-wider">Campos del Formulario</p>
         <div *ngFor="let field of formFields; let i = index" class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
           <div class="flex items-center justify-between">
-            <input [(ngModel)]="field.label" placeholder="Etiqueta" class="flex-1 px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200 outline-none">
+            <input [(ngModel)]="field.label" (ngModelChange)="saveFormFields(); triggerAutoSave()" placeholder="Etiqueta" class="flex-1 px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200 outline-none">
             <button (click)="removeFormField(i)" class="ml-2 text-red-400/50 hover:text-red-400 text-xs">&#10005;</button>
           </div>
           <div class="flex gap-2">
-            <select [(ngModel)]="field.type" class="flex-1 px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-300 outline-none">
+            <select [(ngModel)]="field.type" (ngModelChange)="saveFormFields(); triggerAutoSave()" class="flex-1 px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-300 outline-none">
               <option value="text">Texto</option><option value="number">Numero</option><option value="date">Fecha</option><option value="email">Email</option><option value="boolean">Si/No</option><option value="textarea">Parrafo</option><option value="select">Seleccion</option>
             </select>
-            <label class="flex items-center gap-1 text-[10px] text-slate-500"><input type="checkbox" [(ngModel)]="field.required" class="rounded"> Req</label>
+            <label class="flex items-center gap-1 text-[10px] text-slate-500"><input type="checkbox" [(ngModel)]="field.required" (ngModelChange)="saveFormFields(); triggerAutoSave()" class="rounded"> Req</label>
+          </div>
+          
+          <!-- Validaciones Extra (Solo para Numero) -->
+          <div *ngIf="field.type === 'number'" class="flex gap-2 p-2 rounded-lg bg-slate-800/50 border border-slate-700/50">
+            <div class="flex-1">
+              <label class="block text-[8px] font-black text-slate-500 uppercase mb-1">Mín</label>
+              <input type="number" [(ngModel)]="field.validations.min" (ngModelChange)="saveFormFields(); triggerAutoSave()" class="w-full px-2 py-1 rounded bg-slate-800 border border-slate-700 text-[10px] text-slate-300 outline-none">
+            </div>
+            <div class="flex-1">
+              <label class="block text-[8px] font-black text-slate-500 uppercase mb-1">Máx</label>
+              <input type="number" [(ngModel)]="field.validations.max" (ngModelChange)="saveFormFields(); triggerAutoSave()" class="w-full px-2 py-1 rounded bg-slate-800 border border-slate-700 text-[10px] text-slate-300 outline-none">
+            </div>
           </div>
         </div>
         <button *ngIf="!sel.estaActiva" (click)="addFormField()" class="w-full py-2 rounded-xl border border-dashed border-slate-700 text-xs text-slate-500 hover:text-indigo-400 hover:border-indigo-500/30 transition-all">+ Campo</button>
+        </div>
       </ng-container>
       <!-- TAB: Conexiones -->
       <ng-container *ngIf="activeTab==='conexiones'">
-        <div *ngFor="let conn of getNodeConnections(nodoSeleccionado.id)" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs">
-          <span class="text-slate-400 truncate">{{ conn.fromName }}</span><span class="text-indigo-400">&#8594;</span><span class="text-slate-400 truncate">{{ conn.toName }}</span>
-          <button *ngIf="!sel.estaActiva" (click)="eliminarTransicionById(conn.id)" class="ml-auto text-red-500/50 hover:text-red-400 transition-all">&#10005;</button>
+        <div class="space-y-4">
+          <p class="text-[10px] font-bold text-slate-500 uppercase px-1 tracking-wider">Caminos de Salida</p>
+          <div *ngFor="let out of getSalidasNodo(nodoSeleccionado.id)" class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5 shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-bold text-indigo-400 flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                {{ getNombreNodo(out.destinoId) }}
+              </span>
+              <button (click)="eliminarTransicion(out.id)" class="w-5 h-5 rounded hover:bg-red-500/10 text-red-500/40 hover:text-red-400 transition-all flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>
+            <div>
+              <label class="block text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">Etiqueta (Ej. Si)</label>
+              <input [(ngModel)]="out.etiqueta" (ngModelChange)="onNodeChange()" placeholder="Ej. Aprobado" class="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 outline-none focus:border-indigo-500/50 transition-all">
+            </div>
+            <div *ngIf="nodoSeleccionado.tipo === 'DECISION'">
+              <label class="block text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">Condición (JS Expression)</label>
+              <input [(ngModel)]="out.condicion" (ngModelChange)="onNodeChange()" placeholder="Ej. data.monto > 100" class="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-indigo-300 outline-none focus:border-indigo-500/50 transition-all">
+            </div>
+          </div>
+          <div *ngIf="getSalidasNodo(nodoSeleccionado.id).length === 0" class="py-6 px-4 text-center rounded-xl border border-dashed border-slate-800 bg-slate-900/30">
+            <p class="text-[10px] text-slate-600 italic">No hay caminos de salida configurados. Arrastra desde un círculo del nodo para conectar.</p>
+          </div>
         </div>
-        <p *ngIf="getNodeConnections(nodoSeleccionado.id).length === 0" class="text-[10px] text-slate-600 italic px-1">Sin conexiones</p>
       </ng-container>
     </div>
     <div *ngIf="!sel.estaActiva" class="px-5 py-4 border-t border-slate-800/60">
@@ -314,7 +458,7 @@
   </aside>
 
   <!-- RIGHT SIDEBAR: Transition Properties -->
-  <aside *ngIf="transicionSeleccionada && sel && !nodoSeleccionado && !calleSeleccionada" class="sidebar-right w-[320px] flex-shrink-0 border-l border-slate-800 bg-slate-950 flex flex-col overflow-hidden">
+  <aside *ngIf="transicionSeleccionada && sel && !nodoSeleccionado && !calleSeleccionada" class="sidebar-right w-[320px] flex-1 flex flex-col overflow-hidden">
     <div class="px-5 py-4 border-b border-slate-800/60 flex items-center justify-between">
       <div class="flex items-center gap-2.5">
         <div class="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center">
@@ -352,7 +496,7 @@
   </aside>
 
   <!-- RIGHT SIDEBAR: Lane Properties -->
-  <aside *ngIf="calleSeleccionada && sel && !nodoSeleccionado && !transicionSeleccionada" class="sidebar-right w-[320px] flex-shrink-0 border-l border-slate-800 bg-slate-950 flex flex-col overflow-hidden">
+  <aside *ngIf="calleSeleccionada && sel && !nodoSeleccionado && !transicionSeleccionada" class="sidebar-right w-[320px] flex-1 flex flex-col overflow-hidden">
     <div class="px-5 py-4 border-b border-slate-800/60 flex items-center justify-between">
       <div class="flex items-center gap-2.5">
         <div class="w-8 h-8 rounded-xl flex items-center justify-center" [style.background]="(calleSeleccionada.color || '#475569') + '25'">
@@ -363,8 +507,15 @@
       <button (click)="calleSeleccionada = null" class="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-300 transition-all text-xs">&#10005;</button>
     </div>
     <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-      <div><label class="block text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500 mb-2">Nombre</label>
-        <input [(ngModel)]="calleSeleccionada.nombre" (ngModelChange)="onCalleChange()" [disabled]="sel.estaActiva" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-200 outline-none focus:border-indigo-500 transition-all disabled:opacity-50" placeholder="Nombre de la calle"></div>
+      <div><label class="block text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500 mb-2">Nombre / Etiqueta</label>
+        <input [(ngModel)]="calleSeleccionada.nombre" (input)="onCalleChange()" class="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-100 outline-none focus:border-indigo-500 transition-all"></div>
+      <div>
+        <label class="block text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500 mb-2">Departamento Responsable</label>
+        <select [(ngModel)]="calleSeleccionada.departamentoId" (change)="onCalleChange()" class="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-100 outline-none focus:border-indigo-500 transition-all appearance-none">
+          <option value="">Seleccionar Departamento...</option>
+          <option *ngFor="let d of adminSvc.departamentos()" [value]="d.id">{{ d.nombre }}</option>
+        </select>
+      </div>
       <div><label class="block text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500 mb-2">Color</label>
         <div class="flex flex-wrap gap-1.5">
           <button *ngFor="let c of laneColors" (click)="calleSeleccionada.color = c; onCalleChange()" class="color-swatch" [ngClass]="{'active': calleSeleccionada.color === c}" [style.background]="c"></button>
@@ -377,16 +528,44 @@
     </div>
   </aside>
 
-  <!-- RIGHT SIDEBAR: Default Actions (when nothing selected) -->
-  <aside *ngIf="sel && !nodoSeleccionado && !transicionSeleccionada && !calleSeleccionada" class="sidebar-right w-[320px] flex-shrink-0 border-l border-slate-800 bg-slate-950 flex flex-col overflow-hidden">
+  <!-- RIGHT SIDEBAR: Default Actions or Simulation Log -->
+  <aside *ngIf="sel && !nodoSeleccionado && !transicionSeleccionada && !calleSeleccionada" class="sidebar-right w-[320px] flex-1 flex flex-col overflow-hidden">
     <div class="px-5 py-4 border-b border-slate-800/60">
-      <p class="text-xs font-bold text-slate-100">Acciones</p>
+      <p class="text-xs font-bold text-slate-100">{{ isSimulating ? 'Log de Simulación' : 'Acciones' }}</p>
       <p class="text-[9px] text-slate-500">{{ sel.nombre }}</p>
     </div>
     <div class="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-      <div class="panel-section-title">POLITICA</div>
+      <!-- Simulation Log -->
+      <div *ngIf="isSimulating" class="space-y-2">
+        <div *ngFor="let msg of simLog; let last = last" class="p-3 rounded-xl border border-slate-800 bg-slate-900/50 text-[10px] font-mono"
+             [ngClass]="last ? 'border-indigo-500/30 text-indigo-300' : 'text-slate-500'">
+          {{ msg }}
+        </div>
+
+        <div *ngIf="activeSimNodes.length > 0" class="mt-4 p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+          <p class="text-[11px] font-bold text-indigo-400 mb-3 uppercase tracking-wider">Opciones de Decisión</p>
+          <div class="space-y-2">
+            <ng-container *ngFor="let node of activeSimNodes">
+               <div *ngFor="let t of sel.transiciones">
+                 <button *ngIf="t.origenId === node" (click)="pickSimPath(t.id)" class="w-full text-left p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all text-[10px] text-slate-300">
+                   <div class="flex items-center justify-between">
+                     <span>{{ t.etiqueta || 'Siguiente' }}</span>
+                     <span class="text-indigo-400">&#8594; {{ getNombreNodo(t.destinoId) }}</span>
+                   </div>
+                 </button>
+               </div>
+            </ng-container>
+          </div>
+        </div>
+
+        <button *ngIf="activeSimNodes.length === 0 && simLog.length > 1" (click)="stopSimulation()" class="w-full py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-all">
+          Finalizar Simulación
+        </button>
+      </div>
+
+      <div *ngIf="!isSimulating" class="panel-section-title">POLITICA</div>
       <!-- LIVE policy: only versioning allowed -->
-      <ng-container *ngIf="sel.estaActiva">
+      <ng-container *ngIf="sel.estaActiva && !isSimulating">
         <div class="px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 mb-2">
           Esta política está publicada. Para editar, crea una nueva versión.
         </div>
@@ -409,7 +588,8 @@
         <button (click)="confirmarEliminar()" class="w-full px-4 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10 rounded-xl transition-all border border-transparent hover:border-red-500/20">Eliminar Politica</button>
       </ng-container>
     </div>
-  </aside>
+    </aside>
+  </div>
 
   <!-- MODAL: Crear Politica -->
   <div *ngIf="mostrarModalCrear" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md">
@@ -441,7 +621,18 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/></svg>
         Nueva Calle
       </h3>
-      <input [(ngModel)]="nuevaCalleNombre" placeholder="Ej. Departamento Tecnico" class="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 outline-none focus:border-indigo-500 transition-all mb-3">
+      <div class="relative mb-3">
+        <select [(ngModel)]="nuevaCalleNombre" 
+                class="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-sm text-slate-200 outline-none focus:border-indigo-500 transition-all appearance-none">
+          <option value="">Seleccionar Departamento...</option>
+          @for (d of getDeptos(); track d.id) {
+            <option [value]="d.nombre">{{ d.nombre }}</option>
+          }
+        </select>
+        <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+      </div>
       <div class="mb-4"><label class="block text-[10px] font-semibold uppercase text-slate-500 mb-2">Color</label>
         <div class="flex gap-1.5">
           <button *ngFor="let c of laneColors" (click)="nuevaCalleColor = c" class="color-swatch" [ngClass]="{'active': nuevaCalleColor === c}" [style.background]="c"></button>
@@ -470,3 +661,22 @@
   </div>
 
 </div>
+  <!-- MODAL: FORM MANAGER -->
+  <div *ngIf="mostrarFormManager" class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-10 overflow-y-auto bg-slate-950/80 backdrop-blur-md">
+    <div class="absolute inset-0" (click)="mostrarFormManager = false"></div>
+    <div class="w-full max-w-5xl my-auto glass rounded-[3rem] shadow-2xl flex flex-col overflow-hidden relative border border-white/10 animate-in zoom-in duration-300">
+      <div class="p-8 border-b border-white/5 flex items-center justify-between bg-slate-900/50">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-2xl text-indigo-400 border border-indigo-500/20">📋</div>
+          <div>
+            <h2 class="text-xl font-black text-white">Gestor de Plantillas</h2>
+            <p class="text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5">Define estructuras reutilizables para tus actividades</p>
+          </div>
+        </div>
+        <button (click)="mostrarFormManager = false" class="w-10 h-10 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all text-slate-400">&#10005;</button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-10 bg-slate-950/20">
+        <app-form-builder></app-form-builder>
+      </div>
+    </div>
+  </div>

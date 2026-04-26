@@ -11,7 +11,9 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Data
@@ -31,6 +33,12 @@ public class RegistroActividad {
 
     private String actividadId;
     private String ejecutadoPor;
+    private String ejecutadoPorId;
+    @Indexed
+    private String departamentoId;
+
+    @Indexed
+    private String tenantId;
 
     @Builder.Default
     private EstadoRegistro estado = EstadoRegistro.PENDIENTE;
@@ -42,6 +50,22 @@ public class RegistroActividad {
     /** Datos capturados por el funcionario contra el esquema */
     @Builder.Default
     private Map<String, Object> datosFormulario = new HashMap<>();
+
+    @Builder.Default
+    private List<ArchivoInfo> archivos = new ArrayList<>();
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ArchivoInfo {
+        private String id;
+        private String nombre;
+        private String path;
+        private String tipo;
+        private long tamano;
+        private Instant subidoEn;
+    }
 
     @Builder.Default
     private String notas = "";

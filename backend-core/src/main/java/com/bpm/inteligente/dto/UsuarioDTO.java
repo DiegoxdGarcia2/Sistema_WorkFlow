@@ -20,6 +20,8 @@ public class UsuarioDTO {
     private String email;
     private String telefono;
     private String cargo;
+    private String departamento;
+    private String departamentoId;
     private RolUsuario rol;
     private boolean activo;
     private String creadoEn;

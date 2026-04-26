@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: bpm-inteligente-core
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
   data:
     mongodb:
       uri: ${MONGO_URI:mongodb://localhost:27017/bpm_inteligente}
@@ -13,3 +17,8 @@ logging:
   level:
     com.bpm.inteligente: DEBUG
     org.springframework.data.mongodb: INFO
+
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME}
+  api-key: ${CLOUDINARY_API_KEY}
+  api-secret: ${CLOUDINARY_API_SECRET}

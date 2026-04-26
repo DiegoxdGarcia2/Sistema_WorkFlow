@@ -16,7 +16,21 @@ export interface Actividad {
   esInicial: boolean;
   esFinal: boolean;
   orden: number;
-  esquemaFormulario?: Record<string, any>;
+  esquemaFormulario?: {
+    fields: Array<{
+      key: string;
+      label: string;
+      type: string;
+      required?: boolean;
+      options?: string[];
+      validations?: {
+        min?: number;
+        max?: number;
+        pattern?: string;
+        customMsg?: string;
+      };
+    }>;
+  };
 
   // Estilo visual
   color?: string;
@@ -28,6 +42,8 @@ export interface Actividad {
   // Posición en canvas
   posX?: number;
   posY?: number;
+
+  plantillaId?: string; // ID de la plantilla de formulario vinculada
 }
 
 export interface Calle {
@@ -35,6 +51,8 @@ export interface Calle {
   nombre: string;
   orden: number;
   color?: string;
+  ancho?: number;
+  departamentoId?: string;
   actividades: Actividad[];
 }
 
@@ -51,6 +69,8 @@ export interface Transicion {
   color?: string;
   tipoLinea?: 'solida' | 'punteada' | 'discontinua';
   grosor?: number;
+  origenAnchor?: 'top' | 'bottom' | 'left' | 'right';
+  destinoAnchor?: 'top' | 'bottom' | 'left' | 'right';
 }
 
 // ── DTOs (coinciden con backend) ──
@@ -100,6 +120,8 @@ export interface RegistroActividadDTO {
   estado: EstadoRegistro;
   esquemaFormulario: Record<string, any>;
   datosFormulario: Record<string, any>;
+  archivos: any[];
+  departamentoId: string;
   notas: string;
   asignadoEn: string;
   completadoEn: string | null;
@@ -109,12 +131,14 @@ export interface RegistroActividadDTO {
 
 export interface IniciarTramiteRequest {
   politicaId: string;
+  usuarioId?: string;
 }
 
 export interface CompletarTareaRequest {
   registroId: string;
   esquemaFormulario: Record<string, any>;
   datosFormulario: Record<string, any>;
+  archivos?: any[];
   notas: string;
 }
 
@@ -129,6 +153,9 @@ export interface PasoTimeline {
   notas: string;
   asignadoEn: string | null;
   completadoEn: string | null;
+  datosFormulario: Record<string, any> | null;
+  esquemaFormulario: Record<string, any> | null;
+  archivos: any[] | null;
 }
 
 export interface TrackingDTO {

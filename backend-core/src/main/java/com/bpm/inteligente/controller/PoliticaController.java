@@ -60,4 +60,14 @@ public class PoliticaController {
                 .map(DomainMapper::toDTO)
                 .toList();
     }
+
+    @GetMapping("/tenant/{tenantId}/iniciables")
+    public List<PoliticaDTO> listarIniciablesPorUsuario(
+            @PathVariable String tenantId,
+            @RequestParam String departamentoId,
+            @RequestParam String rol) {
+        return politicaService.listarIniciablesPorUsuario(tenantId, departamentoId, rol).stream()
+                .map(DomainMapper::toDTO)
+                .toList();
+    }
 }

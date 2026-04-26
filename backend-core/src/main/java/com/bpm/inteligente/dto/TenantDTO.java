@@ -1,12 +1,9 @@
-package com.bpm.inteligente.domain;
+package com.bpm.inteligente.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
 
@@ -14,15 +11,9 @@ import java.time.Instant;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Document(collection = "tenants")
-public class Tenant {
-
-    @Id
+public class TenantDTO {
     private String id;
-
-    @Indexed(unique = true)
     private String nombre;
-
     private String nit;
     private String direccion;
     private String industria;
@@ -31,10 +22,5 @@ public class Tenant {
     private String emailContacto;
     private String logoUrl;
     private String lema;
-
-    @Builder.Default
-    private Instant creadoEn = Instant.now();
-
-    @Builder.Default
-    private Instant actualizadoEn = Instant.now();
+    private Instant creadoEn;
 }

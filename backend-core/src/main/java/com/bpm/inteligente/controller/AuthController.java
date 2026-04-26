@@ -52,6 +52,8 @@ public class AuthController {
                 .email(user.getEmail())
                 .telefono(user.getTelefono())
                 .cargo(user.getCargo())
+                .departamento(user.getDepartamento())
+                .departamentoId(user.getDepartamentoId())
                 .rol(user.getRol())
                 .activo(user.isActivo())
                 .creadoEn(user.getCreadoEn() != null ? user.getCreadoEn().toString() : null)

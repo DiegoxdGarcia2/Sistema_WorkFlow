@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import com.bpm.inteligente.domain.RegistroActividad;
 
 /**
  * DTO público para el Portal del Cliente (tracking de trámites).
@@ -34,5 +35,8 @@ public class TrackingDTO {
         private String notas;
         private String asignadoEn;
         private String completadoEn;
+        private Object datosFormulario;
+        private Object esquemaFormulario;
+        private List<RegistroActividad.ArchivoInfo> archivos;
     }
 }
