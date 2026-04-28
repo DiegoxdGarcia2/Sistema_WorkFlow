@@ -122,9 +122,25 @@
         <span *ngIf="sel.estaActiva" class="ml-2 text-[8px] px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold uppercase tracking-widest shrink-0">Publicada</span>
       </div>
 
-      <!-- MIDDLE: Save Status Indicator -->
-      <div class="absolute left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none">
-        <div *ngIf="saveStatus !== 'idle'" class="save-pill animate-in fade-in slide-in-from-top-2 duration-300" [ngClass]="saveStatus">
+      <!-- MIDDLE: Save Status Indicator & Collaborators -->
+      <div class="absolute left-1/2 -translate-x-1/2 flex items-center justify-center gap-6 pointer-events-auto">
+        <!-- Colabs -->
+        <div class="flex items-center">
+          <div class="flex -space-x-2 mr-3">
+             <div *ngFor="let col of colabSvc.colaboradores()" 
+                  class="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white border-2 border-slate-900 shadow-md transition-all hover:scale-110 hover:z-10 cursor-help"
+                  [style.background]="col.color"
+                  [title]="col.nombre + (col.id === auth.usuario()?.id ? ' (Tú)' : '')">
+                  {{ col.avatar }}
+             </div>
+          </div>
+          <div *ngIf="colabSvc.colaboradores().length > 1" class="text-[9px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            En vivo
+          </div>
+        </div>
+
+        <div *ngIf="saveStatus !== 'idle'" class="save-pill pointer-events-none animate-in fade-in slide-in-from-top-2 duration-300" [ngClass]="saveStatus">
           <div class="flex items-center gap-2">
             <div class="w-1.5 h-1.5 rounded-full" 
                  [ngClass]="{'bg-amber-400 animate-pulse': saveStatus==='saving', 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)]': saveStatus==='saved', 'bg-red-400': saveStatus==='error'}">
@@ -240,16 +256,24 @@
       <ng-container *ngFor="let calle of sel.calles; let ci = index; trackBy: trackById">
         <div *ngFor="let act of calle.actividades; let ai = index; trackBy: trackById"
              class="node-card rounded-2xl z-10"
-             [ngClass]="{'selected': nodoSeleccionado?.id === act.id, 'dragging': isDragging && dragNodeId === act.id, 'conn-source': connMode.sourceId === act.id, 'sim-active': activeSimNodes.includes(act.id)}"
+             [ngClass]="{'selected': nodoSeleccionado?.id === act.id, 'dragging': isDragging && dragNodeId === act.id, 'conn-source': connMode.sourceId === act.id, 'sim-active': activeSimNodes.includes(act.id), 'locked': nodosBloqueados[act.id]}"
              [style.left.px]="getNodoPos(act.id).x" [style.top.px]="getNodoPos(act.id).y"
              [style.width.px]="act.ancho || NW"
              [style.background]="act.color ? act.color + '20' : 'rgba(15,23,42,0.92)'"
              [style.backdrop-filter]="'blur(20px)'"
-             [style.border-color]="act.color || 'rgba(51,65,85,0.6)'"
+             [style.border-color]="nodosBloqueados[act.id] ? nodosBloqueados[act.id].color : (act.color || 'rgba(51,65,85,0.6)')"
+             [style.border-width]="nodosBloqueados[act.id] ? '2px' : '1px'"
              (mousedown)="onNodoMouseDown($event, ci, ai)" (click)="isSimulating ? avanzarSimulacion(act.id) : seleccionarNodo(ci, ai, $event)"
              (mouseenter)="onNodeMouseEnter(act.id)" (mouseleave)="onNodeMouseLeave()">
           
           <div *ngIf="activeSimNodes.includes(act.id)" class="sim-badge">ACTIVO</div>
+          
+          <!-- Locked Badge -->
+          <div *ngIf="nodosBloqueados[act.id]" class="absolute -top-3 -right-3 px-2 py-0.5 rounded-full text-[9px] font-bold text-white shadow-lg z-20 flex items-center gap-1"
+               [style.background]="nodosBloqueados[act.id].color">
+             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+             {{ nodosBloqueados[act.id].nombre }}
+          </div>
 
           <!-- Handles -->
           <div class="node-handle node-handle-top" (mousedown)="onHandleMouseDown($event, act, 'top')"></div>
@@ -589,6 +613,77 @@
       </ng-container>
     </div>
     </aside>
+
+    <!-- ML / Simulation Panel (Right) -->
+    <aside *ngIf="showMlPanel" class="w-[320px] shrink-0 border-l border-slate-800 bg-slate-950 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+      <div class="px-5 py-4 border-b border-slate-800/60 bg-indigo-500/5">
+        <h2 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-400"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Análisis Inteligente
+        </h2>
+        <p class="text-[10px] text-slate-500 mt-1">Validación BPMN y Simulación Monte Carlo</p>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 space-y-4">
+        <!-- Loading State -->
+        <div *ngIf="isAnalyzingMl" class="flex flex-col items-center justify-center py-10 space-y-3">
+          <div class="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin"></div>
+          <span class="text-xs font-semibold text-indigo-400 animate-pulse">Analizando grafo...</span>
+        </div>
+
+        <!-- Results -->
+        <div *ngIf="!isAnalyzingMl && mlResult" class="space-y-4">
+          <!-- Findings -->
+          <div>
+            <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Hallazgos Estructurales</h3>
+            <div *ngIf="mlResult.findings.length === 0" class="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-400 flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              Estructura BPMN válida. Sin problemas.
+            </div>
+            
+            <div *ngFor="let f of mlResult.findings" class="mb-2 p-3 rounded-xl border"
+                 [ngClass]="f.severity === 'CRITICAL' ? 'bg-red-500/10 border-red-500/30' : (f.severity === 'WARNING' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-blue-500/10 border-blue-500/30')">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                      [ngClass]="f.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-400' : (f.severity === 'WARNING' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400')">
+                  {{ f.type }}
+                </span>
+                <span class="text-[10px] font-medium text-slate-400 truncate flex-1">{{ getNombreNodo(f.nodeId) }}</span>
+              </div>
+              <p class="text-[11px] text-slate-300 mt-2">{{ f.message }}</p>
+              <p class="text-[10px] text-slate-500 mt-1 italic">💡 {{ f.suggestion }}</p>
+            </div>
+          </div>
+
+          <!-- Simulation Stats -->
+          <div *ngIf="mlResult.simulation">
+            <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Simulación de Carga</h3>
+            <div class="grid grid-cols-2 gap-2 mb-2">
+              <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                <p class="text-[9px] text-slate-500 uppercase">Instancias</p>
+                <p class="text-sm font-bold text-indigo-400">{{ mlResult.simulation.simulatedInstances }}</p>
+              </div>
+              <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                <p class="text-[9px] text-slate-500 uppercase">T. Promedio</p>
+                <p class="text-sm font-bold text-emerald-400">{{ mlResult.simulation.averageTotalTimeMinutes | number:'1.0-1' }}m</p>
+              </div>
+            </div>
+            <div *ngIf="mlResult.simulation.blockedInstances > 0" class="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-400 flex items-center gap-2 mb-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              {{ mlResult.simulation.blockedInstances }} instancias no pudieron terminar (bloqueadas).
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Close Button -->
+      <div class="p-4 border-t border-slate-800 bg-slate-900/50">
+        <button (click)="stopSimulation()" class="w-full px-4 py-2 text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all">
+          Cerrar Panel
+        </button>
+      </div>
+    </aside>
+
   </div>
 
   <!-- MODAL: Crear Politica -->
@@ -660,7 +755,6 @@
     </div>
   </div>
 
-</div>
   <!-- MODAL: FORM MANAGER -->
   <div *ngIf="mostrarFormManager" class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-10 overflow-y-auto bg-slate-950/80 backdrop-blur-md">
     <div class="absolute inset-0" (click)="mostrarFormManager = false"></div>
@@ -680,3 +774,73 @@
       </div>
     </div>
   </div>
+
+  <!-- AI Assistant Floating UI -->
+  <div *ngIf="sel && !sel.estaActiva && !isSimulating" class="fixed bottom-6 left-6 z-[60] flex flex-col items-start gap-3 pointer-events-none">
+    
+    <!-- Chat Panel -->
+    <div *ngIf="showAiAssistant" class="pointer-events-auto w-80 bg-slate-900/95 backdrop-blur-xl border border-indigo-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+      <div class="bg-indigo-500/10 p-3 border-b border-indigo-500/20 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-400"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+          <span class="text-xs font-bold text-indigo-300">Asistente IA</span>
+        </div>
+        <button (click)="toggleAiAssistant()" class="text-slate-400 hover:text-white transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      
+      <div class="p-4 flex-1">
+        <p class="text-[11px] text-slate-400 mb-4 text-center">
+          Dime qué quieres diseñar. Ej: "Crea una calle de Ventas", "Añade una tarea de Revisión en Ventas".
+        </p>
+
+        <div *ngIf="isAiProcessing" class="flex justify-center my-4">
+          <div class="flex gap-1 items-center">
+            <span class="w-2 h-2 rounded-full bg-indigo-500 animate-bounce" style="animation-delay: 0s;"></span>
+            <span class="w-2 h-2 rounded-full bg-indigo-500 animate-bounce" style="animation-delay: 0.1s;"></span>
+            <span class="w-2 h-2 rounded-full bg-indigo-500 animate-bounce" style="animation-delay: 0.2s;"></span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between mb-3 px-1">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Envío Directo</span>
+          <button (click)="aiDirectSend = !aiDirectSend" 
+                  [class]="aiDirectSend ? 'bg-indigo-600' : 'bg-slate-700'"
+                  class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none">
+            <span [class]="aiDirectSend ? 'translate-x-4' : 'translate-x-0'"
+                  class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+          </button>
+        </div>
+
+        <div class="relative">
+          <textarea [(ngModel)]="aiInputText" (keyup.enter)="enviarInstruccionAi()"
+                    [disabled]="isAiProcessing"
+                    placeholder="Escribe o usa el micrófono..."
+                    class="w-full h-20 px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none pr-10"></textarea>
+          
+          <button (click)="isAiListening ? stopAiListening() : startAiListening()" 
+                  [class.text-red-400]="isAiListening"
+                  [class.animate-pulse]="isAiListening"
+                  class="absolute right-2 bottom-3 p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 transition-colors">
+            <svg *ngIf="!isAiListening" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            <svg *ngIf="isAiListening" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+          </button>
+        </div>
+      </div>
+      
+      <div class="p-2 border-t border-slate-800">
+        <button (click)="enviarInstruccionAi()" [disabled]="!aiInputText.trim() || isAiProcessing"
+                class="w-full py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:bg-slate-700 rounded-xl transition-all">
+          Enviar Instrucción
+        </button>
+      </div>
+    </div>
+
+    <!-- Floating Toggle Button -->
+    <button (click)="toggleAiAssistant()" class="pointer-events-auto w-14 h-14 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-full shadow-lg shadow-indigo-500/30 flex items-center justify-center hover:scale-105 transition-transform">
+      <svg *ngIf="!showAiAssistant" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+      <svg *ngIf="showAiAssistant" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+  </div>
+</div>

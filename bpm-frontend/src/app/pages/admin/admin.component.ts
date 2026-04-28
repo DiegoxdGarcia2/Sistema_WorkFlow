@@ -2,6 +2,7 @@ import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router'; // Importación correcta
 import { Observable } from 'rxjs';
 import { AdminService, TenantDTO, UsuarioListDTO } from '../../services/admin.service';
 import { AuthService } from '../../services/auth.service';
@@ -649,11 +650,27 @@ export class AdminComponent implements OnInit {
   modalTenantOpen = false;
   tenantForm: Partial<TenantDTO> = {};
 
-  constructor(public svc: AdminService, public auth: AuthService, private fs: FormularioService) {
-  }
+  constructor(
+    public svc: AdminService, 
+    public auth: AuthService, 
+    private fs: FormularioService,
+    private route: ActivatedRoute
+  ) {}
 
   ngOnInit(): void {
     this.svc.cargarTenants().subscribe();
+    
+    // Escuchar parámetros de la URL para navegación desde el chatbot
+    this.route.queryParams.subscribe(params => {
+      console.log('🔍 AdminComponent: QueryParams detectados:', params);
+      const tab = params['tab'];
+      if (tab && ['monitor', 'tenants', 'usuarios', 'audit', 'cargos', 'departamentos', 'formularios'].includes(tab)) {
+        console.log('🎯 AdminComponent: Cambiando a pestaña:', tab);
+        this.seccionActiva.set(tab as any);
+        this.refreshData();
+      }
+    });
+
     // Delay data loading to avoid NG0100 ExpressionChangedAfterItHasBeenCheckedError
     setTimeout(() => {
       this.refreshData();
@@ -669,7 +686,11 @@ export class AdminComponent implements OnInit {
     const user = this.auth.usuario();
     if (user?.tenantId) {
       const sa = this.seccionActiva();
-      if (sa === 'usuarios') this.svc.cargarUsuarios(user.tenantId).subscribe();
+      if (sa === 'usuarios') {
+        this.svc.cargarUsuarios(user.tenantId).subscribe();
+        this.svc.cargarCargos(user.tenantId).subscribe();
+        this.svc.cargarDepartamentos(user.tenantId).subscribe();
+      }
       if (sa === 'cargos') this.svc.cargarCargos(user.tenantId).subscribe();
       if (sa === 'departamentos') this.svc.cargarDepartamentos(user.tenantId).subscribe();
       if (sa === 'audit') this.svc.cargarAuditLog(user.tenantId).subscribe();

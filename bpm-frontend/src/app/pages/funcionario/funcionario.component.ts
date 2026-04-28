@@ -11,6 +11,7 @@ import {
   PoliticaDTO,
   TramiteDTO,
 } from '../../models/bpm.models';
+import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { FormularioService, FormularioTemplate } from '../../services/formulario.service';
 import { KeyValuePipe } from '@angular/common';
@@ -681,6 +682,7 @@ export class FuncionarioComponent implements OnInit {
   constructor(
     public workflowService: WorkflowService,
     public auth: AuthService,
+    private route: ActivatedRoute,
     private politicaService: PoliticaService,
     private archivoService: ArchivoService,
     public fs: FormularioService
@@ -696,7 +698,18 @@ export class FuncionarioComponent implements OnInit {
 
   ngOnInit(): void {
     this.menu.forEach(m => m.safeSvg = this.getSafeIcon(m.svg));
-    this.cargarDatos();
+
+    // Escuchar parámetros de ruta para navegación directa (ej: desde el chatbot)
+    this.route.queryParams.subscribe(params => {
+      if (params['tab']) {
+        const tab = params['tab'] as any;
+        if (['bandeja', 'disponible', 'historial', 'iniciar'].includes(tab)) {
+          this.vista = tab;
+        }
+      }
+      this.cargarDatos();
+    });
+
     // Prefetch para agilidad
     const user = this.auth.usuario();
     if (user) {

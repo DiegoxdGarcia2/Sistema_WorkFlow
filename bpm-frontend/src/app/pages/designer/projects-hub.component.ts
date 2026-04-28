@@ -271,7 +271,11 @@ export class ProjectsHubComponent implements OnInit {
   }
 
   abrirProyecto(p: ProyectoDTO): void {
-    this.router.navigate(['/designer/editor'], { queryParams: { projectId: p.id, projectName: p.nombre } });
+    this.router.navigate(['/designer/editor'], { queryParams: { projectId: p.id, projectName: p.nombre } })
+      .then(success => {
+        if (!success) console.error('Router navigate returned false. Maybe a guard blocked it?');
+      })
+      .catch(err => console.error('Router error:', err));
   }
 
   abrirSinProyecto(): void {

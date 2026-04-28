@@ -6,6 +6,9 @@
 .skills/
 AGENT.md
 mis cosas/
+brain/
+.gemini/
+
 
 # ── IDEs ──
 .idea/
@@ -55,3 +58,4 @@ path.txt
 backend-core/uploads/
 bpm-frontend/proxy.conf.json
 Lanzar-BPM.bat
+pdf_text.txt

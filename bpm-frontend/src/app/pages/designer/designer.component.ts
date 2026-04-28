@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -8,9 +8,12 @@ import { AuthService } from '../../services/auth.service';
 import { AdminService, Departamento } from '../../services/admin.service';
 import { FormularioService, FormularioTemplate } from '../../services/formulario.service';
 import { FormBuilderComponent } from '../admin/form-builder.component';
-import { signal } from '@angular/core';
+import { ColaboracionService, SocketMessageDTO } from '../../services/colaboracion.service';
+import { MlAnalysisService, AnalysisResult } from '../../services/ml-analysis.service';
+import { AiAssistantService, AiAction, AiResponse } from '../../services/ai-assistant.service';
+import { effect, signal } from '@angular/core';
 
-interface FormField { 
+export interface FormField { 
   key: string; 
   label: string; 
   type: string; 
@@ -52,6 +55,9 @@ export class DesignerComponent implements OnInit, OnDestroy {
   editCalleIdx = 0;
   editActIdx = 0;
   activeTab: 'general' | 'estilo' | 'formulario' | 'conexiones' = 'general';
+
+  // ── Collaboration State ──
+  nodosBloqueados: Record<string, { userId: string, color: string, nombre: string }> = {};
 
   // ── Lane Selection ──
   calleSeleccionada: Calle | null = null;
@@ -100,11 +106,26 @@ export class DesignerComponent implements OnInit, OnDestroy {
   resizeStartX = 0;
   resizeStartW = 0;
 
-  // ── Simulation ──
+  // ── Simulation & ML ──
   showRightPanel = true;
   isSimulating = false;
   activeSimNodes: string[] = [];
   simLog: string[] = [];
+  
+  showMlPanel = false;
+  mlResult: AnalysisResult | null = null;
+  
+  // ── History (Undo/Redo) ──
+  historial: PoliticaDTO[] = [];
+  historialIdx = -1;
+  isAnalyzingMl = false;
+  
+  // ── AI Assistant ──
+  showAiAssistant = false;
+  aiInputText = '';
+  isAiProcessing = false;
+  isAiListening = false;
+  aiDirectSend = true;
 
   // ── Connection Mode ──
   connMode = { active: false, tipo: 'SECUENCIAL' as TipoRuta, sourceId: null as string | null };
@@ -126,7 +147,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
   // ── Toast ──
   toastMsg = '';
-  toastType: 'success' | 'error' = 'success';
+  toastType: 'success' | 'error' | 'info' = 'success';
 
   // ── Palettes ──
   nodeColors = ['#6366f1','#8b5cf6','#ec4899','#f43f5e','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#475569','#10b981','#e11d48'];
@@ -155,9 +176,84 @@ export class DesignerComponent implements OnInit, OnDestroy {
     public auth: AuthService,
     public adminSvc: AdminService,
     public fs: FormularioService,
+    public colabSvc: ColaboracionService,
+    public mlSvc: MlAnalysisService,
+    public aiSvc: AiAssistantService,
     private route: ActivatedRoute,
     private router: Router,
-  ) {}
+    private cdr: ChangeDetectorRef,
+  ) {
+    // Escuchar eventos WebSocket remotos (señales reactivas)
+    effect(() => {
+      const msg = this.colabSvc.nodeUpdates();
+      if (msg) this.procesarEventoRemoto(msg);
+    });
+  }
+
+  procesarEventoRemoto(msg: SocketMessageDTO) {
+    // Ignorar mis propios mensajes retransmitidos
+    if (msg.colaborador.id === this.auth.usuario()?.id) return;
+
+    if (msg.type === 'NODE_MOVED' && msg.payload) {
+      // Actualizar posición visual instantáneamente sin disparar guardado
+      const data = msg.payload as { id: string; x: number; y: number };
+      if (this.nodePositions[data.id]) {
+        this.nodePositions[data.id] = { x: data.x, y: data.y };
+      }
+
+    } else if (msg.type === 'NODE_EDITING') {
+      // msg.payload es el ID del nodo
+      const nodeId = msg.payload as string | null;
+
+      // Limpiar bloqueos previos de este usuario
+      for (const key in this.nodosBloqueados) {
+        if (this.nodosBloqueados[key].userId === msg.colaborador.id) {
+          delete this.nodosBloqueados[key];
+        }
+      }
+
+      // Aplicar nuevo bloqueo si está editando algo
+      if (nodeId) {
+        this.nodosBloqueados[nodeId] = {
+          userId: msg.colaborador.id,
+          color: msg.colaborador.color,
+          nombre: msg.colaborador.nombre
+        };
+      }
+
+    } else if (msg.type === 'POLICY_UPDATED' && msg.payload && this.sel) {
+      // Sincronización completa: lanes, conexiones, colores, propiedades, etc.
+      const updated = msg.payload as PoliticaDTO;
+      // Solo aplicar si es la misma política abierta
+      if (updated.id === this.sel.id) {
+        // Preservar selecciones para restaurarlas después
+        const selNodeId = this.nodoSeleccionado?.id;
+        const selTransId = this.transicionSeleccionada?.id;
+        const selCalleId = this.calleSeleccionada?.id;
+
+        this.sel = JSON.parse(JSON.stringify(updated));
+        this.generateLayout();
+
+        // Restaurar selecciones
+        if (selNodeId) {
+          for (let ci = 0; ci < this.sel!.calles.length; ci++) {
+            const ai = this.sel!.calles[ci].actividades.findIndex(a => a.id === selNodeId);
+            if (ai >= 0) { this.nodoSeleccionado = this.sel!.calles[ci].actividades[ai]; this.editCalleIdx = ci; this.editActIdx = ai; break; }
+          }
+        }
+        if (selTransId) { this.transicionSeleccionada = this.sel!.transiciones.find(t => t.id === selTransId) || null; }
+        if (selCalleId) {
+          const ci = this.sel!.calles.findIndex(c => c.id === selCalleId);
+          if (ci >= 0) { this.calleSeleccionada = this.sel!.calles[ci]; this.calleSelIdx = ci; }
+        }
+
+        this.showToast(`${msg.colaborador.nombre} actualizó el diagrama`, 'success');
+      }
+    }
+
+    // Forzar render de Angular para movimiento fluido en vivo (~60fps)
+    this.cdr.detectChanges();
+  }
 
   ngOnInit(): void {
     this.route.queryParams.subscribe(p => {
@@ -174,11 +270,23 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
   templates = signal<FormularioTemplate[]>([]);
   departamentos = signal<Departamento[]>([]);
-  ngOnDestroy(): void { if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer); }
+  
+  ngOnDestroy(): void { 
+    if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer); 
+    this.colabSvc.desconectar();
+  }
 
-  @HostListener('document:keydown.escape')
-  onEsc(): void {
-    if (this.connMode.active) this.cancelConnMode();
+  @HostListener('document:keydown', ['$event'])
+  handleKeyboardEvent(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      if (this.connMode.active) this.cancelConnMode();
+    } else if (event.ctrlKey && event.key === 'z') {
+      event.preventDefault();
+      this.undo();
+    } else if (event.ctrlKey && (event.key === 'y' || (event.shiftKey && event.key === 'Z'))) {
+      event.preventDefault();
+      this.redo();
+    }
   }
 
   // ── Data ──
@@ -194,15 +302,21 @@ export class DesignerComponent implements OnInit, OnDestroy {
     });
   }
 
-  goBack(): void { this.router.navigate(['/designer']); }
+  goBack(): void { 
+    this.colabSvc.desconectar();
+    this.router.navigate(['/designer']); 
+  }
 
   // ── Selection ──
   seleccionar(p: PoliticaDTO): void {
+    this.colabSvc.conectarRoom(p.id); // Conectarse a WS
+    
     // Re-fetch from server to get latest version
     this.politicaService.buscarPorId(p.id).subscribe({
       next: (fresh) => {
         this.sel = JSON.parse(JSON.stringify(fresh));
         this.nodoSeleccionado = null;
+        this.colabSvc.notificarEdicionNodo(null); // Limpiar mi seleccion
         this.transicionSeleccionada = null;
         this.calleSeleccionada = null;
         this.generateLayout();
@@ -211,6 +325,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
         // Fallback to cached version
         this.sel = JSON.parse(JSON.stringify(p));
         this.nodoSeleccionado = null;
+        this.colabSvc.notificarEdicionNodo(null);
         this.transicionSeleccionada = null;
         this.calleSeleccionada = null;
         this.generateLayout();
@@ -285,10 +400,17 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
     const act = this.sel!.calles[ci].actividades[ai];
 
+    if (this.nodosBloqueados[act.id]) {
+        // Bloqueado por otro usuario
+        this.showToast('Nodo bloqueado por ' + this.nodosBloqueados[act.id].nombre, 'error');
+        return;
+    }
+
     if (this.connMode.active) {
       if (!this.connMode.sourceId) {
         this.connMode.sourceId = act.id;
       } else if (this.connMode.sourceId !== act.id) {
+        this.pushHistorial();
         this.sel!.transiciones.push({
           id: crypto.randomUUID(), origenId: this.connMode.sourceId, destinoId: act.id,
           tipoRuta: this.connMode.tipo, condicion: '', etiqueta: '', prioridad: 0,
@@ -304,6 +426,8 @@ export class DesignerComponent implements OnInit, OnDestroy {
     this.transicionSeleccionada = null;
     this.calleSeleccionada = null;
     this.nodoSeleccionado = act;
+    this.colabSvc.notificarEdicionNodo(act.id); // Notificar a los demás
+    
     this.editCalleIdx = ci;
     this.editActIdx = ai;
     if (!act.ancho) act.ancho = this.NW;
@@ -317,6 +441,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   seleccionarCalle(ci: number, event: MouseEvent): void {
     event.stopPropagation();
     this.nodoSeleccionado = null;
+    this.colabSvc.notificarEdicionNodo(null); // Limpiar seleccion colaborativa
     this.transicionSeleccionada = null;
     this.calleSeleccionada = this.sel!.calles[ci];
     this.calleSelIdx = ci;
@@ -326,6 +451,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   onNodeChange(): void {
     if (this.nodoSeleccionado) {
       this.generateLayout();
+      this.broadcastPolicyState();
       this.triggerAutoSave();
     }
   }
@@ -333,14 +459,19 @@ export class DesignerComponent implements OnInit, OnDestroy {
     if (newCi !== this.editCalleIdx) {
       this.moveNodeToLane(newCi);
     }
+    this.broadcastPolicyState();
     this.triggerAutoSave();
   }
-  onTransChange(): void { this.triggerAutoSave(); }
+  onTransChange(): void {
+    this.broadcastPolicyState();
+    this.triggerAutoSave();
+  }
   onCalleChange(): void {
     // Force update reference so Angular detects change
     if (this.sel && this.calleSelIdx >= 0) {
       this.sel.calles = [...this.sel.calles];
     }
+    this.broadcastPolicyState();
     this.triggerAutoSave();
   }
 
@@ -348,6 +479,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
     const t = event.target as HTMLElement;
     if (t.closest('.node-card') || t.closest('.sidebar-left') || t.closest('.sidebar-right')) return;
     this.nodoSeleccionado = null;
+    this.colabSvc.notificarEdicionNodo(null); // Limpiar seleccion colaborativa
     this.transicionSeleccionada = null;
   }
 
@@ -370,6 +502,13 @@ export class DesignerComponent implements OnInit, OnDestroy {
     if (this.connMode.active) return;
     const act = this.sel!.calles[ci].actividades[ai];
     if (!act) return;
+    
+    // Si otro usuario lo está bloqueando, no permitir arrastrar
+    if (this.nodosBloqueados[act.id]) {
+        e.preventDefault();
+        return;
+    }
+    
     e.preventDefault();
     const pos = this.nodePositions[act.id];
     if (!pos) return;
@@ -383,11 +522,15 @@ export class DesignerComponent implements OnInit, OnDestroy {
     const check = (me: MouseEvent) => {
       if (Math.abs(me.clientX - sx) > 4 || Math.abs(me.clientY - sy) > 4) {
         this.isDragging = true;
+        // Al empezar a arrastrar, notificar selección
+        this.colabSvc.notificarEdicionNodo(act.id);
         document.removeEventListener('mousemove', check);
       }
     };
     document.addEventListener('mousemove', check);
   }
+
+  private lastSyncTime = 0;
 
   onCanvasMouseMove(e: MouseEvent): void {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -433,6 +576,13 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
     this.nodePositions[this.dragNodeId] = { x: snappedX, y: snappedY };
 
+    // Throttled WebSocket Sync — 16ms ≈ 60fps para movimiento fluido en vivo
+    const now = Date.now();
+    if (now - this.lastSyncTime > 16) {
+      this.colabSvc.notificarMovimientoNodo(this.dragNodeId, snappedX, snappedY);
+      this.lastSyncTime = now;
+    }
+
     // Guides
     this.guides = [];
     const others = this.getAllActividades().filter(a => a.id !== this.dragNodeId);
@@ -451,6 +601,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   onCanvasMouseUp(): void {
     if (this.isResizingLane) {
       this.isResizingLane = false;
+      this.broadcastPolicyState();
       this.triggerAutoSave();
       return;
     }
@@ -466,6 +617,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
           destinoAnchor: this.calculateBestAnchor(this.tempConnSource.id, this.hoveredNodeId, true)
         };
         this.sel.transiciones.push(newTrans);
+        this.broadcastPolicyState();
         this.triggerAutoSave();
         this.showToast('Conexión creada', 'success');
       }
@@ -517,6 +669,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
             t.destinoId = foundNodeId;
             t.destinoAnchor = anchor;
           }
+          this.broadcastPolicyState();
           this.triggerAutoSave();
         }
       }
@@ -535,6 +688,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
       }
       this.persistPositions();
       this.generateLayout();
+      this.broadcastPolicyState();
       this.triggerAutoSave();
       setTimeout(() => this.isDragging = false, 50);
     }
@@ -569,6 +723,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   setAnchor(trans: Transicion, end: 'origen' | 'destino', anchor: 'top' | 'bottom' | 'left' | 'right'): void {
     if (end === 'origen') trans.origenAnchor = anchor;
     else trans.destinoAnchor = anchor;
+    this.broadcastPolicyState();
     this.triggerAutoSave();
   }
 
@@ -761,16 +916,64 @@ export class DesignerComponent implements OnInit, OnDestroy {
         }
         this.saveStatus = 'saved';
         setTimeout(() => { if (this.saveStatus === 'saved') this.saveStatus = 'idle'; }, 2000);
+        // ── Sincronización colaborativa: notificar a todos el estado actualizado ──
+        this.colabSvc.notificarCambioCompleto(this.sel);
       },
       error: (e: any) => { this.saveStatus = 'error'; this.showToast(e.error?.message || 'Error al guardar', 'error'); },
     });
   }
 
   triggerAutoSave(): void {
-    if (!this.sel || this.sel.estaActiva) return;
+    if (!this.sel || this.sel.estaActiva) return; // Politicas activas no se guardan via autosave
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
     this.saveStatus = 'saving';
     this.autoSaveTimer = setTimeout(() => this.guardarPolitica(), 800);
+  }
+
+  // ── History (Undo/Redo) ──
+  pushHistorial(): void {
+    if (!this.sel || this.sel.estaActiva) return;
+    if (this.historialIdx < this.historial.length - 1) {
+      this.historial = this.historial.slice(0, this.historialIdx + 1);
+    }
+    const snapshot = JSON.parse(JSON.stringify(this.sel));
+    this.historial.push(snapshot);
+    if (this.historial.length > 50) this.historial.shift();
+    else this.historialIdx++;
+  }
+
+  undo(): void {
+    if (this.historialIdx > 0) {
+      this.historialIdx--;
+      this.restoreSnapshot(this.historial[this.historialIdx]);
+    }
+  }
+
+  redo(): void {
+    if (this.historialIdx < this.historial.length - 1) {
+      this.historialIdx++;
+      this.restoreSnapshot(this.historial[this.historialIdx]);
+    }
+  }
+
+  private restoreSnapshot(snapshot: PoliticaDTO): void {
+    this.sel = JSON.parse(JSON.stringify(snapshot));
+    this.nodoSeleccionado = null;
+    this.calleSeleccionada = null;
+    this.transicionSeleccionada = null;
+    this.generateLayout();
+    this.broadcastPolicyState();
+    this.triggerAutoSave();
+    this.showToast('Estado restaurado', 'info');
+  }
+
+  /** Difunde INMEDIATAMENTE el estado completo a todos los colaboradores.
+   *  Llamar en cada cambio estructural (lanes, colores, conexiones, etc.)
+   *  sin esperar al ciclo de auto-guardado. */
+  broadcastPolicyState(): void {
+    if (this.sel) {
+      this.colabSvc.notificarCambioCompleto(this.sel);
+    }
   }
 
   // ── Lane Reorder ──
@@ -799,6 +1002,8 @@ export class DesignerComponent implements OnInit, OnDestroy {
       return;
     }
     
+    this.pushHistorial();
+
     // 1. Mapear posiciones X actuales por ID de calle antes de mover
     const oldLaneXMap: Record<string, number> = {};
     this.sel.calles.forEach((c, i) => {
@@ -829,6 +1034,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
       }
     });
 
+    this.broadcastPolicyState(); // Sincronizar lane reorder inmediatamente
     this.triggerAutoSave();
     this.isDraggingLane = false;
     this.dragLaneIdx = -1;
@@ -883,6 +1089,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   // ── CRUD: Calles ──
   agregarCalle(): void {
     if (!this.sel) return;
+    this.pushHistorial();
     const depto = this.adminSvc.departamentos().find(d => d.id === this.nuevaCalleDeptoId);
     const nombre = this.nuevaCalleNombre.trim() || depto?.nombre || 'Nueva Calle';
     
@@ -905,6 +1112,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   }
   eliminarCalle(ci: number): void {
     if (!this.sel) return;
+    this.pushHistorial();
     const removedIds = this.sel.calles[ci].actividades.map(a => a.id);
     this.sel.transiciones = this.sel.transiciones.filter(t => !removedIds.includes(t.origenId) && !removedIds.includes(t.destinoId));
     this.sel.calles.splice(ci, 1);
@@ -919,9 +1127,24 @@ export class DesignerComponent implements OnInit, OnDestroy {
   agregarNodo(tipo: TipoActividad): void {
     if (!this.sel || this.sel.estaActiva) return;
     if (this.sel.calles.length === 0) { this.showToast('Crea una calle primero', 'error'); return; }
-    const ci = this.calleSelIdx >= 0 ? this.calleSelIdx : 0;
+    this.pushHistorial();
+    let ci = this.calleSelIdx >= 0 ? this.calleSelIdx : 0;
+    if (ci >= this.sel.calles.length) ci = 0;
+
     const names: Record<string, string> = { INICIO: 'Inicio', TAREA: 'Nueva Tarea', DECISION: 'Decisión', FORK: 'Fork', JOIN: 'Join', FIN: 'Fin', MERGE: 'Merge' };
-    const newAct: Actividad = { id: crypto.randomUUID(), nombre: names[tipo] || 'Nodo', tipo, esInicial: tipo === 'INICIO', esFinal: tipo === 'FIN', orden: this.sel.calles[ci].actividades.length, ancho: this.NW, alto: this.NH, fontSize: 'md' };
+    const newAct: Actividad = { 
+      id: crypto.randomUUID(), 
+      nombre: names[tipo] || 'Nodo', 
+      tipo, 
+      esInicial: tipo === 'INICIO', 
+      esFinal: tipo === 'FIN', 
+      orden: this.sel.calles[ci].actividades.length, 
+      ancho: this.NW, 
+      alto: this.NH, 
+      fontSize: 'md',
+      posX: undefined,
+      posY: undefined
+    };
     this.sel.calles[ci].actividades.push(newAct);
     this.generateLayout();
     this.triggerAutoSave();
@@ -929,6 +1152,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   }
   eliminarNodoSeleccionado(): void {
     if (!this.sel || !this.nodoSeleccionado) return;
+    this.pushHistorial();
     const id = this.nodoSeleccionado.id;
     this.sel.calles[this.editCalleIdx].actividades.splice(this.editActIdx, 1);
     this.sel.transiciones = this.sel.transiciones.filter(t => t.origenId !== id && t.destinoId !== id);
@@ -941,6 +1165,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   // ── CRUD: Transiciones ──
   eliminarTransicionById(id: string): void {
     if (!this.sel) return;
+    this.pushHistorial();
     this.sel.transiciones = this.sel.transiciones.filter(t => t.id !== id);
     if (this.transicionSeleccionada?.id === id) this.transicionSeleccionada = null;
     this.triggerAutoSave();
@@ -995,7 +1220,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   trackById(index: number, item: any): string { return item.id; }
   trackByConnId(index: number, item: any): string { return item.id; }
 
-  showToast(msg: string, type: 'success' | 'error'): void {
+  showToast(msg: string, type: 'success' | 'error' | 'info'): void {
     this.toastMsg = msg; this.toastType = type;
     setTimeout(() => this.toastMsg = '', 3000);
   }
@@ -1025,14 +1250,37 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
   // ── Simulation Logic ──
   startSimulation(): void {
-    if (!this.sel) return;
+    const politica = this.sel;
+    if (!politica) return;
+    
     this.isSimulating = true;
     this.nodoSeleccionado = null;
     this.transicionSeleccionada = null;
     this.calleSeleccionada = null;
     this.activeSimNodes = [];
-    this.simLog = ['Simulación lista. Haz clic en Inicio.'];
+    this.simLog = ['Simulación y Análisis iniciados...'];
+    this.showMlPanel = true;
+    this.isAnalyzingMl = true;
     
+    // Ejecutar ML Analysis en backend
+    this.mlSvc.analyze(politica).subscribe({
+      next: (res) => {
+        this.mlResult = res;
+        this.isAnalyzingMl = false;
+        
+        const hasCritical = res.findings.some(f => f.severity === 'CRITICAL');
+        if (!hasCritical) {
+          this.mlSvc.simulate(politica, 1000).subscribe(simRes => {
+            if (this.mlResult) this.mlResult.simulation = simRes;
+          });
+        }
+      },
+      error: () => {
+        this.isAnalyzingMl = false;
+        this.showToast('Error en análisis ML', 'error');
+      }
+    });
+
     const inicio = this.getAllActividades().find(a => a.tipo === 'INICIO');
     if (inicio) {
       this.activeSimNodes = [inicio.id];
@@ -1041,6 +1289,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
   stopSimulation(): void {
     this.isSimulating = false;
+    this.showMlPanel = false;
     this.activeSimNodes = [];
     this.simLog = [];
   }
@@ -1127,6 +1376,307 @@ export class DesignerComponent implements OnInit, OnDestroy {
     this.nodoSeleccionado.esquemaFormulario = { fields };
     this.formFields = fields;
     this.onNodeChange();
+  }
+
+  // ── AI Assistant ──
+  toggleAiAssistant() {
+    this.showAiAssistant = !this.showAiAssistant;
+    if (!this.showAiAssistant && this.isAiListening) {
+      this.stopAiListening();
+    }
+  }
+
+  startAiListening() {
+    this.isAiListening = true;
+    this.aiSvc.empezarAEscuchar(
+      (text, isFinal) => {
+        this.aiInputText = text;
+        if (isFinal) {
+          this.isAiListening = false;
+          if (this.aiDirectSend) {
+            this.enviarInstruccionAi();
+          }
+        }
+        this.cdr.detectChanges();
+      },
+      (err) => {
+        console.error('Error de voz:', err);
+        this.isAiListening = false;
+        this.showToast('Error de reconocimiento de voz', 'error');
+        this.cdr.detectChanges();
+      },
+      () => {
+        this.isAiListening = false;
+        this.cdr.detectChanges();
+      }
+    );
+  }
+
+  stopAiListening() {
+    this.aiSvc.detenerEscucha();
+    this.isAiListening = false;
+  }
+
+  enviarInstruccionAi() {
+    if (!this.aiInputText.trim() || !this.sel) return;
+    this.isAiProcessing = true;
+    const instruccion = this.aiInputText;
+    this.aiInputText = '';
+
+    this.aiSvc.ejecutarComando(this.sel.id, instruccion, this.sel).subscribe({
+      next: (res: AiResponse) => {
+        this.isAiProcessing = false;
+        this.showToast('AI: ' + res.explicacion, 'info');
+        this.aiSvc.hablar(res.explicacion);
+        
+        // Ejecutar las acciones
+        if (res.acciones && res.acciones.length > 0) {
+          this.pushHistorial();
+          
+          for (const acc of res.acciones) {
+            this.ejecutarAccionAi(acc);
+          }
+          
+          this.generateLayout();
+          this.triggerAutoSave();
+          this.broadcastPolicyState();
+          this.cdr.detectChanges();
+        }
+      },
+      error: (e: any) => {
+        this.isAiProcessing = false;
+        this.showToast('Error con la IA: ' + (e.error?.message || e.message), 'error');
+      }
+    });
+  }
+
+  private ejecutarAccionAi(acc: AiAction) {
+    if (!this.sel) return;
+    try {
+      switch (acc.tipo) {
+        case 'CREAR_CALLE': {
+          this.sel.calles.push({
+            id: crypto.randomUUID(),
+            nombre: acc.params.nombre || 'Nueva Calle',
+            departamentoId: '',
+            color: acc.params.color || '#475569',
+            orden: this.sel.calles.length,
+            actividades: []
+          });
+          break;
+        }
+        case 'CREAR_NODO': {
+          let calleIdx = 0;
+          if (acc.params.calleNombre) {
+            const idx = this.sel.calles.findIndex(c => c.nombre.toLowerCase().includes((acc.params.calleNombre as string).toLowerCase()));
+            if (idx >= 0) calleIdx = idx;
+          }
+          
+          if (this.sel.calles.length === 0) {
+            this.sel.calles.push({ id: crypto.randomUUID(), nombre: 'Defecto', departamentoId: '', orden: 0, color: '#475569', actividades: [] });
+          }
+          
+          const tipo: TipoActividad = acc.params.tipo || 'TAREA';
+          const newAct: Actividad = {
+            id: crypto.randomUUID(),
+            nombre: acc.params.nombre || 'Nueva Tarea',
+            tipo,
+            esInicial: tipo === 'INICIO',
+            esFinal: tipo === 'FIN',
+            orden: this.sel.calles[calleIdx].actividades.length,
+            ancho: this.NW, 
+            alto: this.NH, 
+            fontSize: 'md',
+            posX: undefined,
+            posY: undefined
+          };
+          this.sel.calles[calleIdx].actividades.push(newAct);
+          break;
+        }
+        case 'CONECTAR_NODOS': {
+          // Busca origen y destino por nombre
+          const oName = (acc.params.origenNombre as string || '').toLowerCase();
+          const dName = (acc.params.destinoNombre as string || '').toLowerCase();
+          
+          let oNode: Actividad | null = null;
+          let dNode: Actividad | null = null;
+          
+          for (const c of this.sel.calles) {
+            for (const a of c.actividades) {
+              if (a.nombre.toLowerCase().includes(oName)) oNode = a;
+              if (a.nombre.toLowerCase().includes(dName)) dNode = a;
+            }
+          }
+          
+          if (oNode && dNode) {
+            this.sel.transiciones.push({
+              id: crypto.randomUUID(),
+              origenId: oNode.id,
+              destinoId: dNode.id,
+              tipoRuta: 'SECUENCIAL', condicion: '', etiqueta: '', prioridad: 0,
+              color: '#475569', tipoLinea: 'solida', grosor: 2,
+              origenAnchor: 'bottom', destinoAnchor: 'top'
+            });
+          }
+          break;
+        }
+        case 'ELIMINAR_NODO': {
+          const nName = (acc.params.nombre as string || '').toLowerCase().trim();
+          if (!nName) break; // Seguridad: no borrar si el nombre está vacío
+          for (const c of this.sel.calles) {
+            const idx = c.actividades.findIndex(a => a.nombre.toLowerCase().includes(nName));
+            if (idx >= 0) {
+              const id = c.actividades[idx].id;
+              c.actividades.splice(idx, 1);
+              this.sel.transiciones = this.sel.transiciones.filter(t => t.origenId !== id && t.destinoId !== id);
+            }
+          }
+          break;
+        }
+        case 'MODIFICAR_NODO': {
+          const oldName = (acc.params.nombreActual as string || '').toLowerCase();
+          const newName = acc.params.nuevoNombre as string || 'Nodo Renombrado';
+          
+          for (const c of this.sel.calles) {
+            const act = c.actividades.find(a => a.nombre.toLowerCase().includes(oldName));
+            if (act) {
+              act.nombre = newName;
+              break;
+            }
+          }
+          break;
+        }
+        case 'ELIMINAR_CALLE': {
+          const cName = (acc.params.nombre as string || '').toLowerCase().trim();
+          if (!cName) break;
+          const idx = this.sel.calles.findIndex(c => c.nombre.toLowerCase().includes(cName));
+          if (idx >= 0) {
+            const lane = this.sel.calles[idx];
+            // Eliminar transiciones de los nodos de esta calle
+            const nodeIds = lane.actividades.map(a => a.id);
+            this.sel.transiciones = this.sel.transiciones.filter(t => !nodeIds.includes(t.origenId) && !nodeIds.includes(t.destinoId));
+            // Eliminar calle
+            this.sel.calles.splice(idx, 1);
+          }
+          break;
+        }
+        case 'MOVER_NODO': {
+          const nName = (acc.params.nombreNodo as string || '').toLowerCase().trim();
+          const targetLaneName = (acc.params.nuevaCalleNombre as string || '').toLowerCase().trim();
+          if (!nName || !targetLaneName) break;
+
+          let sourceNode: Actividad | null = null;
+          let sourceLaneIdx = -1;
+          let nodeIdx = -1;
+
+          for (let i = 0; i < this.sel.calles.length; i++) {
+            const idx = this.sel.calles[i].actividades.findIndex(a => a.nombre.toLowerCase().includes(nName));
+            if (idx >= 0) {
+              sourceNode = this.sel.calles[i].actividades[idx];
+              sourceLaneIdx = i;
+              nodeIdx = idx;
+              break;
+            }
+          }
+
+          const targetLaneIdx = this.sel.calles.findIndex(c => c.nombre.toLowerCase().includes(targetLaneName));
+          
+          if (sourceNode && targetLaneIdx >= 0 && sourceLaneIdx !== targetLaneIdx) {
+            this.sel.calles[sourceLaneIdx].actividades.splice(nodeIdx, 1);
+            this.sel.calles[targetLaneIdx].actividades.push(sourceNode);
+            // Ajustar posición horizontal para que no se pierda fuera de la calle
+            if (typeof sourceNode.posX === 'number') {
+              const oldLaneX = this.getLaneX(sourceLaneIdx);
+              const newLaneX = this.getLaneX(targetLaneIdx);
+              sourceNode.posX = sourceNode.posX - oldLaneX + newLaneX;
+            }
+          }
+          break;
+        }
+        case 'REORDENAR_CALLES': {
+          const names = acc.params.nombresOrdenados as string[];
+          if (!names || !Array.isArray(names)) break;
+          
+          const newCalles: Calle[] = [];
+          for (const n of names) {
+            const lane = this.sel.calles.find(c => c.nombre.toLowerCase().includes(n.toLowerCase()));
+            if (lane) newCalles.push(lane);
+          }
+          // Añadir las que falten
+          for (const c of this.sel.calles) {
+            if (!newCalles.find(nc => nc.id === c.id)) newCalles.push(c);
+          }
+          this.sel.calles = newCalles;
+          break;
+        }
+        case 'EDITAR_TRANSICION': {
+          const oName = (acc.params.origenNombre as string || '').toLowerCase().trim();
+          const dName = (acc.params.destinoNombre as string || '').toLowerCase().trim();
+          if (!oName || !dName) break;
+
+          let oNodeId = '';
+          let dNodeId = '';
+
+          for (const c of this.sel.calles) {
+            for (const a of c.actividades) {
+              if (a.nombre.toLowerCase().includes(oName)) oNodeId = a.id;
+              if (a.nombre.toLowerCase().includes(dName)) dNodeId = a.id;
+            }
+          }
+
+          const trans = this.sel.transiciones.find(t => t.origenId === oNodeId && t.destinoId === dNodeId);
+          if (trans) {
+            if (acc.params.etiqueta !== undefined) trans.etiqueta = acc.params.etiqueta;
+            if (acc.params.condicion !== undefined) trans.condicion = acc.params.condicion;
+            if (acc.params.color) trans.color = acc.params.color;
+            if (acc.params.tipoLinea) trans.tipoLinea = acc.params.tipoLinea;
+            if (acc.params.grosor) trans.grosor = acc.params.grosor;
+          }
+          break;
+        }
+        case 'CAMBIAR_ESTILO': {
+          const targetName = (acc.params.nombre as string || '').toLowerCase().trim();
+          if (!targetName) break;
+
+          // Buscar en nodos
+          for (const c of this.sel.calles) {
+            const act = c.actividades.find(a => a.nombre.toLowerCase().includes(targetName));
+            if (act) {
+              if (acc.params.color) act.color = acc.params.color;
+              if (acc.params.ancho) act.ancho = acc.params.ancho;
+              if (acc.params.alto) act.alto = acc.params.alto;
+              if (acc.params.fontSize) act.fontSize = acc.params.fontSize;
+              if (acc.params.descripcion) act.descripcion = acc.params.descripcion;
+              return;
+            }
+          }
+          // Buscar en calles
+          const lane = this.sel.calles.find(c => c.nombre.toLowerCase().includes(targetName));
+          if (lane) {
+            if (acc.params.color) lane.color = acc.params.color;
+            if (acc.params.ancho) lane.ancho = acc.params.ancho;
+          }
+          break;
+        }
+        case 'MOVER_NODO_COORDENADAS': {
+          const nName = (acc.params.nombreNodo as string || '').toLowerCase().trim();
+          const x = acc.params.x;
+          const y = acc.params.y;
+          
+          for (const c of this.sel.calles) {
+            const act = c.actividades.find(a => a.nombre.toLowerCase().includes(nName));
+            if (act) {
+              if (x !== undefined) act.posX = x;
+              if (y !== undefined) act.posY = y;
+              break;
+            }
+          }
+          break;
+        }
+      }
+    } catch (e) {
+      console.error('Error procesando acción IA', acc, e);
+    }
   }
 
   getDeptos() { return this.adminSvc.departamentos(); }
