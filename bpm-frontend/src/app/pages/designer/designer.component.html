@@ -251,14 +251,15 @@
               [attr.x2]="mouseX" [attr.y2]="mouseY"
               stroke="#6366f1" stroke-width="2" stroke-dasharray="4 4"/>
       </svg>
-
       <!-- Nodes -->
       <ng-container *ngFor="let calle of sel.calles; let ci = index; trackBy: trackById">
         <div *ngFor="let act of calle.actividades; let ai = index; trackBy: trackById"
-             class="node-card rounded-2xl z-10"
+             class="node-card rounded-2xl z-10 absolute cursor-move select-none transition-all duration-300 ease-out"
+             [id]="'node-' + act.id"
              [ngClass]="{'selected': nodoSeleccionado?.id === act.id, 'dragging': isDragging && dragNodeId === act.id, 'conn-source': connMode.sourceId === act.id, 'sim-active': activeSimNodes.includes(act.id), 'locked': nodosBloqueados[act.id]}"
              [style.left.px]="getNodoPos(act.id).x" [style.top.px]="getNodoPos(act.id).y"
              [style.width.px]="act.ancho || NW"
+             [style.min-height.px]="act.alto || NH"
              [style.background]="act.color ? act.color + '20' : 'rgba(15,23,42,0.92)'"
              [style.backdrop-filter]="'blur(20px)'"
              [style.border-color]="nodosBloqueados[act.id] ? nodosBloqueados[act.id].color : (act.color || 'rgba(51,65,85,0.6)')"
@@ -267,6 +268,17 @@
              (mouseenter)="onNodeMouseEnter(act.id)" (mouseleave)="onNodeMouseLeave()">
           
           <div *ngIf="activeSimNodes.includes(act.id)" class="sim-badge">ACTIVO</div>
+          
+          <!-- ML Finding Badge -->
+          <div *ngIf="getFindingForNode(act.id)" class="absolute -top-3 left-4 px-2 py-0.5 rounded-full text-[9px] font-bold text-white shadow-lg z-20 flex items-center gap-1 border border-white/20"
+               [ngClass]="{
+                 'bg-red-500': getFindingForNode(act.id)?.severity === 'CRITICAL',
+                 'bg-amber-500': getFindingForNode(act.id)?.severity === 'WARNING',
+                 'bg-blue-500': getFindingForNode(act.id)?.severity === 'INFO'
+               }"
+               [title]="getFindingForNode(act.id)?.message">
+             <span>{{ getFindingForNode(act.id)?.severity === 'CRITICAL' ? '⚠️ CRÍTICO' : '⚡ LENTO' }}</span>
+          </div>
           
           <!-- Locked Badge -->
           <div *ngIf="nodosBloqueados[act.id]" class="absolute -top-3 -right-3 px-2 py-0.5 rounded-full text-[9px] font-bold text-white shadow-lg z-20 flex items-center gap-1"
@@ -293,7 +305,7 @@
               </svg>
             </div>
             <div class="min-w-0 flex-1">
-              <p class="text-[11px] font-bold text-slate-100 truncate">{{ act.nombre }}</p>
+              <p class="font-bold text-slate-100 truncate" [ngClass]="{'text-[10px]': act.fontSize==='sm', 'text-[11px]': !act.fontSize || act.fontSize==='md', 'text-sm': act.fontSize==='lg'}">{{ act.nombre }}</p>
               <p class="text-[9px] font-semibold uppercase tracking-[0.15em] mt-0.5" [style.color]="getAccent(act.tipo)">{{ getCategory(act.tipo) }}</p>
             </div>
           </div>
@@ -720,9 +732,7 @@
         <select [(ngModel)]="nuevaCalleNombre" 
                 class="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-sm text-slate-200 outline-none focus:border-indigo-500 transition-all appearance-none">
           <option value="">Seleccionar Departamento...</option>
-          @for (d of getDeptos(); track d.id) {
-            <option [value]="d.nombre">{{ d.nombre }}</option>
-          }
+          <option *ngFor="let d of getDeptos(); trackBy: trackById" [value]="d.nombre">{{ d.nombre }}</option>
         </select>
         <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
@@ -756,9 +766,9 @@
   </div>
 
   <!-- MODAL: FORM MANAGER -->
-  <div *ngIf="mostrarFormManager" class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-10 overflow-y-auto bg-slate-950/80 backdrop-blur-md">
+  <div *ngIf="mostrarFormManager" class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-10 bg-slate-950/80 backdrop-blur-md">
     <div class="absolute inset-0" (click)="mostrarFormManager = false"></div>
-    <div class="w-full max-w-5xl my-auto glass rounded-[3rem] shadow-2xl flex flex-col overflow-hidden relative border border-white/10 animate-in zoom-in duration-300">
+    <div class="w-full max-w-5xl max-h-[90vh] glass rounded-[3rem] shadow-2xl flex flex-col overflow-hidden relative border border-white/10 animate-in zoom-in duration-300">
       <div class="p-8 border-b border-white/5 flex items-center justify-between bg-slate-900/50">
         <div class="flex items-center gap-4">
           <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-2xl text-indigo-400 border border-indigo-500/20">📋</div>

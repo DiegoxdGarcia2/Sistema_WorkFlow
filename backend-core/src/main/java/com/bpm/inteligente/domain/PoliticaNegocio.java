@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.*;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -44,9 +44,21 @@ public class PoliticaNegocio {
     @Builder.Default
     private List<Transicion> transiciones = new ArrayList<>();
 
-    @Builder.Default
-    private Instant creadoEn = Instant.now();
+    // ── Auditoría Enterprise ──────────────────────────────────
 
-    @Builder.Default
-    private Instant actualizadoEn = Instant.now();
+    /** ID del usuario que creó este registro (poblado automáticamente por MongoAuditorAware) */
+    @CreatedBy
+    private String creadoPor;
+
+    /** Fecha de creación (poblada automáticamente por Spring Data) */
+    @CreatedDate
+    private Instant creadoEn;
+
+    /** ID del último usuario que modificó este registro */
+    @LastModifiedBy
+    private String modificadoPor;
+
+    /** Fecha de última modificación (poblada automáticamente por Spring Data) */
+    @LastModifiedDate
+    private Instant actualizadoEn;
 }

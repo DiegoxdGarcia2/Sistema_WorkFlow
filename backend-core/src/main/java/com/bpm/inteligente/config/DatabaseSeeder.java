@@ -160,7 +160,7 @@ public class DatabaseSeeder implements CommandLineRunner {
 
         // Trámites CRE
         // Trámite 1: En progreso (tomado por Juan)
-        Tramite t1 = tramiteService.iniciar(p1.getId(), funcCre1.getId());
+        Tramite t1 = tramiteService.iniciar(p1.getId(), funcCre1.getId(), null, null, null);
         t1.setEstado(EstadoTramite.EN_PROGRESO);
         tramiteRepo.save(t1);
         List<RegistroActividad> regsT1 = registroRepo.findByTramiteId(t1.getId());
@@ -173,7 +173,7 @@ public class DatabaseSeeder implements CommandLineRunner {
         }
 
         // Trámite 2: En progreso (tomado por Ana)
-        Tramite t2 = tramiteService.iniciar(p1.getId(), funcCre2.getId());
+        Tramite t2 = tramiteService.iniciar(p1.getId(), funcCre2.getId(), null, null, null);
         t2.setEstado(EstadoTramite.EN_PROGRESO);
         tramiteRepo.save(t2);
         List<RegistroActividad> regsT2 = registroRepo.findByTramiteId(t2.getId());
@@ -186,7 +186,7 @@ public class DatabaseSeeder implements CommandLineRunner {
         }
 
         // Trámite 3: Reclamo activo
-        Tramite t3 = tramiteService.iniciar(p2.getId(), funcCre3.getId());
+        Tramite t3 = tramiteService.iniciar(p2.getId(), funcCre3.getId(), null, null, null);
         t3.setEstado(EstadoTramite.EN_PROGRESO);
         tramiteRepo.save(t3);
         List<RegistroActividad> regsT3 = registroRepo.findByTramiteId(t3.getId());
@@ -199,7 +199,7 @@ public class DatabaseSeeder implements CommandLineRunner {
         }
 
         // Trámite 4: Completado (para Historial)
-        Tramite t4 = tramiteService.iniciar(p1.getId(), funcCre1.getId());
+        Tramite t4 = tramiteService.iniciar(p1.getId(), funcCre1.getId(), null, null, null);
         t4.setId("mock-tramite-finalizado-001");
         t4.setEstado(EstadoTramite.COMPLETADO);
         t4.setFinalizadoEn(Instant.now().minus(1, ChronoUnit.DAYS));
@@ -271,7 +271,7 @@ public class DatabaseSeeder implements CommandLineRunner {
         PoliticaNegocio p5 = crearPoliticaCuentaEmpresarial(bnd.getId(), proyectoBnd.getId(), db1.getId(), db2.getId(), db2.getId());
 
         // Trámites BND
-        Tramite t6 = tramiteService.iniciar(p4.getId(), funcBnd1.getId());
+        Tramite t6 = tramiteService.iniciar(p4.getId(), funcBnd1.getId(), null, null, null);
         t6.setEstado(EstadoTramite.EN_PROGRESO);
         tramiteRepo.save(t6);
         List<RegistroActividad> regsT6 = registroRepo.findByTramiteId(t6.getId());

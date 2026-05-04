@@ -38,6 +38,8 @@ public class PoliticaDTO {
     @Builder.Default
     private List<Transicion> transiciones = new ArrayList<>();
 
+    private String creadoPor;
     private Instant creadoEn;
+    private String modificadoPor;
     private Instant actualizadoEn;
 }

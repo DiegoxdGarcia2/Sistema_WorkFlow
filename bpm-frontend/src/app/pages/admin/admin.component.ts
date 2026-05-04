@@ -9,6 +9,8 @@ import { AuthService } from '../../services/auth.service';
 import { FormBuilderComponent } from './form-builder.component';
 import { MonitorComponent } from './monitor.component';
 import { FormularioService } from '../../services/formulario.service';
+import { ClienteService } from '../../services/cliente.service';
+import { ClienteDTO } from '../../models/bpm.models';
 
 @Component({
   selector: 'app-admin',
@@ -65,6 +67,9 @@ import { FormularioService } from '../../services/formulario.service';
             }
             @if (seccionActiva() === 'departamentos') {
               <button (click)="abrirCrearDepto()" class="px-6 py-3 text-xs font-bold text-white bg-indigo-500 hover:bg-indigo-400 rounded-2xl shadow-xl shadow-indigo-500/20 transition-all hover:-translate-y-0.5 active:translate-y-0 cursor-pointer">+ Nuevo Departamento</button>
+            }
+            @if (seccionActiva() === 'clientes') {
+              <button (click)="abrirCrearCliente()" class="px-6 py-3 text-xs font-bold text-white bg-indigo-500 hover:bg-indigo-400 rounded-2xl shadow-xl shadow-indigo-500/20 transition-all hover:-translate-y-0.5 active:translate-y-0 cursor-pointer">+ Nuevo Cliente</button>
             }
           </div>
 
@@ -307,6 +312,62 @@ import { FormularioService } from '../../services/formulario.service';
           <!-- SECTION: MONITOR -->
           @if (seccionActiva() === 'monitor') {
             <app-monitor></app-monitor>
+          }
+
+          <!-- SECTION: CLIENTES -->
+          @if (seccionActiva() === 'clientes') {
+            <div class="rounded-3xl border border-slate-800/60 bg-slate-900/30 backdrop-blur-md shadow-2xl overflow-hidden ring-1 ring-white/5 animate-in fade-in duration-500">
+               <div class="overflow-x-auto">
+                 <table class="w-full border-collapse">
+                   <thead>
+                     <tr class="bg-white/[0.02] border-b border-white/5">
+                       <th class="px-8 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Cliente</th>
+                       <th class="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Identificación (CI)</th>
+                       <th class="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Contacto</th>
+                       <th class="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Dirección</th>
+                       <th class="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Acciones</th>
+                     </tr>
+                   </thead>
+                   <tbody class="divide-y divide-slate-800/40">
+                     @for (c of cs.clientes(); track c.id) {
+                       <tr class="hover:bg-indigo-500/[0.02] transition-colors group">
+                         <td class="px-8 py-5">
+                            <div class="flex items-center gap-3">
+                              <div class="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 text-xs font-black border border-indigo-500/20">
+                                {{ c.nombre.charAt(0) }}{{ c.apellido.charAt(0) }}
+                              </div>
+                              <div>
+                                <p class="font-bold text-slate-200">{{ c.nombre }} {{ c.apellido }}</p>
+                                <p class="text-[9px] text-indigo-400 font-bold uppercase tracking-widest mt-0.5">Cliente Registrado</p>
+                              </div>
+                            </div>
+                         </td>
+                         <td class="px-6 py-5 text-slate-300 font-mono text-xs font-bold">{{ c.ci }}</td>
+                         <td class="px-6 py-5">
+                            <p class="text-xs text-slate-300 font-medium">{{ c.correo }}</p>
+                            <p class="text-[10px] text-slate-500 mt-1">{{ c.telefono || 'Sin teléfono' }}</p>
+                         </td>
+                         <td class="px-6 py-5 text-slate-400 text-xs max-w-[200px] truncate">{{ c.direccion || 'No especificada' }}</td>
+                         <td class="px-6 py-5 text-right">
+                           <div class="flex justify-end gap-2">
+                             <button (click)="abrirEditarCliente(c)" class="w-8 h-8 rounded-xl flex items-center justify-center text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 transition-all">
+                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                             </button>
+                             <button (click)="eliminarCliente(c.id)" class="w-8 h-8 rounded-xl flex items-center justify-center text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-all">
+                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                             </button>
+                           </div>
+                         </td>
+                       </tr>
+                     } @empty {
+                       <tr>
+                         <td colspan="5" class="py-20 text-center text-slate-500 font-bold">No hay clientes registrados en el sistema.</td>
+                       </tr>
+                     }
+                   </tbody>
+                 </table>
+               </div>
+            </div>
           }
 
           <!-- SECTION: FORMULARIOS -->
@@ -612,13 +673,69 @@ import { FormularioService } from '../../services/formulario.service';
             </div>
           </div>
         }
+
+        <!-- MODAL: CREAR/EDITAR CLIENTE -->
+        @if (modalClienteOpen) {
+          <div class="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 backdrop-blur-md px-4 overflow-y-auto py-20">
+            <div class="w-full max-w-xl rounded-[3rem] border border-white/10 bg-slate-900 shadow-2xl p-12 ring-1 ring-white/5 animate-in fade-in zoom-in duration-300 my-auto">
+              <div class="flex items-center justify-between mb-8">
+                <div class="flex items-center gap-4">
+                  <div class="w-12 h-12 rounded-2xl bg-indigo-500 flex items-center justify-center text-white shadow-xl shadow-indigo-500/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                  </div>
+                  <div>
+                    <h3 class="text-xl font-black text-white leading-tight">{{ modalEditCliente ? 'Editar Cliente' : 'Nuevo Cliente' }}</h3>
+                    <p class="text-xs text-slate-500 mt-0.5 font-medium">Información básica y de contacto del cliente.</p>
+                  </div>
+                </div>
+                <button (click)="modalClienteOpen = false" class="w-10 h-10 rounded-2xl flex items-center justify-center text-slate-500 hover:text-white hover:bg-slate-800 transition-all">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+              </div>
+
+              <div class="grid grid-cols-2 gap-5">
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-1">Nombre *</label>
+                  <input [(ngModel)]="formCliente.nombre" placeholder="Nombre" class="w-full px-4 py-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-200 focus:border-indigo-500 transition-all outline-none">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-1">Apellido *</label>
+                  <input [(ngModel)]="formCliente.apellido" placeholder="Apellido" class="w-full px-4 py-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-200 focus:border-indigo-500 transition-all outline-none">
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-1">Documento de Identidad (CI) *</label>
+                  <input [(ngModel)]="formCliente.ci" placeholder="CI o Cédula" class="w-full px-4 py-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-200 focus:border-indigo-500 transition-all outline-none">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-1">Email</label>
+                  <input [(ngModel)]="formCliente.correo" type="email" placeholder="email@ejemplo.com" class="w-full px-4 py-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-200 focus:border-indigo-500 transition-all outline-none">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-1">Teléfono</label>
+                  <input [(ngModel)]="formCliente.telefono" placeholder="Teléfono" class="w-full px-4 py-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-200 focus:border-indigo-500 transition-all outline-none">
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-1">Dirección</label>
+                  <textarea [(ngModel)]="formCliente.direccion" rows="2" placeholder="Dirección completa" class="w-full px-4 py-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-200 focus:border-indigo-500 transition-all outline-none resize-none"></textarea>
+                </div>
+              </div>
+
+              <div class="flex gap-4 mt-10">
+                <button (click)="modalClienteOpen = false" class="flex-1 py-4 text-sm font-bold text-slate-400 hover:text-white rounded-2xl hover:bg-white/5 transition-all">Cancelar</button>
+                <button (click)="guardarCliente()" class="flex-[2] py-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-2xl shadow-2xl shadow-indigo-500/40 transition-all active:scale-95">
+                  {{ modalEditCliente ? 'Guardar Cambios' : 'Registrar Cliente' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        }
       </main>
     </div>
   `,
 })
 export class AdminComponent implements OnInit {
   private sanitizer = inject(DomSanitizer);
-  seccionActiva = signal<'monitor' | 'tenants' | 'usuarios' | 'audit' | 'cargos' | 'departamentos' | 'formularios'>('monitor');
+  seccionActiva = signal<'monitor' | 'tenants' | 'usuarios' | 'audit' | 'cargos' | 'departamentos' | 'formularios' | 'clientes'>('monitor');
   
   getSafeIcon(svg: string): SafeHtml {
     return this.sanitizer.bypassSecurityTrustHtml(svg);
@@ -631,6 +748,7 @@ export class AdminComponent implements OnInit {
     { key: 'departamentos', label: 'Departamentos', svg: 'M21 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7 M21 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2 M21 7h-6.5L12 3H5v4z' },
     { key: 'cargos', label: 'Cargos', svg: 'M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16 M2 21h20' },
     { key: 'tenants', label: 'Empresa', svg: 'M3 21h18M3 7V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2M3 7l9 6 9-6M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7' },
+    { key: 'clientes', label: 'Clientes', svg: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87' },
     { key: 'audit', label: 'Auditoría', svg: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 6v6l4 2' }
   ];
 
@@ -650,10 +768,15 @@ export class AdminComponent implements OnInit {
   modalTenantOpen = false;
   tenantForm: Partial<TenantDTO> = {};
 
+  modalClienteOpen = false;
+  modalEditCliente: any = null;
+  formCliente: Partial<ClienteDTO> = { nombre: '', apellido: '', ci: '', correo: '', telefono: '', direccion: '' };
+
   constructor(
     public svc: AdminService, 
     public auth: AuthService, 
     private fs: FormularioService,
+    public cs: ClienteService,
     private route: ActivatedRoute
   ) {}
 
@@ -664,7 +787,7 @@ export class AdminComponent implements OnInit {
     this.route.queryParams.subscribe(params => {
       console.log('🔍 AdminComponent: QueryParams detectados:', params);
       const tab = params['tab'];
-      if (tab && ['monitor', 'tenants', 'usuarios', 'audit', 'cargos', 'departamentos', 'formularios'].includes(tab)) {
+      if (tab && ['monitor', 'tenants', 'usuarios', 'audit', 'cargos', 'departamentos', 'formularios', 'clientes'].includes(tab)) {
         console.log('🎯 AdminComponent: Cambiando a pestaña:', tab);
         this.seccionActiva.set(tab as any);
         this.refreshData();
@@ -696,6 +819,7 @@ export class AdminComponent implements OnInit {
       if (sa === 'audit') this.svc.cargarAuditLog(user.tenantId).subscribe();
       if (sa === 'tenants') this.svc.cargarTenants().subscribe();
       if (sa === 'formularios') this.fs.listarPorTenant(user.tenantId).subscribe();
+      if (sa === 'clientes') this.cs.listarPorTenant(user.tenantId).subscribe();
     }
   }
 
@@ -716,7 +840,8 @@ export class AdminComponent implements OnInit {
       cargos: 'Cargos Institucionales', 
       departamentos: 'Estructura Organizacional', 
       formularios: 'Repositorio de Formularios',
-      monitor: 'Monitor de Procesos'
+      monitor: 'Monitor de Procesos',
+      clientes: 'Base de Datos de Clientes'
     };
     return map[this.seccionActiva()] || 'Panel de Control';
   }
@@ -729,7 +854,8 @@ export class AdminComponent implements OnInit {
       cargos: 'Define las jerarquías y puestos oficiales de la organización.', 
       departamentos: 'Gestiona las unidades operativas y áreas funcionales.', 
       formularios: 'Biblioteca de estructuras de datos para procesos de negocio.',
-      monitor: 'Vista en tiempo real del estado de los trámites y cuellos de botella.'
+      monitor: 'Vista en tiempo real del estado de los trámites y cuellos de botella.',
+      clientes: 'Gestiona la información de contacto y legal de tus clientes.'
     };
     return map[this.seccionActiva()] || 'Administración central de la plataforma.';
   }
@@ -889,5 +1015,32 @@ export class AdminComponent implements OnInit {
   getAvatarCls(r: string) {
     const m: any = { ADMINISTRADOR: 'bg-indigo-600', DISENADOR: 'bg-emerald-600', FUNCIONARIO: 'bg-sky-600', CLIENTE: 'bg-slate-600' };
     return m[r] || 'bg-slate-700';
+  }
+
+  // --- Clientes ---
+  abrirCrearCliente() { 
+    this.modalEditCliente = null; 
+    this.formCliente = { tenantId: this.auth.usuario()?.tenantId, nombre: '', apellido: '', ci: '', correo: '', telefono: '', direccion: '' }; 
+    this.modalClienteOpen = true; 
+  }
+  abrirEditarCliente(c: any) { this.modalEditCliente = c; this.formCliente = { ...c }; this.modalClienteOpen = true; }
+  
+  guardarCliente() {
+    const tid = this.auth.usuario()?.tenantId;
+    if (!tid) return;
+    const obs = this.modalEditCliente 
+      ? this.cs.actualizar(this.modalEditCliente.id, this.formCliente) 
+      : this.cs.crear(this.formCliente);
+    
+    obs.subscribe({
+      next: () => { this.cs.listarPorTenant(tid).subscribe(); this.modalClienteOpen = false; },
+      error: (e) => alert(e.error?.message || 'Error al guardar cliente. Verifique si el CI ya existe.')
+    });
+  }
+
+  eliminarCliente(id: string) {
+    if (confirm('¿Eliminar cliente definitivamente?')) {
+      this.cs.eliminar(id).subscribe(() => this.cs.listarPorTenant(this.auth.usuario()!.tenantId).subscribe());
+    }
   }
 }

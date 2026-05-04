@@ -12,4 +12,6 @@ public interface PoliticaNegocioRepository extends MongoRepository<PoliticaNegoc
     List<PoliticaNegocio> findByTenantIdAndEstaActiva(String tenantId, boolean estaActiva);
 
     boolean existsByTenantIdAndNombreAndVersion(String tenantId, String nombre, int version);
+
+    long countByEstaActivaTrue();
 }

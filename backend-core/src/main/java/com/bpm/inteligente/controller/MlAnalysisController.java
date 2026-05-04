@@ -21,6 +21,12 @@ public class MlAnalysisController {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping("/analyze-real/{politicaId}")
+    public ResponseEntity<AnalysisResultDTO> analyzeReal(@PathVariable String politicaId) {
+        AnalysisResultDTO result = mlAnalysisService.analyzeRealData(politicaId);
+        return ResponseEntity.ok(result);
+    }
+
     @PostMapping("/simulate")
     public ResponseEntity<AnalysisResultDTO.SimulationResult> simulate(@RequestBody SimulationRequest request) {
         AnalysisResultDTO.SimulationResult result = mlAnalysisService.simulate(request.getPolitica(), request.getInstances());

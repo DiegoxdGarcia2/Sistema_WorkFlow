@@ -14,4 +14,9 @@ public class IniciarTramiteRequest {
     private String politicaId;
 
     private String usuarioId;
+
+    /** Datos opcionales del cliente asociado al trámite */
+    private String clienteId;
+    private String documentoCliente;
+    private String clienteNombre;
 }

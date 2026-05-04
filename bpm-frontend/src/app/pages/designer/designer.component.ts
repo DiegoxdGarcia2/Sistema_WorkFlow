@@ -38,7 +38,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   // ── Constants ──
   readonly LW = 270;   // lane width
   readonly NW = 210;   // node width
-  readonly NH = 76;    // node height
+  readonly NH = 60;    // node height
   readonly NG = 56;    // node gap
   readonly TOP = 100;  // top offset (below lane header + toolbar)
 
@@ -892,7 +892,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   guardarPolitica(): void {
     if (!this.sel) return;
     this.persistPositions();
-    this.saveStatus = 'saving';
+    setTimeout(() => this.saveStatus = 'saving');
     const selId = this.sel.id;
     const selNodeId = this.nodoSeleccionado?.id;
     const selTransId = this.transicionSeleccionada?.id;
@@ -914,19 +914,24 @@ export class DesignerComponent implements OnInit, OnDestroy {
           const ci = this.sel!.calles.findIndex(c => c.id === selCalleId);
           if (ci >= 0) { this.calleSeleccionada = this.sel!.calles[ci]; this.calleSelIdx = ci; }
         }
-        this.saveStatus = 'saved';
-        setTimeout(() => { if (this.saveStatus === 'saved') this.saveStatus = 'idle'; }, 2000);
+        setTimeout(() => {
+          this.saveStatus = 'saved';
+          setTimeout(() => { if (this.saveStatus === 'saved') this.saveStatus = 'idle'; }, 2000);
+        });
         // ── Sincronización colaborativa: notificar a todos el estado actualizado ──
         this.colabSvc.notificarCambioCompleto(this.sel);
       },
-      error: (e: any) => { this.saveStatus = 'error'; this.showToast(e.error?.message || 'Error al guardar', 'error'); },
+      error: (e: any) => { 
+        setTimeout(() => this.saveStatus = 'error');
+        this.showToast(e.error?.message || 'Error al guardar', 'error'); 
+      },
     });
   }
 
   triggerAutoSave(): void {
     if (!this.sel || this.sel.estaActiva) return; // Politicas activas no se guardan via autosave
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
-    this.saveStatus = 'saving';
+    setTimeout(() => this.saveStatus = 'saving');
     this.autoSaveTimer = setTimeout(() => this.guardarPolitica(), 800);
   }
 
@@ -1673,10 +1678,63 @@ export class DesignerComponent implements OnInit, OnDestroy {
           }
           break;
         }
+        case 'ELIMINAR_TRANSICION': {
+          const oName = (acc.params.origenNombre as string || '').toLowerCase().trim();
+          const dName = (acc.params.destinoNombre as string || '').toLowerCase().trim();
+          if (!oName || !dName) break;
+
+          let oId = '';
+          let dId = '';
+          for (const c of this.sel.calles) {
+            for (const a of c.actividades) {
+              if (a.nombre.toLowerCase().includes(oName)) oId = a.id;
+              if (a.nombre.toLowerCase().includes(dName)) dId = a.id;
+            }
+          }
+
+          if (oId && dId) {
+            this.sel.transiciones = this.sel.transiciones.filter(t => !(t.origenId === oId && t.destinoId === dId));
+          }
+          break;
+        }
+        case 'RENOMBRAR_CALLE': {
+          const currentName = (acc.params.nombreActual as string || '').toLowerCase().trim();
+          const newLaneName = acc.params.nuevoNombre as string || 'Calle Renombrada';
+          if (!currentName) break;
+
+          const lane = this.sel.calles.find(c => c.nombre.toLowerCase().includes(currentName));
+          if (lane) {
+            lane.nombre = newLaneName;
+          }
+          break;
+        }
+        case 'ASIGNAR_PLANTILLA': {
+          const nodeName = (acc.params.nombreNodo as string || '').toLowerCase().trim();
+          const tplName = (acc.params.nombrePlantilla as string || '').toLowerCase().trim();
+          if (!nodeName || !tplName) break;
+
+          const tpl = this.templates().find(t => t.nombre.toLowerCase().includes(tplName));
+          if (!tpl) break;
+
+          for (const c of this.sel.calles) {
+            const act = c.actividades.find(a => a.nombre.toLowerCase().includes(nodeName));
+            if (act) {
+              act.plantillaId = tpl.id;
+              act.esquemaFormulario = { fields: JSON.parse(JSON.stringify(tpl.campos)) };
+              break;
+            }
+          }
+          break;
+        }
       }
     } catch (e) {
       console.error('Error procesando acción IA', acc, e);
     }
+  }
+
+  getFindingForNode(nodeId: string) {
+    if (!this.mlResult) return null;
+    return this.mlResult.findings.find(f => f.nodeId === nodeId);
   }
 
   getDeptos() { return this.adminSvc.departamentos(); }

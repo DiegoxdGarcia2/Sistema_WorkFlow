@@ -85,7 +85,9 @@ export interface PoliticaDTO {
   estaActiva: boolean;
   calles: Calle[];
   transiciones: Transicion[];
+  creadoPor?: string;
   creadoEn: string;
+  modificadoPor?: string;
   actualizadoEn: string;
 }
 
@@ -107,8 +109,14 @@ export interface TramiteDTO {
   politicaNombre: string;
   tenantId: string;
   estado: EstadoTramite;
+  creadoPor?: string;
   iniciadoEn: string;
+  modificadoPor?: string;
+  actualizadoEn?: string;
   finalizadoEn: string | null;
+  clienteId?: string;
+  clienteNombre?: string;
+  documentoCliente?: string;
 }
 
 export interface RegistroActividadDTO {
@@ -117,6 +125,7 @@ export interface RegistroActividadDTO {
   actividadId: string;
   actividadNombre: string;
   ejecutadoPor: string | null;
+  ejecutadoPorId: string | null;
   estado: EstadoRegistro;
   esquemaFormulario: Record<string, any>;
   datosFormulario: Record<string, any>;
@@ -132,6 +141,23 @@ export interface RegistroActividadDTO {
 export interface IniciarTramiteRequest {
   politicaId: string;
   usuarioId?: string;
+  clienteId?: string;
+  documentoCliente?: string;
+  clienteNombre?: string;
+}
+
+// ── Cliente ──
+
+export interface ClienteDTO {
+  id: string;
+  tenantId: string;
+  nombre: string;
+  apellido: string;
+  ci: string;
+  correo: string;
+  telefono: string;
+  direccion: string;
+  creadoEn?: string;
 }
 
 export interface CompletarTareaRequest {

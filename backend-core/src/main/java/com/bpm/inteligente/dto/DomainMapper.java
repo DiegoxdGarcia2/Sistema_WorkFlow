@@ -37,7 +37,9 @@ public final class DomainMapper {
                 .estaActiva(entity.isEstaActiva())
                 .calles(entity.getCalles())
                 .transiciones(entity.getTransiciones())
+                .creadoPor(entity.getCreadoPor())
                 .creadoEn(entity.getCreadoEn())
+                .modificadoPor(entity.getModificadoPor())
                 .actualizadoEn(entity.getActualizadoEn())
                 .build();
     }
@@ -49,10 +51,17 @@ public final class DomainMapper {
                 .politicaNombre(politicaNombre)
                 .tenantId(entity.getTenantId())
                 .estado(entity.getEstado())
+                .creadoPor(entity.getCreadoPor())
                 .iniciadoEn(entity.getIniciadoEn())
+                .modificadoPor(entity.getModificadoPor())
+                .actualizadoEn(entity.getActualizadoEn())
                 .finalizadoEn(entity.getFinalizadoEn())
+                .clienteId(entity.getClienteId())
+                .clienteNombre(entity.getClienteNombre())
+                .documentoCliente(entity.getDocumentoCliente())
                 .build();
     }
+
 
     public static RegistroActividadDTO toDTO(RegistroActividad entity, String actividadNombre) {
         return RegistroActividadDTO.builder()

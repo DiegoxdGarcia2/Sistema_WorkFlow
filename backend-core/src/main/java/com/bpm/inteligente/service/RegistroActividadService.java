@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -170,6 +171,7 @@ public class RegistroActividadService {
 
         // Actualizar trámite a EN_PROGRESO si estaba en INICIADO
         if (tramite.getEstado() == EstadoTramite.INICIADO) {
+            System.out.println("🔄 Derivación: Pasando trámite " + tramite.getId() + " a EN_PROGRESO");
             tramite.setEstado(EstadoTramite.EN_PROGRESO);
             tramiteRepo.save(tramite);
         }
@@ -177,19 +179,29 @@ public class RegistroActividadService {
         boolean algunDestinoEsFin = false;
 
         for (Transicion transicion : salientes) {
+            if (transicion.getDestinoId() == null) {
+                System.err.println("⚠️ Derivación: Transición con destino nulo detectada en política " + politica.getId());
+                continue;
+            }
+
             Actividad destino = buscarActividadEnPolitica(politica, transicion.getDestinoId());
 
             if (destino.getTipo() == TipoActividad.FIN) {
+                System.out.println("🏁 Derivación: Actividad destino es FIN para trámite " + tramite.getId());
                 algunDestinoEsFin = true;
-                continue; // No se crea registro para nodos FIN
+                continue; 
             }
 
             // Buscar a qué calle pertenece esta actividad para saber el departamento
             String deptoId = politica.getCalles().stream()
-                    .filter(c -> c.getActividades().stream().anyMatch(a -> a.getId().equals(destino.getId())))
+                    .filter(Objects::nonNull)
+                    .filter(c -> c.getActividades() != null && c.getActividades().stream()
+                            .anyMatch(a -> a != null && Objects.equals(a.getId(), destino.getId())))
                     .findFirst()
                     .map(Calle::getDepartamentoId)
                     .orElse(null);
+
+            System.out.println("📤 Derivación: Creando registro PENDIENTE para actividad " + destino.getNombre() + " (Depto: " + deptoId + ")");
 
             // Crear registro pendiente para la actividad destino
             RegistroActividad nuevoRegistro = RegistroActividad.builder()
@@ -200,7 +212,7 @@ public class RegistroActividadService {
                     .departamentoId(deptoId)
                     .estado(EstadoRegistro.PENDIENTE)
                     .asignadoEn(Instant.now())
-                    .esquemaFormulario(destino.getEsquemaFormulario()) // Copiar esquema de la plantilla/actividad
+                    .esquemaFormulario(destino.getEsquemaFormulario() != null ? destino.getEsquemaFormulario() : new java.util.HashMap<>())
                     .build();
             registroRepo.save(nuevoRegistro);
         }
@@ -234,11 +246,16 @@ public class RegistroActividadService {
      * Busca una actividad por ID dentro de todas las calles de la política.
      */
     private Actividad buscarActividadEnPolitica(PoliticaNegocio politica, String actividadId) {
+        if (actividadId == null) {
+            throw new BusinessRuleException("Se intentó buscar una actividad con ID nulo");
+        }
         return politica.getCalles().stream()
-                .flatMap(c -> c.getActividades().stream())
-                .filter(a -> a.getId().equals(actividadId))
+                .filter(Objects::nonNull)
+                .flatMap(c -> c.getActividades() != null ? c.getActividades().stream() : java.util.stream.Stream.empty())
+                .filter(Objects::nonNull)
+                .filter(a -> Objects.equals(a.getId(), actividadId))
                 .findFirst()
                 .orElseThrow(() -> new BusinessRuleException(
-                        "Actividad '" + actividadId + "' no encontrada en la política '" + politica.getNombre() + "'"));
+                        "Actividad '" + actividadId + "' no encontrada en la política '" + (politica != null ? politica.getNombre() : "null") + "'"));
     }
 }

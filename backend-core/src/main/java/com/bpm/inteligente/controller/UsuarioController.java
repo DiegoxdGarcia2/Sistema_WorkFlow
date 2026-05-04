@@ -1,5 +1,6 @@
 package com.bpm.inteligente.controller;
 
+import com.bpm.inteligente.config.TenantContext;
 import com.bpm.inteligente.domain.Usuario;
 import com.bpm.inteligente.dto.CrearUsuarioRequest;
 import com.bpm.inteligente.dto.EditarUsuarioRequest;
@@ -10,6 +11,7 @@ import com.bpm.inteligente.service.AuditService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -23,6 +25,7 @@ public class UsuarioController {
 
     private final UsuarioRepository usuarioRepo;
     private final AuditService auditService;
+    private final PasswordEncoder passwordEncoder;
 
     @GetMapping("/tenant/{tenantId}")
     public List<Usuario> listarPorTenant(@PathVariable String tenantId) {
@@ -57,7 +60,7 @@ public class UsuarioController {
                 .nombre(req.getNombre())
                 .apellido(req.getApellido())
                 .email(req.getEmail())
-                .password(req.getPassword())
+                .password(passwordEncoder.encode(req.getPassword()))
                 .telefono(req.getTelefono())
                 .cargo(req.getCargo())
                 .departamento(req.getDepartamento())

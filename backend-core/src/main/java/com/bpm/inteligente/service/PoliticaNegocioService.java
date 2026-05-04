@@ -176,9 +176,24 @@ public class PoliticaNegocioService {
                 .esInicial(false).esFinal(true).orden(1)
                 .build();
 
-        Calle calleGeneral = Calle.builder()
+        // Usar el nombre de departamento del creador si viene en las calles pre-existentes,
+        // de lo contrario usar nombre genérico que el diseñador debe configurar
+        String calleNombre = "Mi Departamento";
+        String calleDptoId = null;
+        if (politica.getCalles() != null && !politica.getCalles().isEmpty()) {
+            Calle primeraCalle = politica.getCalles().get(0);
+            if (primeraCalle.getNombre() != null && !primeraCalle.getNombre().isEmpty()) {
+                calleNombre = primeraCalle.getNombre();
+            }
+            if (primeraCalle.getDepartamentoId() != null) {
+                calleDptoId = primeraCalle.getDepartamentoId();
+            }
+        }
+
+        Calle calleInicial = Calle.builder()
                 .id(UUID.randomUUID().toString())
-                .nombre("General")
+                .nombre(calleNombre)
+                .departamentoId(calleDptoId)
                 .orden(0)
                 .actividades(new ArrayList<>(List.of(inicio, fin)))
                 .build();
@@ -191,9 +206,10 @@ public class PoliticaNegocioService {
                 .prioridad(0)
                 .build();
 
-        politica.setCalles(new ArrayList<>(List.of(calleGeneral)));
+        politica.setCalles(new ArrayList<>(List.of(calleInicial)));
         politica.setTransiciones(new ArrayList<>(List.of(transicion)));
     }
+
 
     /**
      * Valida que el grafo tenga al menos un nodo INICIO y un nodo FIN.

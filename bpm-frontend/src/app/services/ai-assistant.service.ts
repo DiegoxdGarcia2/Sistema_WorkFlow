@@ -46,7 +46,13 @@ export class AiAssistantService {
   // ── 2. Speech to Text (Voz a Texto) ──
   empezarAEscuchar(onResult: (text: string, isFinal: boolean) => void, onError: (err: any) => void, onEnd: () => void): void {
     if (!this.recognition) {
-      onError('El navegador no soporta reconocimiento de voz');
+      // Detección de Brave para mensaje específico
+      const isBrave = !!(navigator as any).brave && (navigator as any).brave.isBrave();
+      if (isBrave) {
+        onError('Brave deshabilita el reconocimiento de voz de Google por defecto. Debes habilitar "Google Services" en la configuración de Brave o usar Chrome.');
+      } else {
+        onError('El navegador no soporta reconocimiento de voz');
+      }
       return;
     }
 

@@ -30,4 +30,6 @@ public interface RegistroActividadRepository extends MongoRepository<RegistroAct
     /** Historial de tareas completadas */
     List<RegistroActividad> findByEjecutadoPorIdAndEstadoOrderByCompletadoEnDesc(String ejecutadoPorId, EstadoRegistro estado);
     List<RegistroActividad> findByEjecutadoPorAndEstadoOrderByCompletadoEnDesc(String ejecutadoPor, EstadoRegistro estado);
+
+    long countByEstado(EstadoRegistro estado);
 }

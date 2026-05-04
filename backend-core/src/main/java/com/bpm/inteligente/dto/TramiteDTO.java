@@ -19,6 +19,14 @@ public class TramiteDTO {
     private String politicaNombre;
     private String tenantId;
     private EstadoTramite estado;
+    private String creadoPor;
     private Instant iniciadoEn;
+    private String modificadoPor;
+    private Instant actualizadoEn;
     private Instant finalizadoEn;
+
+    // Cliente asociado
+    private String clienteId;
+    private String clienteNombre;
+    private String documentoCliente;
 }

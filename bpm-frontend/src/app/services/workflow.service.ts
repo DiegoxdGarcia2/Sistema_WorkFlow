@@ -67,15 +67,12 @@ export class WorkflowService {
 
     return forkJoin({ personales: personales$, depto: depto$ }).pipe(
       tap(({ personales, depto }) => {
-        const map = new Map();
-        [...personales, ...depto].forEach(t => map.set(t.id, t));
-        this.tareasPendientes.set(Array.from(map.values()));
+        // Mis Tareas: Solo las que tengo asignadas (PENDIENTE o EN_PROGRESO)
+        this.tareasPendientes.set(personales);
+        // Tareas Disponibles: Las del depto que no tienen ejecutor
+        this.tareasNoAsignadas.set(depto);
       }),
-      rxMap(res => {
-        const map = new Map();
-        [...res.personales, ...res.depto].forEach(t => map.set(t.id, t));
-        return Array.from(map.values());
-      })
+      rxMap(res => [...res.personales, ...res.depto])
     );
   }
 

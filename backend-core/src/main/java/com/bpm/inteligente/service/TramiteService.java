@@ -31,7 +31,7 @@ public class TramiteService {
      * para la actividad INICIO de la política.
      */
     @Transactional
-    public Tramite iniciar(String politicaId, String usuarioId) {
+    public Tramite iniciar(String politicaId, String usuarioId, String clienteId, String documentoCliente, String clienteNombre) {
         PoliticaNegocio politica = politicaService.buscarPorId(politicaId);
         Usuario usuario = usuarioRepo.findById(usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario", "id", usuarioId));
@@ -41,11 +41,14 @@ public class TramiteService {
                     "No se puede iniciar un trámite de una política inactiva.");
         }
 
-        // 1. Crear el trámite
+        // 1. Crear el trámite con datos del cliente si vienen
         Tramite tramite = Tramite.builder()
                 .politicaId(politicaId)
                 .tenantId(politica.getTenantId())
                 .estado(EstadoTramite.INICIADO)
+                .clienteId(clienteId)
+                .documentoCliente(documentoCliente)
+                .clienteNombre(clienteNombre)
                 .build();
         tramite = tramiteRepo.save(tramite);
 
@@ -70,7 +73,7 @@ public class TramiteService {
                 .tramiteId(tramite.getId())
                 .tenantId(tramite.getTenantId())
                 .actividadId(actividadInicial.getId())
-                .departamentoId(deptoId) // <-- CRITICAL FIX: Ahora el depto sí ve la tarea inicial
+                .departamentoId(deptoId)
                 .estado(EstadoRegistro.PENDIENTE)
                 .asignadoEn(java.time.Instant.now())
                 .build();
@@ -78,6 +81,7 @@ public class TramiteService {
 
         return tramite;
     }
+
 
     /**
      * Cambia el estado de un trámite a CANCELADO.

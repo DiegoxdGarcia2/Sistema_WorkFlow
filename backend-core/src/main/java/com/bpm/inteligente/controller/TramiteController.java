@@ -31,10 +31,17 @@ public class TramiteController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public TramiteDTO iniciar(@Valid @RequestBody IniciarTramiteRequest request) {
-        Tramite tramite = tramiteService.iniciar(request.getPoliticaId(), request.getUsuarioId());
+        Tramite tramite = tramiteService.iniciar(
+                request.getPoliticaId(), 
+                request.getUsuarioId(),
+                request.getClienteId(),
+                request.getDocumentoCliente(),
+                request.getClienteNombre()
+        );
         PoliticaNegocio politica = politicaService.buscarPorId(tramite.getPoliticaId());
         return DomainMapper.toDTO(tramite, politica.getNombre());
     }
+
 
     @PostMapping("/{id}/cancelar")
     @CrossOrigin(origins = "*", allowedHeaders = "*")

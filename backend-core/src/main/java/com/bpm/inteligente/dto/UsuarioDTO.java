@@ -25,4 +25,5 @@ public class UsuarioDTO {
     private RolUsuario rol;
     private boolean activo;
     private String creadoEn;
+    private String token;
 }

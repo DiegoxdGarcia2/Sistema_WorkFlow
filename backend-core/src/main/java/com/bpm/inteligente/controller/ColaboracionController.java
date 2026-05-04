@@ -9,6 +9,7 @@ import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.CrossOrigin;
 
@@ -24,9 +25,10 @@ public class ColaboracionController {
     private final ColaboracionService colaboracionService;
 
     @MessageMapping("/politica/{politicaId}/join")
-    public void joinRoom(@DestinationVariable String politicaId, @Payload ColaboradorDTO colaborador) {
-        log.info("Colaborador {} se unió a la política {}", colaborador.getNombre(), politicaId);
-        Set<ColaboradorDTO> colaboradores = colaboracionService.joinRoom(politicaId, colaborador);
+    public void joinRoom(@DestinationVariable String politicaId, @Payload ColaboradorDTO colaborador, StompHeaderAccessor headerAccessor) {
+        String sessionId = headerAccessor.getSessionId();
+        log.info("Colaborador {} se unió a la política {} (Session: {})", colaborador.getNombre(), politicaId, sessionId);
+        Set<ColaboradorDTO> colaboradores = colaboracionService.joinRoom(politicaId, colaborador, sessionId);
         
         SocketMessageDTO msg = SocketMessageDTO.builder()
                 .type("ROOM_STATE")

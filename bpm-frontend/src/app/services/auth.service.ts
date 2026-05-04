@@ -8,10 +8,15 @@ export interface UsuarioSesion {
   tenantId: string;
   tenantNombre: string;
   nombre: string;
+  apellido?: string;
   email: string;
+  telefono?: string;
+  cargo?: string;
   departamentoId?: string;
   departamento?: string;
   rol: 'ADMINISTRADOR' | 'DISENADOR' | 'FUNCIONARIO' | 'CLIENTE';
+  activo?: boolean;
+  token: string; // JWT Bearer token
 }
 
 export interface LoginRequest { email:  string; password: string; }
@@ -20,10 +25,12 @@ export interface RegistroEmpresaRequest { nombreEmpresa: string; nombreAdmin: st
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly baseUrl = 'http://localhost:8080/api/auth';
-  private readonly SESSION_VERSION = 'v1.4_cleanup'; // Incrementa esto para forzar logout masivo
+  private readonly SESSION_VERSION = 'v2.0_jwt'; // Fuerza re-login al migrar a JWT
+  private readonly TOKEN_KEY = 'bpm_token';
+  private readonly USER_KEY = 'bpm_user';
 
   usuario = signal<UsuarioSesion | null>(this.cargarSesion());
-  estaLogueado = computed(() => this.usuario() !== null);
+  estaLogueado = computed(() => this.usuario() !== null && this.getToken() !== null);
 
   constructor(
     private http: HttpClient, 
@@ -31,56 +38,82 @@ export class AuthService {
     private injector: Injector
   ) {
     this.validarYLimpiarSesion();
-    // Heartbeat cada 1 minuto para verificar expiración
+    // Heartbeat cada 60s para detectar token expirado
     setInterval(() => {
-      if (this.estaLogueado()) {
-        const sesion = this.cargarSesion();
-        if (!sesion) {
-          console.warn('Sesión expirada detectada por Heartbeat.');
+      if (this.usuario()) {
+        if (this.isTokenExpired()) {
+          console.warn('⏰ Token JWT expirado. Cerrando sesión...');
           this.logout();
         }
       }
     }, 60000);
   }
 
+  // ── Token Management ──────────────────────────────────────
+
+  /** Retorna el JWT token almacenado o null */
+  getToken(): string | null {
+    return localStorage.getItem(this.TOKEN_KEY);
+  }
+
+  /** Verifica si el token JWT ha expirado leyendo el payload */
+  isTokenExpired(): boolean {
+    const token = this.getToken();
+    if (!token) return true;
+    
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const expiresAt = payload.exp * 1000; // JWT exp es en segundos
+      return Date.now() >= expiresAt;
+    } catch {
+      return true;
+    }
+  }
+
+  /** Extrae el tenantId del JWT payload */
+  getTenantIdFromToken(): string | null {
+    const token = this.getToken();
+    if (!token) return null;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.tenantId || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ── Auth Operations ───────────────────────────────────────
+
   private validarYLimpiarSesion(): void {
-    const raw = localStorage.getItem('bpm_user');
+    const raw = localStorage.getItem(this.USER_KEY);
     if (!raw) return;
     try {
       const data = JSON.parse(raw);
       if (data.version !== this.SESSION_VERSION) {
-        console.warn('LIMPIEZA FORZADA: Sesión incompatible detectada.');
-        localStorage.clear(); // Limpia TODO para estar seguros
+        console.warn('🔄 LIMPIEZA FORZADA: Sesión pre-JWT detectada. Re-login requerido.');
+        this.clearStorage();
         this.usuario.set(null);
       }
     } catch (e) {
-      localStorage.clear();
+      this.clearStorage();
     }
   }
 
   login(req: LoginRequest): Observable<UsuarioSesion> {
     return this.http.post<UsuarioSesion>(`${this.baseUrl}/login`, req).pipe(
-      tap(user => { 
-        this.usuario.set(user); 
-        const sessionData = { ...user, loginAt: Date.now(), version: this.SESSION_VERSION };
-        localStorage.setItem('bpm_user', JSON.stringify(sessionData)); 
-      })
+      tap(user => this.persistSession(user))
     );
   }
 
   registroEmpresa(req: RegistroEmpresaRequest): Observable<UsuarioSesion> {
     return this.http.post<UsuarioSesion>(`${this.baseUrl}/registro-empresa`, req).pipe(
-      tap(user => { 
-        this.usuario.set(user); 
-        const sessionData = { ...user, loginAt: Date.now(), version: this.SESSION_VERSION };
-        localStorage.setItem('bpm_user', JSON.stringify(sessionData)); 
-      })
+      tap(user => this.persistSession(user))
     );
   }
 
   logout(): void {
     this.usuario.set(null);
-    localStorage.removeItem('bpm_user');
+    this.clearStorage();
     
     // Lazy injection to prevent circular dependencies
     import('./workflow.service').then(m => {
@@ -95,26 +128,56 @@ export class AuthService {
     this.router.navigate(['/login']);
   }
 
+  // ── Private Helpers ───────────────────────────────────────
+
+  private persistSession(user: UsuarioSesion): void {
+    // Guardar token por separado (fácil acceso desde interceptor)
+    if (user.token) {
+      localStorage.setItem(this.TOKEN_KEY, user.token);
+    }
+    // Guardar datos de usuario (sin token, por seguridad)
+    const sessionData = { ...user, token: undefined, loginAt: Date.now(), version: this.SESSION_VERSION };
+    localStorage.setItem(this.USER_KEY, JSON.stringify(sessionData));
+    // Actualizar signal (con token para uso inmediato)
+    this.usuario.set(user);
+  }
+
   private cargarSesion(): UsuarioSesion | null {
-    const raw = localStorage.getItem('bpm_user');
-    if (!raw) return null;
+    const raw = localStorage.getItem(this.USER_KEY);
+    const token = localStorage.getItem(this.TOKEN_KEY);
+    if (!raw || !token) return null;
     
     try {
       const data = JSON.parse(raw);
-      const loginAt = data.loginAt || 0;
       const version = data.version;
-      const ONE_HOUR = 60 * 60 * 1000;
       
-      // Limpiar si la versión cambió o si expiró
-      if (version !== this.SESSION_VERSION || Date.now() - loginAt > ONE_HOUR) {
-        console.warn('Sesión incompatible o expirada. Limpiando...');
-        localStorage.removeItem('bpm_user');
+      // Limpiar si la versión cambió
+      if (version !== this.SESSION_VERSION) {
+        this.clearStorage();
+        return null;
+      }
+
+      // Verificar que el token no esté expirado
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (Date.now() >= payload.exp * 1000) {
+          console.warn('⏰ Token JWT expirado al cargar sesión.');
+          this.clearStorage();
+          return null;
+        }
+      } catch {
+        this.clearStorage();
         return null;
       }
       
-      return data;
+      return { ...data, token };
     } catch (e) {
       return null;
     }
+  }
+
+  private clearStorage(): void {
+    localStorage.removeItem(this.USER_KEY);
+    localStorage.removeItem(this.TOKEN_KEY);
   }
 }

@@ -13,8 +13,11 @@ import {
 } from '../../models/bpm.models';
 import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { ClienteService } from '../../services/cliente.service';
+import { ClienteDTO } from '../../models/bpm.models';
 import { FormularioService, FormularioTemplate } from '../../services/formulario.service';
 import { KeyValuePipe } from '@angular/common';
+import { forkJoin } from 'rxjs';
 
 @Component({
   selector: 'app-funcionario',
@@ -124,13 +127,23 @@ import { KeyValuePipe } from '@angular/common';
           <div class="flex gap-4">
              <div class="px-6 py-3 rounded-[1.5rem] border border-slate-800 bg-slate-900/50 backdrop-blur-md flex items-center gap-8 shadow-xl ring-1 ring-white/5">
                 <div class="text-center">
-                   <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Tareas Hoy</p>
+                   <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Hoy</p>
                    <p class="text-xl font-black text-white leading-none">{{ getRendimiento().completadasHoy }}</p>
                 </div>
                 <div class="w-px h-10 bg-slate-800"></div>
                 <div class="text-center">
+                   <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Por Hacer</p>
+                   <p class="text-xl font-black text-amber-400 leading-none">{{ getRendimiento().porHacer }}</p>
+                </div>
+                <div class="w-px h-10 bg-slate-800"></div>
+                <div class="text-center">
+                   <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Disponibles</p>
+                   <p class="text-xl font-black text-emerald-400 leading-none">{{ getRendimiento().disponibles }}</p>
+                </div>
+                <div class="w-px h-10 bg-slate-800"></div>
+                <div class="text-center">
                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Eficiencia</p>
-                   <p class="text-xl font-black text-indigo-400 leading-none">94%</p>
+                   <p class="text-xl font-black text-indigo-400 leading-none">{{ getRendimiento().eficiencia }}</p>
                 </div>
              </div>
           </div>
@@ -183,10 +196,16 @@ import { KeyValuePipe } from '@angular/common';
                       </div>
                       <div class="flex items-center gap-3">
                          @if (vista === 'disponible') {
-                           <button (click)="tomarTarea(t)" class="px-6 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-black transition-all">TOMAR TAREA</button>
+                           <button (click)="tomarTarea(t)" [disabled]="procesandoId() === t.id" class="px-6 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-black transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                             @if (procesandoId() === t.id) { <span class="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> }
+                             TOMAR TAREA
+                           </button>
                          } @else {
                            @if (t.estado === 'PENDIENTE') {
-                             <button (click)="comenzarTarea(t)" class="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-xs font-black transition-all uppercase">Comenzar</button>
+                             <button (click)="comenzarTarea(t)" [disabled]="procesandoId() === t.id" class="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-xs font-black transition-all uppercase disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                               @if (procesandoId() === t.id) { <span class="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> }
+                               Comenzar
+                             </button>
                            } @else {
                              <button (click)="abrirFormulario(t)" class="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-black transition-all uppercase">Completar</button>
                            }
@@ -208,7 +227,9 @@ import { KeyValuePipe } from '@angular/common';
                       </div>
                       <h3 class="text-xl font-bold text-white mb-2">{{ p.nombre }}</h3>
                       <p class="text-slate-500 text-sm mb-8 leading-relaxed">{{ p.descripcion || 'Flujo de trabajo empresarial estandarizado.' }}</p>
-                      <button (click)="iniciarTramite(p)" class="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-500/20 hover:-translate-y-1 transition-all">Iniciar Nuevo Proceso</button>
+                      <button (click)="abrirSeleccionCliente(p)" [disabled]="procesandoId() === p.id" class="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-500/20 hover:-translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                        @if (procesandoId() === p.id) { <span class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> <span>Procesando...</span> } @else { <span>Iniciar Nuevo Proceso</span> }
+                      </button>
                    </div>
                  }
               </div>
@@ -219,19 +240,19 @@ import { KeyValuePipe } from '@angular/common';
               <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                  <div class="glass-card p-6 rounded-3xl border border-white/5 bg-slate-900/50">
                     <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1">Total Completadas</p>
-                    <p class="text-3xl font-black text-white">{{ getRendimiento().total }}</p>
+                    <p class="text-3xl font-black text-white">{{ workflowService.historial().length }}</p>
                     <div class="mt-4 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
                        <div class="h-full bg-indigo-500 rounded-full" [style.width.%]="75"></div>
                     </div>
                  </div>
                  <div class="glass-card p-6 rounded-3xl border border-white/5 bg-slate-900/50">
-                    <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1">Promedio Diario</p>
-                    <p class="text-3xl font-black text-emerald-400">{{ getRendimiento().promedio }}</p>
-                    <p class="text-[9px] text-slate-600 mt-2 font-bold uppercase">Meta: 12.0 tareas/día</p>
+                    <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1">Completadas Hoy</p>
+                    <p class="text-3xl font-black text-emerald-400">{{ getRendimiento().completadasHoy }}</p>
+                    <p class="text-[9px] text-slate-600 mt-2 font-bold uppercase">En la jornada actual</p>
                  </div>
                  <div class="glass-card p-6 rounded-3xl border border-white/5 bg-slate-900/50">
-                    <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1">Satisfacción (IA)</p>
-                    <p class="text-3xl font-black text-sky-400">98%</p>
+                    <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1">Eficiencia</p>
+                    <p class="text-3xl font-black text-sky-400">{{ getRendimiento().eficiencia }}</p>
                     <div class="flex gap-1 mt-3">
                        <span *ngFor="let i of [1,2,3,4,5]" class="text-xs">⭐</span>
                     </div>
@@ -478,8 +499,15 @@ import { KeyValuePipe } from '@angular/common';
 
                 <!-- Modal Footer -->
                 <div class="p-8 border-t border-white/5 bg-slate-900/50 flex gap-4">
-                   <button (click)="cerrarModal()" class="flex-1 py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-black text-xs uppercase tracking-widest transition-all">Cancelar</button>
-                   <button (click)="completarTarea()" class="flex-1 py-4 rounded-2xl btn-premium text-white font-black text-xs uppercase tracking-widest">Finalizar Actividad</button>
+                   <button (click)="cerrarModal()" class="flex-1 py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-black text-xs uppercase tracking-widest transition-all" [disabled]="guardando()">Cancelar</button>
+                   <button (click)="completarTarea()" [disabled]="guardando()" class="flex-1 py-4 rounded-2xl btn-premium text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3">
+                      @if (guardando()) {
+                        <span class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                        <span>PROCESANDO...</span>
+                      } @else {
+                        <span>Finalizar Actividad</span>
+                      }
+                   </button>
                 </div>
 
              </div>
@@ -568,9 +596,124 @@ import { KeyValuePipe } from '@angular/common';
                  <button (click)="detalleHistorial = null" class="px-8 py-3 rounded-2xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20">Cerrar</button>
                </div>
              </div>
-           </div>
-         }
 
+
+          </div>
+        }
+
+        <!-- MODAL: SELECCIÓN DE CLIENTE -->
+        @if (modalClienteOpen) {
+          <div class="fixed inset-0 z-[120] flex items-center justify-center p-6">
+            <div class="absolute inset-0 bg-slate-950/90 backdrop-blur-md" (click)="modalClienteOpen = false"></div>
+            <div class="w-full max-w-2xl bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl flex flex-col relative animate-fade overflow-hidden">
+              
+              <div class="p-10 border-b border-white/5 flex items-center justify-between bg-slate-900/50">
+                <div class="flex items-center gap-4">
+                  <div class="w-12 h-12 rounded-2xl bg-indigo-500 flex items-center justify-center text-white shadow-xl shadow-indigo-500/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  </div>
+                  <div>
+                    <h2 class="text-xl font-black text-white leading-tight">Asociar Cliente</h2>
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Vincular proceso a un solicitante</p>
+                  </div>
+                </div>
+                <button (click)="modalClienteOpen = false" class="w-10 h-10 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all text-slate-400">&#10005;</button>
+              </div>
+
+              <div class="p-10 space-y-6">
+                @if (!mostrandoRegistroCliente) {
+                  <!-- Search bar -->
+                  <div class="relative">
+                    <input [(ngModel)]="busquedaCliente" (keyup.enter)="buscarClientes()" placeholder="Buscar por CI o Nombre..." 
+                           class="w-full pl-12 pr-32 py-4 rounded-2xl bg-slate-800 border border-slate-700 text-sm text-white focus:border-indigo-500 outline-none transition-all">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">🔍</span>
+                    <button (click)="buscarClientes()" class="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 rounded-xl bg-indigo-600 text-[10px] font-black text-white uppercase tracking-widest">Buscar</button>
+                  </div>
+
+                  <!-- Results -->
+                  <div class="space-y-2 max-h-60 overflow-y-auto pr-2 scrollbar-hide">
+                    @for (c of clientesEncontrados(); track c.id) {
+                      <div (click)="seleccionarCliente(c)" 
+                           class="p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between group"
+                           [class.bg-indigo-500/10]="clienteSeleccionado?.id === c.id"
+                           [class.border-indigo-500/50]="clienteSeleccionado?.id === c.id"
+                           [class.border-white/5]="clienteSeleccionado?.id !== c.id"
+                           [class.hover:bg-white/5]="clienteSeleccionado?.id !== c.id">
+                        <div class="flex items-center gap-3">
+                          <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-[10px] font-black text-slate-400 border border-white/5 group-hover:bg-indigo-500/20 group-hover:text-indigo-400 transition-all">
+                            {{ c.nombre.charAt(0) }}{{ c.apellido.charAt(0) }}
+                          </div>
+                          <div>
+                            <p class="text-xs font-bold text-white">{{ c.nombre }} {{ c.apellido }}</p>
+                            <p class="text-[9px] text-slate-500 font-medium">CI: {{ c.ci }}</p>
+                          </div>
+                        </div>
+                        @if (clienteSeleccionado?.id === c.id) {
+                          <span class="text-indigo-400 text-xs">✓</span>
+                        }
+                      </div>
+                    } @empty {
+                      @if (busquedaCliente && clientesEncontrados().length === 0) {
+                        <div class="py-10 text-center">
+                          <p class="text-xs text-slate-500 font-bold mb-4">No se encontraron clientes con "{{ busquedaCliente }}"</p>
+                          <button (click)="mostrandoRegistroCliente = true; formNuevoCliente.ci = busquedaCliente" 
+                                  class="px-6 py-3 rounded-2xl border-2 border-dashed border-indigo-500/30 text-indigo-400 text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500/5 transition-all">
+                            + Registrar Nuevo Cliente
+                          </button>
+                        </div>
+                      }
+                    }
+                  </div>
+
+                  <div class="pt-4 flex items-center justify-between border-t border-white/5">
+                     <button (click)="mostrandoRegistroCliente = true" class="text-[10px] font-black text-slate-500 hover:text-indigo-400 uppercase tracking-widest transition-all">Registro Manual</button>
+                     <button (click)="confirmarInicioTramite()" [disabled]="!clienteSeleccionado" 
+                             class="px-8 py-4 rounded-2xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-2xl shadow-indigo-500/40 disabled:opacity-30 transition-all active:scale-95">
+                       Confirmar e Iniciar
+                     </button>
+                  </div>
+                } @else {
+                  <!-- Inline Registration Form -->
+                  <div class="grid grid-cols-2 gap-4 animate-in slide-in-from-right duration-300">
+                    <div class="col-span-2 flex items-center gap-2 mb-2">
+                       <button (click)="mostrandoRegistroCliente = false" class="text-xs text-indigo-400 hover:underline">← Volver a búsqueda</button>
+                    </div>
+                    <div>
+                      <label class="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">Nombre</label>
+                      <input [(ngModel)]="formNuevoCliente.nombre" placeholder="Nombre" class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                      <label class="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">Apellido</label>
+                      <input [(ngModel)]="formNuevoCliente.apellido" placeholder="Apellido" class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-indigo-500">
+                    </div>
+                    <div class="col-span-2">
+                      <label class="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">CI / Identificación</label>
+                      <input [(ngModel)]="formNuevoCliente.ci" placeholder="CI o Cédula" class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                      <label class="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">Email</label>
+                      <input [(ngModel)]="formNuevoCliente.correo" placeholder="email@ejemplo.com" class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                      <label class="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">Teléfono</label>
+                      <input [(ngModel)]="formNuevoCliente.telefono" placeholder="Teléfono" class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-indigo-500">
+                    </div>
+                    <div class="col-span-2">
+                      <label class="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">Dirección</label>
+                      <input [(ngModel)]="formNuevoCliente.direccion" placeholder="Dirección completa" class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-indigo-500">
+                    </div>
+                    <div class="col-span-2 pt-4">
+                       <button (click)="registrarClienteInline()" 
+                               class="w-full py-4 rounded-2xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-500/20">
+                         Registrar y Seleccionar
+                       </button>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        }
       </main>
 
       <style>
@@ -638,6 +781,19 @@ export class FuncionarioComponent implements OnInit {
   toastMsg = '';
   toastType: 'success' | 'error' = 'success';
   cargando = signal<boolean>(false);
+  guardando = signal<boolean>(false);
+  procesandoId = signal<string>(''); // ID del item en proceso para evitar doble-clic
+
+  // --- CLIENTES ---
+  modalClienteOpen = false;
+  busquedaCliente = '';
+  clientesEncontrados = signal<ClienteDTO[]>([]);
+  clienteSeleccionado: ClienteDTO | null = null;
+  politicaParaIniciar: PoliticaDTO | null = null;
+  mostrandoRegistroCliente = false;
+  formNuevoCliente: Partial<ClienteDTO> = { nombre: '', apellido: '', ci: '', correo: '', telefono: '', direccion: '' };
+
+  private cs = inject(ClienteService);
 
   get deptoNombre() {
     return (this.auth.usuario() as any)?.departamento || 'Funcionario';
@@ -669,13 +825,28 @@ export class FuncionarioComponent implements OnInit {
   // Performance Stats
   getRendimiento() {
     const hist = this.workflowService.historial();
+    const pendientes = this.workflowService.tareasPendientes();
+    const disponibles = this.workflowService.tareasNoAsignadas();
+    
+    const user = this.auth.usuario();
+    
     const hoy = new Date().setHours(0,0,0,0);
-    const completadasHoy = hist.filter(h => new Date(h.completadoEn!).getTime() > hoy).length;
-    const total = hist.length;
+    const completadasHoy = hist.filter(h => h.completadoEn && new Date(h.completadoEn).getTime() > hoy).length;
+    
+    // Tareas que el funcionario agarró (Por Hacer)
+    const porHacer = pendientes.length;
+    // Tareas disponibles en el mercado
+    const mercado = disponibles.length;
+    
+    // Eficiencia: Basada en tareas completadas vs total asignadas históricamente
+    const totalVIda = hist.length + porHacer;
+    const eficiencia = totalVIda > 0 ? Math.round((hist.length / totalVIda) * 100) : 100;
+    
     return {
       completadasHoy,
-      total,
-      promedio: total > 0 ? (total / 30).toFixed(1) : 0 // hypothetical monthly avg
+      porHacer,
+      disponibles: mercado,
+      eficiencia: eficiencia + '%'
     };
   }
 
@@ -725,26 +896,31 @@ export class FuncionarioComponent implements OnInit {
   cargarDatos() {
     const user = this.auth.usuario();
     if (!user) return;
-    this.cargando.set(true);
+    setTimeout(() => this.cargando.set(true));
 
-    const finalize = () => this.cargando.set(false);
+    const finalize = () => setTimeout(() => this.cargando.set(false));
 
-    if (this.vista === 'bandeja') {
-      this.workflowService.cargarBandejaUnificada(user.id, user.departamentoId).subscribe({ next: finalize, error: finalize });
-    } else if (this.vista === 'disponible') {
-      const obs = user.departamentoId 
-        ? this.workflowService.cargarTareasNoAsignadasDepartamento(user.departamentoId)
-        : this.workflowService.cargarTareasNoAsignadas();
-      obs.subscribe({ next: finalize, error: finalize });
-    } else if (this.vista === 'iniciar') {
-      this.politicaService.listarIniciables(user.tenantId, user.departamentoId || '', user.rol || 'USER').subscribe({
-        next: p => { this.politicasActivas = p; finalize(); },
-        error: (e) => { console.error('Error cargando políticas:', e); finalize(); }
+    // Cargar todos los sets de datos para mantener contadores sincronizados en el dashboard
+    const obs = [
+      this.workflowService.cargarBandejaUnificada(user.id, user.departamentoId),
+      this.workflowService.cargarHistorial(user.id)
+    ];
+
+    // Si estamos en la vista de iniciar trámite, también cargar las políticas iniciables
+    if (this.vista === 'iniciar') {
+      this.politicaService.listarIniciables(user.tenantId, user.departamentoId || '', user.rol).subscribe(p => {
+        this.politicasActivas = p;
       });
-    } else if (this.vista === 'historial') {
-      this.workflowService.cargarHistorial(user.id).subscribe({ next: finalize, error: finalize });
     }
-    
+
+    forkJoin(obs).subscribe({
+      next: () => finalize(),
+      error: (e) => {
+        console.error('Error cargando datos unificados:', e);
+        finalize();
+      }
+    });
+
     // Cargar plantillas de formularios
     this.fs.listarPorTenant(user.tenantId).subscribe();
   }
@@ -771,14 +947,16 @@ export class FuncionarioComponent implements OnInit {
 
   // ACCIONES
   tomarTarea(t: RegistroActividadDTO) {
+    if (this.procesandoId()) return; // Guard: ya hay una operación en curso
+    this.procesandoId.set(t.id);
     this.workflowService.tomarTarea(t.id, this.auth.usuario()!.id).subscribe({
-      next: () => { this.showToast('Tarea tomada con éxito', 'success'); this.cargarDatos(); },
-      error: (e) => this.showToast(e.error?.message || 'Error al tomar tarea', 'error')
+      next: () => { this.procesandoId.set(''); this.showToast('Tarea tomada con éxito', 'success'); this.cargarDatos(); },
+      error: (e) => { this.procesandoId.set(''); this.showToast(e.error?.message || 'Error al tomar tarea', 'error'); }
     });
   }
 
   comenzarTarea(t: RegistroActividadDTO) {
-    // Si esta PENDIENTE pero ya es del usuario, pasar a EN_PROGRESO
+    if (this.procesandoId()) return;
     this.tomarTarea(t);
   }
 
@@ -951,13 +1129,19 @@ export class FuncionarioComponent implements OnInit {
     // but for now they are stored in the object if the backend supports it.
     // I'll add them to the request if I update the DTO again.
     
+    this.guardando.set(true);
+    
     this.workflowService.completarTarea(req, this.auth.usuario()!.id).subscribe({
       next: () => {
+        this.guardando.set(false);
         this.cerrarModal();
         this.showToast('Actividad completada y derivada', 'success');
         this.cargarDatos();
       },
-      error: (e) => this.showToast(e.error?.message || 'Error al completar', 'error')
+      error: (e) => {
+        this.guardando.set(false);
+        this.showToast(e.error?.message || 'Error al completar', 'error');
+      }
     });
   }
 
@@ -975,17 +1159,66 @@ export class FuncionarioComponent implements OnInit {
 
   cerrarModal() { this.tareaActiva = null; }
 
-  iniciarTramite(p: PoliticaDTO) {
+  abrirSeleccionCliente(p: PoliticaDTO) {
+    this.politicaParaIniciar = p;
+    this.modalClienteOpen = true;
+    this.clienteSeleccionado = null;
+    this.busquedaCliente = '';
+    this.mostrandoRegistroCliente = false;
+    this.clientesEncontrados.set([]);
+  }
+
+  buscarClientes() {
+    if (!this.busquedaCliente) return;
+    const tid = this.auth.usuario()?.tenantId || '';
+    this.cs.buscar(tid, this.busquedaCliente).subscribe(res => this.clientesEncontrados.set(res));
+  }
+
+  seleccionarCliente(c: ClienteDTO) {
+    this.clienteSeleccionado = c;
+  }
+
+  registrarClienteInline() {
+    const tid = this.auth.usuario()?.tenantId;
+    if (!tid) return;
+    this.formNuevoCliente.tenantId = tid;
+    this.cs.crear(this.formNuevoCliente).subscribe({
+      next: (res) => {
+        this.clienteSeleccionado = res;
+        this.mostrandoRegistroCliente = false;
+        this.showToast('Cliente registrado correctamente', 'success');
+      },
+      error: (e) => this.showToast(e.error?.message || 'Error al registrar cliente', 'error')
+    });
+  }
+
+  confirmarInicioTramite() {
+    if (!this.politicaParaIniciar || !this.clienteSeleccionado) return;
+    this.iniciarTramite(this.politicaParaIniciar, this.clienteSeleccionado);
+  }
+
+  iniciarTramite(p: PoliticaDTO, cliente?: ClienteDTO) {
+    if (this.procesandoId()) return;
+    this.procesandoId.set(p.id);
     const user = this.auth.usuario();
+    
     this.workflowService.iniciarTramite({ 
       politicaId: p.id,
-      usuarioId: user?.id 
+      usuarioId: user?.id,
+      clienteId: cliente?.id,
+      documentoCliente: cliente?.ci,
+      clienteNombre: cliente ? `${cliente.nombre} ${cliente.apellido}` : undefined
     }).subscribe({
       next: () => {
+        this.procesandoId.set('');
+        this.modalClienteOpen = false;
         this.showToast('Nuevo trámite iniciado con éxito', 'success');
         this.setVista('bandeja');
       },
-      error: (e) => this.showToast(e.error?.message || 'Error al iniciar trámite', 'error')
+      error: (e) => { 
+        this.procesandoId.set(''); 
+        this.showToast(e.error?.message || 'Error al iniciar trámite', 'error'); 
+      }
     });
   }
 

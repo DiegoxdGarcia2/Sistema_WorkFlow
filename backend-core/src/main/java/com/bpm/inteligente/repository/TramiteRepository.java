@@ -13,4 +13,6 @@ public interface TramiteRepository extends MongoRepository<Tramite, String> {
     List<Tramite> findByPoliticaId(String politicaId);
 
     long countByPoliticaId(String politicaId);
+
+    long countByEstado(EstadoTramite estado);
 }

@@ -19,10 +19,25 @@ logging:
     org.springframework.data.mongodb: INFO
 
 cloudinary:
-  cloud-name: ${CLOUDINARY_CLOUD_NAME}
-  api-key: ${CLOUDINARY_API_KEY}
-  api-secret: ${CLOUDINARY_API_SECRET}
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+  api-key: ${CLOUDINARY_API_KEY:}
+  api-secret: ${CLOUDINARY_API_SECRET:}
 
 groq:
   api:
-    key: ${GROQ_API_KEY}
+    key: ${GROQ_API_KEY:}
+
+# ═══ JWT Configuration ═══
+jwt:
+  secret: ${JWT_SECRET:bpm_inteligente_super_secret_key_1234567890_abcdef_9876543210}
+  expiration: 86400000 # 24 horas
+
+# ═══ Actuator ═══
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
