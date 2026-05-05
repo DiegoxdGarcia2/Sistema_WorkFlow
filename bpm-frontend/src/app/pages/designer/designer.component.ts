@@ -437,9 +437,10 @@ export class DesignerComponent implements OnInit, OnDestroy {
           tipoRuta: this.connMode.tipo, condicion: '', etiqueta: '', prioridad: 0,
           color: '#475569', tipoLinea: 'solida', grosor: 2,
           origenAnchor: 'auto', destinoAnchor: 'auto',
-          enrutamiento: 'bezier'
+          enrutamiento: 'ortogonal'
         });
         this.cancelConnMode();
+        this.triggerAutoSave();
         this.triggerAutoSave();
       }
       return;
@@ -796,9 +797,16 @@ export class DesignerComponent implements OnInit, OnDestroy {
   getConnectionPaths(): any[] {
     if (!this.sel) return [];
     return this.sel.transiciones.map(t => {
-      // Calculate best anchors if they are 'auto' or undefined
-      const fromAnchor = (!t.origenAnchor || t.origenAnchor === 'auto') ? this.calculateBestAnchor(t.origenId, t.destinoId, false) : t.origenAnchor;
-      const toAnchor = (!t.destinoAnchor || t.destinoAnchor === 'auto') ? this.calculateBestAnchor(t.origenId, t.destinoId, true) : t.destinoAnchor;
+      // Force 'auto' behavior visually if dragging the related nodes
+      const isSourceDragging = this.isDragging && this.dragNodeId === t.origenId;
+      const isTargetDragging = this.isDragging && this.dragNodeId === t.destinoId;
+
+      const fromAnchor = (!t.origenAnchor || t.origenAnchor === 'auto' || isSourceDragging || isTargetDragging) 
+                         ? this.calculateBestAnchor(t.origenId, t.destinoId, false) 
+                         : t.origenAnchor;
+      const toAnchor = (!t.destinoAnchor || t.destinoAnchor === 'auto' || isSourceDragging || isTargetDragging) 
+                       ? this.calculateBestAnchor(t.origenId, t.destinoId, true) 
+                       : t.destinoAnchor;
 
       const from = this.findNodeAnchor(t.origenId, fromAnchor, false);
       const to = this.findNodeAnchor(t.destinoId, toAnchor, true);
@@ -894,8 +902,14 @@ export class DesignerComponent implements OnInit, OnDestroy {
     // Si están en calles distintas (horizontal), preferimos izquierda/derecha.
     const sLane = this.sel?.calles.find(c => c.actividades.some(a => a.id === sourceId));
     const tLane = this.sel?.calles.find(c => c.actividades.some(a => a.id === targetId));
-    const sameLane = sLane?.id === tLane?.id;
-    const horizontalBias = sameLane ? 0.6 : 1.8; 
+    const sameLane = !!sLane && !!tLane && sLane.id === tLane.id;
+    const horizontalBias = sameLane ? 0.6 : 2.5; // Bias mucho más fuerte si son carriles distintos
+    
+    // Si están en diferentes calles y no hay una distancia vertical extrema, forzar izquierda/derecha
+    if (!sameLane && Math.abs(dy) < 300) {
+       if (isDest) return dx > 0 ? 'left' : 'right';
+       return dx > 0 ? 'right' : 'left';
+    }
     
     if (Math.abs(dx) * horizontalBias > Math.abs(dy)) {
       // Horizontal preference
@@ -938,7 +952,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
     if (!t.color) t.color = '#475569';
     if (!t.tipoLinea) t.tipoLinea = 'solida';
     if (!t.grosor) t.grosor = 2;
-    if (!t.enrutamiento) t.enrutamiento = 'bezier';
+    if (!t.enrutamiento) t.enrutamiento = 'ortogonal';
     if (!t.origenAnchor) t.origenAnchor = 'auto';
     if (!t.destinoAnchor) t.destinoAnchor = 'auto';
   }
@@ -947,6 +961,20 @@ export class DesignerComponent implements OnInit, OnDestroy {
     if (!this.sel) return [];
     return this.sel.transiciones.filter(t => t.origenId === actId || t.destinoId === actId)
       .map(t => ({ id: t.id, fromName: this.getNombreActividad(t.origenId), toName: this.getNombreActividad(t.destinoId), tipoRuta: t.tipoRuta }));
+  }
+
+  resetAnchors(): void {
+    if (!this.sel) return;
+    this.pushHistorial();
+    this.sel.transiciones.forEach(t => {
+      t.origenAnchor = 'auto';
+      t.destinoAnchor = 'auto';
+      t.enrutamiento = 'ortogonal';
+    });
+    this.generateLayout();
+    this.broadcastPolicyState();
+    this.triggerAutoSave();
+    this.showToast('Conexiones optimizadas', 'success');
   }
 
   // ── CRUD: Policy ──
