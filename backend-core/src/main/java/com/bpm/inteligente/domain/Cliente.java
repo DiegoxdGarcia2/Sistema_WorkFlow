@@ -26,6 +26,7 @@ public class Cliente {
     @Indexed
     private String tenantId;
 
+    @Indexed
     private String nombre;
     private String apellido;
 
@@ -33,6 +34,7 @@ public class Cliente {
     @Indexed
     private String ci;
 
+    @Indexed
     private String correo;
     private String telefono;
     private String direccion;

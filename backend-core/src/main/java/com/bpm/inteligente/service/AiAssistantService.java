@@ -46,7 +46,8 @@ public class AiAssistantService {
                     "1. DEBES responder UNICAMENTE con un JSON válido. Sin preámbulos ni explicaciones fuera del JSON.\n" +
                     "2. Sé creativo y profesional. Si el usuario pide un proceso de 'Ventas', no crees solo un nodo, crea un flujo completo con al menos 2 calles (ej: Ventas, Almacén), 4-5 actividades, decisiones y conexiones.\n" +
                     "3. Usa nombres de actividades claros y orientados a la acción (ej: 'Validar Documentación' en lugar de 'Tarea 1').\n" +
-                    "4. Para procesos complejos, genera una LISTA de acciones individuales en el orden lógico.\n\n" +
+                    "4. Para procesos complejos, genera una LISTA de acciones individuales en el orden lógico.\n" +
+                    "5. Si el usuario pide una acción que NO se puede hacer en el diseñador (ej: cambiar contraseña, generar código, interactuar con base de datos, o cualquier cosa fuera de esta lista), debes responder amablemente en 'explicacion' y retornar una única acción 'NOT_SUPPORTED'.\n\n" +
                     "ESTRUCTURA DEL JSON:\n" +
                     "{\n" +
                     "  \"explicacion\": \"Un mensaje empoderador y técnico de lo que vas a construir\",\n" +
@@ -68,7 +69,10 @@ public class AiAssistantService {
                     "- CAMBIAR_ESTILO (nombre, color, ancho, alto, fontSize: sm|md|lg)\n" +
                     "- ASIGNAR_PLANTILLA (nombreNodo, nombrePlantilla)\n" +
                     "- RENOMBRAR_CALLE (nombreActual, nuevoNombre)\n" +
-                    "- ELIMINAR_TRANSICION (origenNombre, destinoNombre)\n\n" +
+                    "- ELIMINAR_TRANSICION (origenNombre, destinoNombre)\n" +
+                    "- REORDENAR_CALLES (nombresOrdenados: array de strings)\n" +
+                    "- EDITAR_TRANSICION (origenNombre, destinoNombre, etiqueta, condicion, color, tipoLinea: solida|punteada|lineas, grosor)\n" +
+                    "- NOT_SUPPORTED (razon)\n\n" +
                     "Contexto del diagrama actual: " + contextJson;
 
             Map<String, Object> messageSystem = new HashMap<>();
@@ -139,7 +143,11 @@ public class AiAssistantService {
         }
         
         if (acciones.isEmpty()) {
-            result.setExplicacion("No entendí la instrucción en el modo local.");
+            result.setExplicacion("No entendí la instrucción o no está soportada en el modo local.");
+            AiActionDTO.AiAction a = new AiActionDTO.AiAction();
+            a.setTipo("NOT_SUPPORTED");
+            a.setParams(Map.of("razon", "Acción no soportada en el diseñador local."));
+            acciones.add(a);
         }
         
         result.setAcciones(acciones);

@@ -17,7 +17,7 @@ public class GlobalExceptionHandler {
         
         return ResponseEntity.internalServerError().body(Map.of(
             "error", "Internal Server Error",
-            "message", e.getMessage()
+            "message", e.getMessage() != null ? e.getMessage() : "Error interno (sin mensaje)"
         ));
     }
 
@@ -25,5 +25,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleBusiness(BusinessRuleException e) {
         System.err.println("⚠️ REGLA DE NEGOCIO VIOLADA: " + e.getMessage());
         return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<?> handleNotFound(ResourceNotFoundException e) {
+        System.err.println("⚠️ RECURSO NO ENCONTRADO: " + e.getMessage());
+        return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
     }
 }

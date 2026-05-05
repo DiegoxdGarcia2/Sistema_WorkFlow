@@ -28,9 +28,13 @@ export class AuthService {
   private readonly SESSION_VERSION = 'v2.0_jwt'; // Fuerza re-login al migrar a JWT
   private readonly TOKEN_KEY = 'bpm_token';
   private readonly USER_KEY = 'bpm_user';
+  private readonly LAST_ACTIVE_KEY = 'bpm_last_active';
+  private readonly INACTIVITY_LIMIT_MS = 30 * 60 * 1000; // 30 minutos
 
   usuario = signal<UsuarioSesion | null>(this.cargarSesion());
   estaLogueado = computed(() => this.usuario() !== null && this.getToken() !== null);
+
+  private lastActivityUpdate = 0;
 
   constructor(
     private http: HttpClient, 
@@ -38,8 +42,12 @@ export class AuthService {
     private injector: Injector
   ) {
     this.validarYLimpiarSesion();
-    // Heartbeat cada 60s para detectar token expirado
+    this.checkInactivity();
+    this.setupInactivityListeners();
+
+    // Heartbeat cada 60s para detectar token expirado o inactividad
     setInterval(() => {
+      this.checkInactivity();
       if (this.usuario()) {
         if (this.isTokenExpired()) {
           console.warn('⏰ Token JWT expirado. Cerrando sesión...');
@@ -47,6 +55,33 @@ export class AuthService {
         }
       }
     }, 60000);
+  }
+
+  private setupInactivityListeners(): void {
+    const events = ['mousemove', 'keydown', 'click', 'scroll'];
+    events.forEach(e => window.addEventListener(e, () => this.updateLastActiveTime()));
+  }
+
+  private updateLastActiveTime(): void {
+    if (!this.usuario()) return;
+    const now = Date.now();
+    // Actualizar localStorage como máximo una vez cada 5 segundos para no afectar rendimiento
+    if (now - this.lastActivityUpdate > 5000) {
+      localStorage.setItem(this.LAST_ACTIVE_KEY, now.toString());
+      this.lastActivityUpdate = now;
+    }
+  }
+
+  private checkInactivity(): void {
+    if (!this.usuario()) return;
+    const lastActiveStr = localStorage.getItem(this.LAST_ACTIVE_KEY);
+    if (lastActiveStr) {
+      const lastActive = parseInt(lastActiveStr, 10);
+      if (Date.now() - lastActive > this.INACTIVITY_LIMIT_MS) {
+        console.warn('⏰ Sesión expirada por inactividad (30 min). Cerrando sesión...');
+        this.logout();
+      }
+    }
   }
 
   // ── Token Management ──────────────────────────────────────
@@ -138,6 +173,7 @@ export class AuthService {
     // Guardar datos de usuario (sin token, por seguridad)
     const sessionData = { ...user, token: undefined, loginAt: Date.now(), version: this.SESSION_VERSION };
     localStorage.setItem(this.USER_KEY, JSON.stringify(sessionData));
+    localStorage.setItem(this.LAST_ACTIVE_KEY, Date.now().toString());
     // Actualizar signal (con token para uso inmediato)
     this.usuario.set(user);
   }
@@ -179,5 +215,6 @@ export class AuthService {
   private clearStorage(): void {
     localStorage.removeItem(this.USER_KEY);
     localStorage.removeItem(this.TOKEN_KEY);
+    localStorage.removeItem(this.LAST_ACTIVE_KEY);
   }
 }

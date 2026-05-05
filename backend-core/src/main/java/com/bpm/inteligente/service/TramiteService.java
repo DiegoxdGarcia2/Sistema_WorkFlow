@@ -24,6 +24,7 @@ public class TramiteService {
     private final PoliticaNegocioService politicaService;
     private final com.bpm.inteligente.repository.DepartamentoRepository deptoRepo;
     private final com.bpm.inteligente.repository.UsuarioRepository usuarioRepo;
+    private final com.bpm.inteligente.repository.ClienteRepository clienteRepo;
 
     /**
      * Instancia un nuevo Trámite a partir de una PoliticaNegocio activa.
@@ -117,6 +118,48 @@ public class TramiteService {
     public Tramite buscarPorId(String id) {
         return tramiteRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Tramite", "id", id));
+    }
+
+    public List<Tramite> buscarTrackingPorTermino(String termino) {
+        // 1. Buscar en Cliente por término (nombre, apellido, CI, correo)
+        List<com.bpm.inteligente.domain.Cliente> clientesMatch = clienteRepo.buscarPorTermino(null, termino);
+        List<String> clienteIds = clientesMatch.stream().map(com.bpm.inteligente.domain.Cliente::getId).toList();
+
+        // 2. Buscar trámites que coincidan con los IDs de cliente, el nombre de cliente guardado, 
+        //    el documento guardado, el propio ID del trámite (código de seguimiento), o el número de trámite.
+        // Como no tenemos una consulta compleja en Mongo, usamos findAll y filtramos, 
+        // o podemos hacer un par de consultas y juntarlas. Mejor traer los que coinciden.
+        
+        List<Tramite> resultado = new java.util.ArrayList<>();
+        
+        // Trámite por ID exacto (código seguimiento)
+        tramiteRepo.findById(termino).ifPresent(resultado::add);
+        
+        // Trámites por ID de cliente
+        if (!clienteIds.isEmpty()) {
+            List<Tramite> porClienteId = tramiteRepo.findAll().stream()
+                    .filter(t -> clienteIds.contains(t.getClienteId()))
+                    .toList();
+            for (Tramite t : porClienteId) {
+                if (resultado.stream().noneMatch(r -> r.getId().equals(t.getId()))) {
+                    resultado.add(t);
+                }
+            }
+        }
+        
+        // Trámites por nombre o CI guardados directamente en el documento (por si se creó sin ID de cliente asociado)
+        List<Tramite> porDatos = tramiteRepo.findAll().stream()
+                .filter(t -> (t.getDocumentoCliente() != null && t.getDocumentoCliente().toLowerCase().contains(termino.toLowerCase())) ||
+                             (t.getClienteNombre() != null && t.getClienteNombre().toLowerCase().contains(termino.toLowerCase())))
+                .toList();
+        
+        for (Tramite t : porDatos) {
+            if (resultado.stream().noneMatch(r -> r.getId().equals(t.getId()))) {
+                resultado.add(t);
+            }
+        }
+
+        return resultado;
     }
 
     public List<Tramite> listarPorTenantYEstado(String tenantId, EstadoTramite estado) {

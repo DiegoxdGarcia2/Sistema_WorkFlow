@@ -337,7 +337,7 @@ import { ClienteDTO } from '../../models/bpm.models';
                                 {{ c.nombre.charAt(0) }}{{ c.apellido.charAt(0) }}
                               </div>
                               <div>
-                                <p class="font-bold text-slate-200">{{ c.nombre }} {{ c.apellido }}</p>
+                                <p class="font-bold text-slate-200">{{ c.nombre }} {{ c.apellido || '' }}</p>
                                 <p class="text-[9px] text-indigo-400 font-bold uppercase tracking-widest mt-0.5">Cliente Registrado</p>
                               </div>
                             </div>

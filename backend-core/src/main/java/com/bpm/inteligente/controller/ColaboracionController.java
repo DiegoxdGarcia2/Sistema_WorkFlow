@@ -25,8 +25,7 @@ public class ColaboracionController {
     private final ColaboracionService colaboracionService;
 
     @MessageMapping("/politica/{politicaId}/join")
-    public void joinRoom(@DestinationVariable String politicaId, @Payload ColaboradorDTO colaborador, StompHeaderAccessor headerAccessor) {
-        String sessionId = headerAccessor.getSessionId();
+    public void joinRoom(@DestinationVariable String politicaId, @Payload ColaboradorDTO colaborador, @org.springframework.messaging.handler.annotation.Header("simpSessionId") String sessionId) {
         log.info("Colaborador {} se unió a la política {} (Session: {})", colaborador.getNombre(), politicaId, sessionId);
         Set<ColaboradorDTO> colaboradores = colaboracionService.joinRoom(politicaId, colaborador, sessionId);
         

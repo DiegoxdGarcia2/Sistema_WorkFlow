@@ -25,7 +25,7 @@ public class JwtService {
     @Value("${jwt.secret:bpm_inteligente_super_secret_key_1234567890_abcdef}")
     private String secretKey;
 
-    @Value("${jwt.expiration:86400000}")
+    @Value("${jwt.expiration:1800000}")
     private long jwtExpiration;
 
     public String extractUsername(String token) {

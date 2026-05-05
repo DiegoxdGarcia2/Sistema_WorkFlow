@@ -57,7 +57,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   activeTab: 'general' | 'estilo' | 'formulario' | 'conexiones' = 'general';
 
   // ── Collaboration State ──
-  nodosBloqueados: Record<string, { userId: string, color: string, nombre: string }> = {};
+  nodosBloqueados = signal<Record<string, { userId: string, color: string, nombre: string }>>({});
 
   // ── Lane Selection ──
   calleSeleccionada: Calle | null = null;
@@ -67,7 +67,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   transicionSeleccionada: Transicion | null = null;
 
   // ── Auto-save ──
-  saveStatus: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
+  saveStatus = signal<'idle' | 'saving' | 'saved' | 'error'>('idle');
   private autoSaveTimer: any = null;
 
   // ── Drag ──
@@ -188,6 +188,26 @@ export class DesignerComponent implements OnInit, OnDestroy {
       const msg = this.colabSvc.nodeUpdates();
       if (msg) this.procesarEventoRemoto(msg);
     });
+
+    // Escuchar cambios en la lista de colaboradores para liberar nodos bloqueados por usuarios que se desconectan
+    effect(() => {
+      const colaboradoresActivos = this.colabSvc.colaboradores();
+      const activeUserIds = new Set(colaboradoresActivos.map(c => c.id));
+      const currentBloqueados = this.nodosBloqueados();
+      const newBloqueados = { ...currentBloqueados };
+      let changed = false;
+      
+      for (const nodeId in newBloqueados) {
+        if (!activeUserIds.has(newBloqueados[nodeId].userId)) {
+          delete newBloqueados[nodeId];
+          changed = true;
+        }
+      }
+      
+      if (changed) {
+        this.nodosBloqueados.set(newBloqueados);
+      }
+    }, { allowSignalWrites: true });
   }
 
   procesarEventoRemoto(msg: SocketMessageDTO) {
@@ -205,21 +225,23 @@ export class DesignerComponent implements OnInit, OnDestroy {
       // msg.payload es el ID del nodo
       const nodeId = msg.payload as string | null;
 
+      const currentBloqueados = { ...this.nodosBloqueados() };
       // Limpiar bloqueos previos de este usuario
-      for (const key in this.nodosBloqueados) {
-        if (this.nodosBloqueados[key].userId === msg.colaborador.id) {
-          delete this.nodosBloqueados[key];
+      for (const key in currentBloqueados) {
+        if (currentBloqueados[key].userId === msg.colaborador.id) {
+          delete currentBloqueados[key];
         }
       }
 
       // Aplicar nuevo bloqueo si está editando algo
       if (nodeId) {
-        this.nodosBloqueados[nodeId] = {
+        currentBloqueados[nodeId] = {
           userId: msg.colaborador.id,
           color: msg.colaborador.color,
           nombre: msg.colaborador.nombre
         };
       }
+      this.nodosBloqueados.set(currentBloqueados);
 
     } else if (msg.type === 'POLICY_UPDATED' && msg.payload && this.sel) {
       // Sincronización completa: lanes, conexiones, colores, propiedades, etc.
@@ -400,10 +422,9 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
     const act = this.sel!.calles[ci].actividades[ai];
 
-    if (this.nodosBloqueados[act.id]) {
-        // Bloqueado por otro usuario
-        this.showToast('Nodo bloqueado por ' + this.nodosBloqueados[act.id].nombre, 'error');
-        return;
+    if (this.nodosBloqueados()[act.id]) {
+      this.showToast('Nodo bloqueado por ' + this.nodosBloqueados()[act.id].nombre, 'error');
+      return;
     }
 
     if (this.connMode.active) {
@@ -415,7 +436,8 @@ export class DesignerComponent implements OnInit, OnDestroy {
           id: crypto.randomUUID(), origenId: this.connMode.sourceId, destinoId: act.id,
           tipoRuta: this.connMode.tipo, condicion: '', etiqueta: '', prioridad: 0,
           color: '#475569', tipoLinea: 'solida', grosor: 2,
-          origenAnchor: 'bottom', destinoAnchor: 'top'
+          origenAnchor: 'auto', destinoAnchor: 'auto',
+          enrutamiento: 'bezier'
         });
         this.cancelConnMode();
         this.triggerAutoSave();
@@ -504,9 +526,9 @@ export class DesignerComponent implements OnInit, OnDestroy {
     if (!act) return;
     
     // Si otro usuario lo está bloqueando, no permitir arrastrar
-    if (this.nodosBloqueados[act.id]) {
-        e.preventDefault();
-        return;
+    if (this.nodosBloqueados()[act.id]) {
+      this.showToast('Nodo bloqueado por ' + this.nodosBloqueados()[act.id].nombre, 'error');
+      return;
     }
     
     e.preventDefault();
@@ -575,8 +597,8 @@ export class DesignerComponent implements OnInit, OnDestroy {
     const snappedY = Math.round(newY / 12) * 12;
 
     this.nodePositions[this.dragNodeId] = { x: snappedX, y: snappedY };
+    this.cdr.detectChanges(); // IMPORTANTE: Forzar actualización de líneas de conexión durante el arrastre
 
-    // Throttled WebSocket Sync — 16ms ≈ 60fps para movimiento fluido en vivo
     const now = Date.now();
     if (now - this.lastSyncTime > 16) {
       this.colabSvc.notificarMovimientoNodo(this.dragNodeId, snappedX, snappedY);
@@ -613,8 +635,9 @@ export class DesignerComponent implements OnInit, OnDestroy {
           id: crypto.randomUUID(), origenId: this.tempConnSource.id, destinoId: this.hoveredNodeId,
           tipoRuta: 'SECUENCIAL', condicion: '', etiqueta: '', prioridad: 0,
           color: '#475569', tipoLinea: 'solida', grosor: 2,
-          origenAnchor: this.tempConnAnchor,
-          destinoAnchor: this.calculateBestAnchor(this.tempConnSource.id, this.hoveredNodeId, true)
+          origenAnchor: 'auto',
+          destinoAnchor: 'auto',
+          enrutamiento: 'bezier'
         };
         this.sel.transiciones.push(newTrans);
         this.broadcastPolicyState();
@@ -664,10 +687,10 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
           if (this.dragConnEnd === 'origen') {
             t.origenId = foundNodeId;
-            t.origenAnchor = anchor;
+            t.origenAnchor = 'auto';
           } else {
             t.destinoId = foundNodeId;
-            t.destinoAnchor = anchor;
+            t.destinoAnchor = 'auto';
           }
           this.broadcastPolicyState();
           this.triggerAutoSave();
@@ -774,8 +797,8 @@ export class DesignerComponent implements OnInit, OnDestroy {
     if (!this.sel) return [];
     return this.sel.transiciones.map(t => {
       // Calculate best anchors if they are 'auto' or undefined
-      const fromAnchor = t.origenAnchor || this.calculateBestAnchor(t.origenId, t.destinoId, false);
-      const toAnchor = t.destinoAnchor || this.calculateBestAnchor(t.origenId, t.destinoId, true);
+      const fromAnchor = (!t.origenAnchor || t.origenAnchor === 'auto') ? this.calculateBestAnchor(t.origenId, t.destinoId, false) : t.origenAnchor;
+      const toAnchor = (!t.destinoAnchor || t.destinoAnchor === 'auto') ? this.calculateBestAnchor(t.origenId, t.destinoId, true) : t.destinoAnchor;
 
       const from = this.findNodeAnchor(t.origenId, fromAnchor, false);
       const to = this.findNodeAnchor(t.destinoId, toAnchor, true);
@@ -796,18 +819,49 @@ export class DesignerComponent implements OnInit, OnDestroy {
       let path: string;
       const anchor1 = fromAnchor;
       const anchor2 = toAnchor;
+      
+      const isOrthogonal = t.enrutamiento === 'ortogonal';
 
-      if (anchor1 === 'bottom' && anchor2 === 'top' && dy2 > dy1) {
-        path = `M ${dx1} ${dy1} C ${dx1} ${midY}, ${dx2} ${midY}, ${dx2} ${dy2}`;
-      } else if (anchor1 === 'right' && anchor2 === 'left' && dx2 > dx1) {
-        path = `M ${dx1} ${dy1} C ${midX} ${dy1}, ${midX} ${dy2}, ${dx2} ${dy2}`;
-      } else if (anchor1 === 'top' && anchor2 === 'bottom' && dy1 > dy2) {
-         path = `M ${dx1} ${dy1} C ${dx1} ${midY}, ${dx2} ${midY}, ${dx2} ${dy2}`;
+      if (isOrthogonal) {
+        // Enrutamiento Ortogonal (estilo Draw.io)
+        if (anchor1 === 'bottom' && anchor2 === 'top' && dy2 > dy1) {
+          path = `M ${dx1} ${dy1} L ${dx1} ${midY} L ${dx2} ${midY} L ${dx2} ${dy2}`;
+        } else if (anchor1 === 'right' && anchor2 === 'left' && dx2 > dx1) {
+          path = `M ${dx1} ${dy1} L ${midX} ${dy1} L ${midX} ${dy2} L ${dx2} ${dy2}`;
+        } else if (anchor1 === 'top' && anchor2 === 'bottom' && dy1 > dy2) {
+          path = `M ${dx1} ${dy1} L ${dx1} ${midY} L ${dx2} ${midY} L ${dx2} ${dy2}`;
+        } else if (anchor1 === 'left' && anchor2 === 'right' && dx1 > dx2) {
+          path = `M ${dx1} ${dy1} L ${midX} ${dy1} L ${midX} ${dy2} L ${dx2} ${dy2}`;
+        } else {
+          // Complex routing: move out from source, then along perpendicular, then into target
+          const offset = Math.min(Math.abs(dx1 - dx2), Math.abs(dy1 - dy2), 40) + 10;
+          const p1x = anchor1 === 'right' ? dx1 + offset : anchor1 === 'left' ? dx1 - offset : dx1;
+          const p1y = anchor1 === 'bottom' ? dy1 + offset : anchor1 === 'top' ? dy1 - offset : dy1;
+          const p2x = anchor2 === 'right' ? dx2 + offset : anchor2 === 'left' ? dx2 - offset : dx2;
+          const p2y = anchor2 === 'bottom' ? dy2 + offset : anchor2 === 'top' ? dy2 - offset : dy2;
+          
+          if (Math.abs(p1x - p2x) < Math.abs(p1y - p2y)) {
+             path = `M ${dx1} ${dy1} L ${p1x} ${p1y} L ${p1x} ${p2y} L ${p2x} ${p2y} L ${dx2} ${dy2}`;
+          } else {
+             path = `M ${dx1} ${dy1} L ${p1x} ${p1y} L ${p2x} ${p1y} L ${p2x} ${p2y} L ${dx2} ${dy2}`;
+          }
+        }
       } else {
-        const offset = Math.min(Math.abs(dx1 - dx2), Math.abs(dy1 - dy2), 50);
-        path = `M ${dx1} ${dy1} C ${anchor1==='right'?dx1+offset:anchor1==='left'?dx1-offset:dx1} ${anchor1==='bottom'?dy1+offset:anchor1==='top'?dy1-offset:dy1},
-                                 ${anchor2==='right'?dx2+offset:anchor2==='left'?dx2-offset:dx2} ${anchor2==='bottom'?dy2+offset:anchor2==='top'?dy2-offset:dy2},
-                                 ${dx2} ${dy2}`;
+        // Enrutamiento Bezier (Curvas)
+        if (anchor1 === 'bottom' && anchor2 === 'top' && dy2 > dy1) {
+          path = `M ${dx1} ${dy1} C ${dx1} ${midY}, ${dx2} ${midY}, ${dx2} ${dy2}`;
+        } else if (anchor1 === 'right' && anchor2 === 'left' && dx2 > dx1) {
+          path = `M ${dx1} ${dy1} C ${midX} ${dy1}, ${midX} ${dy2}, ${dx2} ${dy2}`;
+        } else if (anchor1 === 'top' && anchor2 === 'bottom' && dy1 > dy2) {
+           path = `M ${dx1} ${dy1} C ${dx1} ${midY}, ${dx2} ${midY}, ${dx2} ${dy2}`;
+        } else if (anchor1 === 'left' && anchor2 === 'right' && dx1 > dx2) {
+           path = `M ${dx1} ${dy1} C ${midX} ${dy1}, ${midX} ${dy2}, ${dx2} ${dy2}`;
+        } else {
+          const offset = Math.min(Math.abs(dx1 - dx2), Math.abs(dy1 - dy2), 50);
+          path = `M ${dx1} ${dy1} C ${anchor1==='right'?dx1+offset:anchor1==='left'?dx1-offset:dx1} ${anchor1==='bottom'?dy1+offset:anchor1==='top'?dy1-offset:dy1},
+                                   ${anchor2==='right'?dx2+offset:anchor2==='left'?dx2-offset:dx2} ${anchor2==='bottom'?dy2+offset:anchor2==='top'?dy2-offset:dy2},
+                                   ${dx2} ${dy2}`;
+        }
       }
 
       const dash = t.tipoLinea === 'punteada' ? '4 4' : t.tipoLinea === 'discontinua' ? '10 5' : '';
@@ -823,12 +877,27 @@ export class DesignerComponent implements OnInit, OnDestroy {
   private calculateBestAnchor(sourceId: string, targetId: string, isDest: boolean): 'top' | 'bottom' | 'left' | 'right' {
     const sPos = this.getNodoPos(sourceId);
     const tPos = this.getNodoPos(targetId);
-    if (!sPos || !tPos) return isDest ? 'top' : 'bottom';
+    const sNode = this.getAllActividades().find(a => a.id === sourceId);
+    const tNode = this.getAllActividades().find(a => a.id === targetId);
+    if (!sPos || !tPos || !sNode || !tNode) return isDest ? 'top' : 'bottom';
 
-    const dx = tPos.x - sPos.x;
-    const dy = tPos.y - sPos.y;
+    const sCenterX = sPos.x + (sNode.ancho || this.NW) / 2;
+    const sCenterY = sPos.y + (sNode.alto || this.NH) / 2;
+    const tCenterX = tPos.x + (tNode.ancho || this.NW) / 2;
+    const tCenterY = tPos.y + (tNode.alto || this.NH) / 2;
 
-    if (Math.abs(dx) > Math.abs(dy)) {
+    const dx = tCenterX - sCenterX;
+    const dy = tCenterY - sCenterY;
+
+    // Smart Anchor Selection:
+    // Si están en la misma calle (vertical), preferimos arriba/abajo.
+    // Si están en calles distintas (horizontal), preferimos izquierda/derecha.
+    const sLane = this.sel?.calles.find(c => c.actividades.some(a => a.id === sourceId));
+    const tLane = this.sel?.calles.find(c => c.actividades.some(a => a.id === targetId));
+    const sameLane = sLane?.id === tLane?.id;
+    const horizontalBias = sameLane ? 0.6 : 1.8; 
+    
+    if (Math.abs(dx) * horizontalBias > Math.abs(dy)) {
       // Horizontal preference
       if (isDest) return dx > 0 ? 'left' : 'right';
       return dx > 0 ? 'right' : 'left';
@@ -869,6 +938,9 @@ export class DesignerComponent implements OnInit, OnDestroy {
     if (!t.color) t.color = '#475569';
     if (!t.tipoLinea) t.tipoLinea = 'solida';
     if (!t.grosor) t.grosor = 2;
+    if (!t.enrutamiento) t.enrutamiento = 'bezier';
+    if (!t.origenAnchor) t.origenAnchor = 'auto';
+    if (!t.destinoAnchor) t.destinoAnchor = 'auto';
   }
 
   getNodeConnections(actId: string): { id: string; fromName: string; toName: string; tipoRuta: string }[] {
@@ -892,7 +964,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   guardarPolitica(): void {
     if (!this.sel) return;
     this.persistPositions();
-    setTimeout(() => this.saveStatus = 'saving');
+    this.saveStatus.set('saving');
     const selId = this.sel.id;
     const selNodeId = this.nodoSeleccionado?.id;
     const selTransId = this.transicionSeleccionada?.id;
@@ -914,25 +986,24 @@ export class DesignerComponent implements OnInit, OnDestroy {
           const ci = this.sel!.calles.findIndex(c => c.id === selCalleId);
           if (ci >= 0) { this.calleSeleccionada = this.sel!.calles[ci]; this.calleSelIdx = ci; }
         }
-        setTimeout(() => {
-          this.saveStatus = 'saved';
-          setTimeout(() => { if (this.saveStatus === 'saved') this.saveStatus = 'idle'; }, 2000);
-        });
+        this.saveStatus.set('saved');
+        setTimeout(() => { if (this.saveStatus() === 'saved') this.saveStatus.set('idle'); }, 2000);
         // ── Sincronización colaborativa: notificar a todos el estado actualizado ──
         this.colabSvc.notificarCambioCompleto(this.sel);
       },
       error: (e: any) => { 
-        setTimeout(() => this.saveStatus = 'error');
+        this.saveStatus.set('error');
         this.showToast(e.error?.message || 'Error al guardar', 'error'); 
       },
     });
   }
 
   triggerAutoSave(): void {
-    if (!this.sel || this.sel.estaActiva) return; // Politicas activas no se guardan via autosave
+    if (!this.sel || this.sel.estaActiva) return;
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
-    setTimeout(() => this.saveStatus = 'saving');
-    this.autoSaveTimer = setTimeout(() => this.guardarPolitica(), 800);
+    
+    this.saveStatus.set('saving');
+    this.autoSaveTimer = setTimeout(() => this.guardarPolitica(), 400); // Reducido de 800ms a 400ms
   }
 
   // ── History (Undo/Redo) ──
@@ -1456,16 +1527,21 @@ export class DesignerComponent implements OnInit, OnDestroy {
   }
 
   private ejecutarAccionAi(acc: AiAction) {
-    if (!this.sel) return;
+    const sel = this.sel;
+    if (!sel) return;
     try {
       switch (acc.tipo) {
+        case 'NOT_SUPPORTED': {
+          this.showToast(acc.params.razon || 'Acción no soportada en el diseñador', 'info');
+          break;
+        }
         case 'CREAR_CALLE': {
-          this.sel.calles.push({
+          sel.calles.push({
             id: crypto.randomUUID(),
             nombre: acc.params.nombre || 'Nueva Calle',
             departamentoId: '',
             color: acc.params.color || '#475569',
-            orden: this.sel.calles.length,
+            orden: sel.calles.length,
             actividades: []
           });
           break;
@@ -1473,12 +1549,12 @@ export class DesignerComponent implements OnInit, OnDestroy {
         case 'CREAR_NODO': {
           let calleIdx = 0;
           if (acc.params.calleNombre) {
-            const idx = this.sel.calles.findIndex(c => c.nombre.toLowerCase().includes((acc.params.calleNombre as string).toLowerCase()));
+            const idx = sel.calles.findIndex(c => c.nombre.toLowerCase().includes((acc.params.calleNombre as string).toLowerCase()));
             if (idx >= 0) calleIdx = idx;
           }
           
-          if (this.sel.calles.length === 0) {
-            this.sel.calles.push({ id: crypto.randomUUID(), nombre: 'Defecto', departamentoId: '', orden: 0, color: '#475569', actividades: [] });
+          if (sel.calles.length === 0) {
+            sel.calles.push({ id: crypto.randomUUID(), nombre: 'Defecto', departamentoId: '', orden: 0, color: '#475569', actividades: [] });
           }
           
           const tipo: TipoActividad = acc.params.tipo || 'TAREA';
@@ -1488,52 +1564,47 @@ export class DesignerComponent implements OnInit, OnDestroy {
             tipo,
             esInicial: tipo === 'INICIO',
             esFinal: tipo === 'FIN',
-            orden: this.sel.calles[calleIdx].actividades.length,
+            orden: sel.calles[calleIdx].actividades.length,
             ancho: this.NW, 
             alto: this.NH, 
             fontSize: 'md',
             posX: undefined,
             posY: undefined
           };
-          this.sel.calles[calleIdx].actividades.push(newAct);
+          sel.calles[calleIdx].actividades.push(newAct);
           break;
         }
         case 'CONECTAR_NODOS': {
-          // Busca origen y destino por nombre
           const oName = (acc.params.origenNombre as string || '').toLowerCase();
           const dName = (acc.params.destinoNombre as string || '').toLowerCase();
           
           let oNode: Actividad | null = null;
           let dNode: Actividad | null = null;
-          
-          for (const c of this.sel.calles) {
+          for (const c of sel.calles) {
             for (const a of c.actividades) {
               if (a.nombre.toLowerCase().includes(oName)) oNode = a;
               if (a.nombre.toLowerCase().includes(dName)) dNode = a;
             }
           }
-          
           if (oNode && dNode) {
-            this.sel.transiciones.push({
-              id: crypto.randomUUID(),
-              origenId: oNode.id,
-              destinoId: dNode.id,
-              tipoRuta: 'SECUENCIAL', condicion: '', etiqueta: '', prioridad: 0,
+            sel.transiciones.push({
+              id: crypto.randomUUID(), origenId: oNode.id, destinoId: dNode.id,
+              tipoRuta: acc.params.tipo || 'SECUENCIAL', condicion: '', etiqueta: '', prioridad: 0,
               color: '#475569', tipoLinea: 'solida', grosor: 2,
-              origenAnchor: 'bottom', destinoAnchor: 'top'
+              origenAnchor: 'auto', destinoAnchor: 'auto', enrutamiento: 'bezier'
             });
           }
           break;
         }
         case 'ELIMINAR_NODO': {
           const nName = (acc.params.nombre as string || '').toLowerCase().trim();
-          if (!nName) break; // Seguridad: no borrar si el nombre está vacío
-          for (const c of this.sel.calles) {
+          if (!nName) break;
+          for (const c of sel.calles) {
             const idx = c.actividades.findIndex(a => a.nombre.toLowerCase().includes(nName));
             if (idx >= 0) {
               const id = c.actividades[idx].id;
               c.actividades.splice(idx, 1);
-              this.sel.transiciones = this.sel.transiciones.filter(t => t.origenId !== id && t.destinoId !== id);
+              sel.transiciones = sel.transiciones.filter(t => t.origenId !== id && t.destinoId !== id);
             }
           }
           break;
@@ -1542,7 +1613,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
           const oldName = (acc.params.nombreActual as string || '').toLowerCase();
           const newName = acc.params.nuevoNombre as string || 'Nodo Renombrado';
           
-          for (const c of this.sel.calles) {
+          for (const c of sel.calles) {
             const act = c.actividades.find(a => a.nombre.toLowerCase().includes(oldName));
             if (act) {
               act.nombre = newName;
@@ -1554,14 +1625,12 @@ export class DesignerComponent implements OnInit, OnDestroy {
         case 'ELIMINAR_CALLE': {
           const cName = (acc.params.nombre as string || '').toLowerCase().trim();
           if (!cName) break;
-          const idx = this.sel.calles.findIndex(c => c.nombre.toLowerCase().includes(cName));
+          const idx = sel.calles.findIndex(c => c.nombre.toLowerCase().includes(cName));
           if (idx >= 0) {
-            const lane = this.sel.calles[idx];
-            // Eliminar transiciones de los nodos de esta calle
+            const lane = sel.calles[idx];
             const nodeIds = lane.actividades.map(a => a.id);
-            this.sel.transiciones = this.sel.transiciones.filter(t => !nodeIds.includes(t.origenId) && !nodeIds.includes(t.destinoId));
-            // Eliminar calle
-            this.sel.calles.splice(idx, 1);
+            sel.transiciones = sel.transiciones.filter(t => !nodeIds.includes(t.origenId) && !nodeIds.includes(t.destinoId));
+            sel.calles.splice(idx, 1);
           }
           break;
         }
@@ -1574,26 +1643,23 @@ export class DesignerComponent implements OnInit, OnDestroy {
           let sourceLaneIdx = -1;
           let nodeIdx = -1;
 
-          for (let i = 0; i < this.sel.calles.length; i++) {
-            const idx = this.sel.calles[i].actividades.findIndex(a => a.nombre.toLowerCase().includes(nName));
+          for (let i = 0; i < sel.calles.length; i++) {
+            const idx = sel.calles[i].actividades.findIndex(a => a.nombre.toLowerCase().includes(nName));
             if (idx >= 0) {
-              sourceNode = this.sel.calles[i].actividades[idx];
+              sourceNode = sel.calles[i].actividades[idx];
               sourceLaneIdx = i;
               nodeIdx = idx;
               break;
             }
           }
 
-          const targetLaneIdx = this.sel.calles.findIndex(c => c.nombre.toLowerCase().includes(targetLaneName));
-          
-          if (sourceNode && targetLaneIdx >= 0 && sourceLaneIdx !== targetLaneIdx) {
-            this.sel.calles[sourceLaneIdx].actividades.splice(nodeIdx, 1);
-            this.sel.calles[targetLaneIdx].actividades.push(sourceNode);
-            // Ajustar posición horizontal para que no se pierda fuera de la calle
-            if (typeof sourceNode.posX === 'number') {
-              const oldLaneX = this.getLaneX(sourceLaneIdx);
-              const newLaneX = this.getLaneX(targetLaneIdx);
-              sourceNode.posX = sourceNode.posX - oldLaneX + newLaneX;
+          if (sourceNode && sourceLaneIdx >= 0) {
+            const targetLaneIdx = sel.calles.findIndex(c => c.nombre.toLowerCase().includes(targetLaneName));
+            if (targetLaneIdx >= 0 && targetLaneIdx !== sourceLaneIdx) {
+              sel.calles[sourceLaneIdx].actividades.splice(nodeIdx, 1);
+              sourceNode.posX = undefined;
+              sourceNode.posY = undefined;
+              sel.calles[targetLaneIdx].actividades.push(sourceNode);
             }
           }
           break;
@@ -1604,32 +1670,31 @@ export class DesignerComponent implements OnInit, OnDestroy {
           
           const newCalles: Calle[] = [];
           for (const n of names) {
-            const lane = this.sel.calles.find(c => c.nombre.toLowerCase().includes(n.toLowerCase()));
+            const lane = sel.calles.find(c => c.nombre.toLowerCase().includes(n.toLowerCase()));
             if (lane) newCalles.push(lane);
           }
           // Añadir las que falten
-          for (const c of this.sel.calles) {
+          for (const c of sel.calles) {
             if (!newCalles.find(nc => nc.id === c.id)) newCalles.push(c);
           }
-          this.sel.calles = newCalles;
+          sel.calles = newCalles;
           break;
         }
-        case 'EDITAR_TRANSICION': {
+        case 'MODIFICAR_TRANSICION': {
           const oName = (acc.params.origenNombre as string || '').toLowerCase().trim();
           const dName = (acc.params.destinoNombre as string || '').toLowerCase().trim();
           if (!oName || !dName) break;
 
           let oNodeId = '';
           let dNodeId = '';
-
-          for (const c of this.sel.calles) {
+          for (const c of sel.calles) {
             for (const a of c.actividades) {
               if (a.nombre.toLowerCase().includes(oName)) oNodeId = a.id;
               if (a.nombre.toLowerCase().includes(dName)) dNodeId = a.id;
             }
           }
 
-          const trans = this.sel.transiciones.find(t => t.origenId === oNodeId && t.destinoId === dNodeId);
+          const trans = sel.transiciones.find(t => t.origenId === oNodeId && t.destinoId === dNodeId);
           if (trans) {
             if (acc.params.etiqueta !== undefined) trans.etiqueta = acc.params.etiqueta;
             if (acc.params.condicion !== undefined) trans.condicion = acc.params.condicion;
@@ -1644,7 +1709,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
           if (!targetName) break;
 
           // Buscar en nodos
-          for (const c of this.sel.calles) {
+          for (const c of sel.calles) {
             const act = c.actividades.find(a => a.nombre.toLowerCase().includes(targetName));
             if (act) {
               if (acc.params.color) act.color = acc.params.color;
@@ -1656,7 +1721,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
             }
           }
           // Buscar en calles
-          const lane = this.sel.calles.find(c => c.nombre.toLowerCase().includes(targetName));
+          const lane = sel.calles.find(c => c.nombre.toLowerCase().includes(targetName));
           if (lane) {
             if (acc.params.color) lane.color = acc.params.color;
             if (acc.params.ancho) lane.ancho = acc.params.ancho;
@@ -1668,7 +1733,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
           const x = acc.params.x;
           const y = acc.params.y;
           
-          for (const c of this.sel.calles) {
+          for (const c of sel.calles) {
             const act = c.actividades.find(a => a.nombre.toLowerCase().includes(nName));
             if (act) {
               if (x !== undefined) act.posX = x;
@@ -1685,7 +1750,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
           let oId = '';
           let dId = '';
-          for (const c of this.sel.calles) {
+          for (const c of sel.calles) {
             for (const a of c.actividades) {
               if (a.nombre.toLowerCase().includes(oName)) oId = a.id;
               if (a.nombre.toLowerCase().includes(dName)) dId = a.id;
@@ -1693,7 +1758,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
           }
 
           if (oId && dId) {
-            this.sel.transiciones = this.sel.transiciones.filter(t => !(t.origenId === oId && t.destinoId === dId));
+            sel.transiciones = sel.transiciones.filter(t => !(t.origenId === oId && t.destinoId === dId));
           }
           break;
         }
@@ -1702,7 +1767,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
           const newLaneName = acc.params.nuevoNombre as string || 'Calle Renombrada';
           if (!currentName) break;
 
-          const lane = this.sel.calles.find(c => c.nombre.toLowerCase().includes(currentName));
+          const lane = sel.calles.find(c => c.nombre.toLowerCase().includes(currentName));
           if (lane) {
             lane.nombre = newLaneName;
           }
@@ -1711,13 +1776,13 @@ export class DesignerComponent implements OnInit, OnDestroy {
         case 'ASIGNAR_PLANTILLA': {
           const nodeName = (acc.params.nombreNodo as string || '').toLowerCase().trim();
           const tplName = (acc.params.nombrePlantilla as string || '').toLowerCase().trim();
-          if (!nodeName || !tplName) break;
+          if (!nodeName || !tplName || !this.sel) break;
 
-          const tpl = this.templates().find(t => t.nombre.toLowerCase().includes(tplName));
+          const tpl = (this.templates() || []).find((t: any) => t.nombre.toLowerCase().includes(tplName));
           if (!tpl) break;
 
           for (const c of this.sel.calles) {
-            const act = c.actividades.find(a => a.nombre.toLowerCase().includes(nodeName));
+            const act = c.actividades.find((a: any) => a.nombre.toLowerCase().includes(nodeName));
             if (act) {
               act.plantillaId = tpl.id;
               act.esquemaFormulario = { fields: JSON.parse(JSON.stringify(tpl.campos)) };
@@ -1728,7 +1793,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
         }
       }
     } catch (e) {
-      console.error('Error procesando acción IA', acc, e);
+      console.error('Error procesando acción IA', e);
     }
   }
 

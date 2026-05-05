@@ -105,6 +105,10 @@ export class WorkflowService {
     return this.http.get<TrackingDTO>(`${this.tramitesUrl}/${tramiteId}/tracking`);
   }
 
+  buscarTracking(q: string): Observable<TrackingDTO[]> {
+    return this.http.get<TrackingDTO[]>(`${this.tramitesUrl}/tracking/buscar?q=${encodeURIComponent(q)}`);
+  }
+
   // ── Tareas sin asignar (para cualquier funcionario) ─────────
 
   tareasNoAsignadas = signal<RegistroActividadDTO[]>([]);

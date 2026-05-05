@@ -69,8 +69,9 @@ export interface Transicion {
   color?: string;
   tipoLinea?: 'solida' | 'punteada' | 'discontinua';
   grosor?: number;
-  origenAnchor?: 'top' | 'bottom' | 'left' | 'right';
-  destinoAnchor?: 'top' | 'bottom' | 'left' | 'right';
+  origenAnchor?: 'top' | 'bottom' | 'left' | 'right' | 'auto';
+  destinoAnchor?: 'top' | 'bottom' | 'left' | 'right' | 'auto';
+  enrutamiento?: 'bezier' | 'ortogonal';
 }
 
 // ── DTOs (coinciden con backend) ──

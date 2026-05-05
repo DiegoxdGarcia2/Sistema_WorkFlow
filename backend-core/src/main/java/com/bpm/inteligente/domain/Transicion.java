@@ -38,4 +38,7 @@ public class Transicion {
 
     private String origenAnchor;
     private String destinoAnchor;
+    
+    @Builder.Default
+    private String enrutamiento = "bezier"; // "bezier", "ortogonal"
 }

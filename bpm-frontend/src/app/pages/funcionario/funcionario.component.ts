@@ -644,7 +644,7 @@ import { forkJoin } from 'rxjs';
                             {{ c.nombre.charAt(0) }}{{ c.apellido.charAt(0) }}
                           </div>
                           <div>
-                            <p class="text-xs font-bold text-white">{{ c.nombre }} {{ c.apellido }}</p>
+                            <p class="text-xs font-bold text-white">{{ c.nombre }} {{ c.apellido || '' }}</p>
                             <p class="text-[9px] text-slate-500 font-medium">CI: {{ c.ci }}</p>
                           </div>
                         </div>
@@ -688,7 +688,7 @@ import { forkJoin } from 'rxjs';
                     </div>
                     <div class="col-span-2">
                       <label class="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">CI / Identificación</label>
-                      <input [(ngModel)]="formNuevoCliente.ci" placeholder="CI o Cédula" class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-indigo-500">
+                      <input [(ngModel)]="formNuevoCliente.ci" (input)="soloNumeros($event, 'ci')" placeholder="CI o Cédula" class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-indigo-500">
                     </div>
                     <div>
                       <label class="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">Email</label>
@@ -696,7 +696,7 @@ import { forkJoin } from 'rxjs';
                     </div>
                     <div>
                       <label class="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">Teléfono</label>
-                      <input [(ngModel)]="formNuevoCliente.telefono" placeholder="Teléfono" class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-indigo-500">
+                      <input [(ngModel)]="formNuevoCliente.telefono" (input)="soloNumeros($event, 'telefono')" placeholder="Teléfono" class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-indigo-500">
                     </div>
                     <div class="col-span-2">
                       <label class="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">Dirección</label>
@@ -797,6 +797,18 @@ export class FuncionarioComponent implements OnInit {
 
   get deptoNombre() {
     return (this.auth.usuario() as any)?.departamento || 'Funcionario';
+  }
+
+  soloNumeros(event: Event, campo: 'ci' | 'telefono') {
+    const input = event.target as HTMLInputElement;
+    // Replace anything that is not a digit
+    const onlyNums = input.value.replace(/[^0-9]/g, '');
+    input.value = onlyNums;
+    if (campo === 'ci') {
+      this.formNuevoCliente.ci = onlyNums;
+    } else {
+      this.formNuevoCliente.telefono = onlyNums;
+    }
   }
 
   getFieldError(f: any): string | null {

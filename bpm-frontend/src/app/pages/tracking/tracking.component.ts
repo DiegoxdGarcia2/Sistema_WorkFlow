@@ -27,8 +27,9 @@ import { TrackingDTO, PasoTimeline } from '../../models/bpm.models';
       <div class="max-w-4xl mx-auto px-6 -mt-5">
         <div class="flex gap-3 p-2 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-xl shadow-2xl">
           <input [(ngModel)]="searchId"
+                 (ngModelChange)="onSearchChange($event)"
                  (keydown.enter)="buscarTramite()"
-                 placeholder="Ingresa el ID de tu trámite..."
+                 placeholder="Ingresa el ID, CI, Nombre o Correo..."
                  class="flex-1 px-5 py-3.5 rounded-xl bg-slate-800/50 border border-slate-700 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono">
           <button (click)="buscarTramite()"
                   class="px-8 py-3.5 text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-sky-500 rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all whitespace-nowrap">
@@ -52,6 +53,27 @@ import { TrackingDTO, PasoTimeline } from '../../models/bpm.models';
             <p class="text-3xl mb-3">🔍</p>
             <p class="text-sm font-semibold text-red-400">{{ errorMsg }}</p>
             <p class="text-xs text-slate-500 mt-1">Verifica que el ID sea correcto e intenta nuevamente.</p>
+          </div>
+        }
+
+        <!-- Multiple Results State -->
+        @if (resultadosMultiple && !tracking && !cargando) {
+          <div class="mb-8 animate-in fade-in zoom-in duration-300">
+            <h3 class="text-lg font-bold text-slate-200 mb-4">Se encontraron varios trámites. Selecciona uno para ver su estado:</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              @for (t of resultadosMultiple; track t.tramite.id) {
+                <div (click)="seleccionarTramite(t)" class="p-6 rounded-2xl border border-slate-700 bg-slate-800/50 hover:bg-slate-800 cursor-pointer transition-all hover:border-indigo-500 group">
+                  <div class="flex justify-between items-start mb-2">
+                    <h4 class="text-md font-bold text-white group-hover:text-indigo-400 transition-colors">{{ t.tramite.politicaNombre }}</h4>
+                    <span class="px-2 py-0.5 rounded text-[9px] font-bold ring-1 ring-inset" [class]="getEstadoTramiteClasses(t.tramite.estado)">
+                      {{ getEstadoLabel(t.tramite.estado) }}
+                    </span>
+                  </div>
+                  <p class="text-xs text-slate-400 font-mono">ID: {{ t.tramite.id }}</p>
+                  <p class="text-[10px] text-slate-500 mt-3">Iniciado el {{ t.tramite.iniciadoEn | date:'dd MMM yyyy' }}</p>
+                </div>
+              }
+            </div>
           </div>
         }
 
@@ -159,8 +181,8 @@ import { TrackingDTO, PasoTimeline } from '../../models/bpm.models';
         @if (!tracking && !cargando && !errorMsg) {
           <div class="text-center py-16">
             <p class="text-5xl mb-4">📦</p>
-            <p class="text-sm text-slate-500 font-medium">Ingresa un ID de trámite para ver su seguimiento</p>
-            <p class="text-xs text-slate-600 mt-1">El ID fue proporcionado cuando se inició tu solicitud.</p>
+            <p class="text-sm text-slate-500 font-medium">Ingresa tus datos o el ID de trámite para ver su seguimiento</p>
+            <p class="text-xs text-slate-600 mt-1">Puedes buscar por código de trámite, número de identificación, nombre o correo electrónico.</p>
           </div>
         }
       </div>
@@ -177,13 +199,30 @@ import { TrackingDTO, PasoTimeline } from '../../models/bpm.models';
 export class TrackingComponent {
   searchId = '';
   tracking: TrackingDTO | null = null;
+  resultadosMultiple: TrackingDTO[] | null = null;
   cargando = false;
   errorMsg = '';
+  private searchTimeout: any;
 
   constructor(
     private workflowService: WorkflowService,
     private route: ActivatedRoute,
   ) {}
+
+  onSearchChange(event: any) {
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+    }
+    if (this.searchId.trim() === '') {
+       this.tracking = null;
+       this.resultadosMultiple = null;
+       this.errorMsg = '';
+       return;
+    }
+    this.searchTimeout = setTimeout(() => {
+      this.buscarTramite();
+    }, 500); // 500ms debounce
+  }
 
   ngOnInit(): void {
     // Si viene con un id en la ruta, buscarlo automáticamente
@@ -195,25 +234,37 @@ export class TrackingComponent {
   }
 
   buscarTramite(): void {
-    const id = this.searchId.trim();
-    if (!id) return;
+    const q = this.searchId.trim();
+    if (!q) return;
 
     this.cargando = true;
     this.errorMsg = '';
     this.tracking = null;
+    this.resultadosMultiple = null;
 
-    this.workflowService.getTracking(id).subscribe({
+    this.workflowService.buscarTracking(q).subscribe({
       next: (data) => {
-        this.tracking = data;
+        if (data && data.length > 0) {
+           if (data.length === 1) {
+             this.tracking = data[0];
+           } else {
+             this.resultadosMultiple = data;
+           }
+        } else {
+           this.errorMsg = 'No se encontraron trámites con esos datos.';
+        }
         this.cargando = false;
       },
       error: (err) => {
-        this.errorMsg = err.status === 404
-          ? 'No se encontró un trámite con ese ID.'
-          : 'Error al buscar el trámite. Intenta nuevamente.';
+        this.errorMsg = 'Error al buscar el trámite. Intenta nuevamente.';
         this.cargando = false;
       },
     });
+  }
+
+  seleccionarTramite(t: TrackingDTO) {
+    this.tracking = t;
+    this.resultadosMultiple = null;
   }
 
   calcularProgreso(): number {

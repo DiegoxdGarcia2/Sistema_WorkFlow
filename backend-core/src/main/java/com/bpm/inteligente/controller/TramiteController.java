@@ -148,6 +148,53 @@ public class TramiteController {
                 .build();
     }
 
+    /**
+     * Busca trámites por código de seguimiento, CI, nombre o correo electrónico del cliente.
+     * Retorna una lista de TrackingDTO con la información completa.
+     */
+    @GetMapping("/tracking/buscar")
+    public List<TrackingDTO> buscarTracking(@RequestParam String q) {
+        if (q == null || q.trim().isEmpty()) {
+            return List.of();
+        }
+        String escaped = q.trim().replaceAll("[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ @._-]", "");
+        return tramiteService.buscarTrackingPorTermino(escaped).stream()
+                .map(tramite -> {
+                    PoliticaNegocio politica = politicaService.buscarPorId(tramite.getPoliticaId());
+                    TramiteDTO tramiteDTO = DomainMapper.toDTO(tramite, politica.getNombre());
+                    List<RegistroActividad> registros = registroService.listarPorTramite(tramite.getId());
+                    List<TrackingDTO.PasoTimeline> timeline = registros.stream()
+                            .sorted((a, b) -> {
+                                Instant t1 = a.getAsignadoEn() != null ? a.getAsignadoEn() : Instant.MIN;
+                                Instant t2 = b.getAsignadoEn() != null ? b.getAsignadoEn() : Instant.MIN;
+                                return t1.compareTo(t2);
+                            })
+                            .map(r -> {
+                                String actNombre = resolverNombreActividad(politica, r.getActividadId());
+                                String calleNombre = resolverCalleDeActividad(politica, r.getActividadId());
+                                return TrackingDTO.PasoTimeline.builder()
+                                        .registroId(r.getId())
+                                        .actividadNombre(actNombre)
+                                        .calleNombre(calleNombre)
+                                        .estado(r.getEstado().name())
+                                        .ejecutadoPor(r.getEjecutadoPor())
+                                        .notas(r.getNotas())
+                                        .asignadoEn(r.getAsignadoEn() != null ? r.getAsignadoEn().toString() : null)
+                                        .completadoEn(r.getCompletadoEn() != null ? r.getCompletadoEn().toString() : null)
+                                        .datosFormulario(r.getDatosFormulario())
+                                        .esquemaFormulario(r.getEsquemaFormulario())
+                                        .archivos(r.getArchivos())
+                                        .build();
+                            })
+                            .toList();
+                    return TrackingDTO.builder()
+                            .tramite(tramiteDTO)
+                            .timeline(timeline)
+                            .build();
+                })
+                .toList();
+    }
+
     // ── Helpers privados ──────────────────────────────────────────
 
     private String resolverNombreActividad(PoliticaNegocio politica, String actividadId) {
