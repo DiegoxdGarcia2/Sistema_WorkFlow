@@ -9,7 +9,8 @@ import os
 import json
 import asyncio
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -24,6 +25,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
+API_SECRET = os.getenv("AI_API_SECRET", "dev_secret_local_only")
 
 # ── Inicializar clientes ────────────────────────────────────────
 app = FastAPI(
@@ -41,16 +43,41 @@ if ELEVENLABS_API_KEY and ELEVENLABS_API_KEY != "your_key_here":
     el_client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
 
 # ── CORS ─────────────────────────────────────────────────────────
+_cors_origins = [
+    "http://localhost:4200",
+    "http://localhost:8080",
+]
+# Agregar orígenes de producción si están configurados
+for env_key in ("CORS_ORIGIN", "BACKEND_ORIGIN"):
+    val = os.getenv(env_key, "")
+    if val:
+        _cors_origins.append(val)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:4200",
-        "http://localhost:8080",
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Seguridad inter-servicios ────────────────────────────────────
+@app.middleware("http")
+async def validate_api_secret(request: Request, call_next):
+    # Permitir health check y CORS preflight sin secreto
+    if request.url.path == "/" or request.method == "OPTIONS":
+        return await call_next(request)
+
+    # En desarrollo local, si el secreto es el default, permitir todo
+    if API_SECRET == "dev_secret_local_only":
+        return await call_next(request)
+
+    # En producción, validar el header X-API-Secret
+    secret = request.headers.get("X-API-Secret", "")
+    if secret != API_SECRET:
+        return JSONResponse(status_code=403, content={"detail": "Forbidden: invalid API secret"})
+
+    return await call_next(request)
 
 
 # ═══════════════════════════════════════════════════════════════════

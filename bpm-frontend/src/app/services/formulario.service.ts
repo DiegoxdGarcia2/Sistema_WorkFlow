@@ -24,9 +24,11 @@ export interface FormularioTemplate {
   campos: CampoFormulario[];
 }
 
+import { environment } from '../../environments/environment';
+
 @Injectable({ providedIn: 'root' })
 export class FormularioService {
-  private readonly baseUrl = 'http://localhost:8080/api/formularios';
+  private readonly baseUrl = `${environment.apiUrl}/formularios`;
   
   templates = signal<FormularioTemplate[]>([]);
 

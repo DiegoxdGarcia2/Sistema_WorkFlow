@@ -3,9 +3,11 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
 import { ClienteDTO } from '../models/bpm.models';
 
+import { environment } from '../../environments/environment';
+
 @Injectable({ providedIn: 'root' })
 export class ClienteService {
-  private readonly baseUrl = 'http://localhost:8080/api/clientes';
+  private readonly baseUrl = `${environment.apiUrl}/clientes`;
 
   /** Signal reactivo: lista de clientes cargados */
   clientes = signal<ClienteDTO[]>([]);

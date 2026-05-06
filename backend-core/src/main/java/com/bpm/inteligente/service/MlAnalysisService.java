@@ -44,6 +44,10 @@ public class MlAnalysisService {
     @Value("${ai.microservice.url:http://localhost:8000}")
     private String aiMicroserviceUrl;
 
+    /** Secreto para autenticación inter-servicios */
+    @Value("${ai.microservice.secret:dev_secret_local_only}")
+    private String aiApiSecret;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
     /**
@@ -58,6 +62,7 @@ public class MlAnalysisService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-API-Secret", aiApiSecret);
 
             Map<String, Object> payload = new HashMap<>();
             payload.put("politicaId", politicaId);
@@ -94,7 +99,16 @@ public class MlAnalysisService {
             String url = builder.toUriString();
             log.info("Obteniendo Insights ML desde Python: {}", url);
 
-            ResponseEntity<InsightsResultDTO> response = restTemplate.getForEntity(url, InsightsResultDTO.class);
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-API-Secret", aiApiSecret);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<InsightsResultDTO> response = restTemplate.exchange(
+                url, 
+                org.springframework.http.HttpMethod.GET, 
+                entity, 
+                InsightsResultDTO.class
+            );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 return response.getBody();

@@ -24,11 +24,13 @@ export interface ActionButton {
   ruta?: string;
 }
 
+import { environment } from '../../environments/environment';
+
 @Injectable({
   providedIn: 'root'
 })
 export class ChatbotService {
-  private apiUrl = 'http://127.0.0.1:8080/api/chatbot';
+  private apiUrl = `${environment.apiUrl}/chatbot`;
 
   constructor(private http: HttpClient) { }
 

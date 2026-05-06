@@ -39,6 +39,10 @@ public class AiAssistantService {
     @Value("${ai.microservice.timeout:30000}")
     private int aiTimeout;
 
+    /** Secreto para autenticación inter-servicios */
+    @Value("${ai.microservice.secret:dev_secret_local_only}")
+    private String aiApiSecret;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
     /**
@@ -53,6 +57,7 @@ public class AiAssistantService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-API-Secret", aiApiSecret);
 
             // Construir payload compatible con el modelo Pydantic de Python
             Map<String, Object> payload = new HashMap<>();

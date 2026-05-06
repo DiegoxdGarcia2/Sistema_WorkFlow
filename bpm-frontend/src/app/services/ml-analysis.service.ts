@@ -57,11 +57,13 @@ export interface InsightsResult {
   alertas: { nivel: string; mensaje: string }[];
 }
 
+import { environment } from '../../environments/environment';
+
 @Injectable({
   providedIn: 'root'
 })
 export class MlAnalysisService {
-  private apiUrl = 'http://localhost:8080/api/ml';
+  private apiUrl = `${environment.apiUrl}/ml`;
 
   // State signals for UI binding
   public lastAnalysis = signal<AnalysisResult | null>(null);

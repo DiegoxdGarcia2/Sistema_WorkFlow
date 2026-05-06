@@ -3,9 +3,11 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
 import { PoliticaDTO } from '../models/bpm.models';
 
+import { environment } from '../../environments/environment';
+
 @Injectable({ providedIn: 'root' })
 export class PoliticaService {
-  private readonly baseUrl = 'http://localhost:8080/api/politicas';
+  private readonly baseUrl = `${environment.apiUrl}/politicas`;
 
   /** Signal reactivo: lista de políticas cargadas */
   politicas = signal<PoliticaDTO[]>([]);

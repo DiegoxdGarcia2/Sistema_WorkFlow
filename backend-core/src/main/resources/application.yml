@@ -30,6 +30,7 @@ ai:
   microservice:
     url: ${AI_MICROSERVICE_URL:http://localhost:8000}
     timeout: 30000
+    secret: ${AI_API_SECRET:dev_secret_local_only}
 
 # ═══ JWT Configuration ═══
 jwt:

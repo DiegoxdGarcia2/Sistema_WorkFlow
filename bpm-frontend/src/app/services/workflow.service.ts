@@ -9,10 +9,12 @@ import {
   TrackingDTO,
 } from '../models/bpm.models';
 
+import { environment } from '../../environments/environment';
+
 @Injectable({ providedIn: 'root' })
 export class WorkflowService {
-  private readonly tramitesUrl = 'http://localhost:8080/api/tramites';
-  private readonly registrosUrl = 'http://localhost:8080/api/registros';
+  private readonly tramitesUrl = `${environment.apiUrl}/tramites`;
+  private readonly registrosUrl = `${environment.apiUrl}/registros`;
 
   /** Signals reactivos */
   tareasPendientes = signal<RegistroActividadDTO[]>([]);

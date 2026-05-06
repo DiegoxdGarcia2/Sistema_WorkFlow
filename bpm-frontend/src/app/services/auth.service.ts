@@ -22,9 +22,11 @@ export interface UsuarioSesion {
 export interface LoginRequest { email:  string; password: string; }
 export interface RegistroEmpresaRequest { nombreEmpresa: string; nombreAdmin: string; email: string; password: string; }
 
+import { environment } from '../../environments/environment';
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly baseUrl = 'http://localhost:8080/api/auth';
+  private readonly baseUrl = `${environment.apiUrl}/auth`;
   private readonly SESSION_VERSION = 'v2.0_jwt'; // Fuerza re-login al migrar a JWT
   private readonly TOKEN_KEY = 'bpm_token';
   private readonly USER_KEY = 'bpm_user';

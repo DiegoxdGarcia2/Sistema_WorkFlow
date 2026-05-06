@@ -1,0 +1,12 @@
+.env
+.env.*
+target/
+.idea/
+.vscode/
+*.log
+uploads/
+backend_log.txt
+server_log.txt
+backend_error.log
+test_*.json
+path.txt

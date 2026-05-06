@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 
 export interface AiAction {
@@ -17,7 +18,7 @@ export interface AiResponse {
   providedIn: 'root'
 })
 export class AiAssistantService {
-  private apiUrl = 'http://localhost:8080/api/ai';
+  private apiUrl = `${environment.apiUrl}/ai`;
   private recognition: any;
 
   private isListening = false;
@@ -144,7 +145,7 @@ export class AiAssistantService {
     const formData = new FormData();
     formData.append('file', audioBlob, 'audio.webm');
 
-    this.http.post<{text: string}>(`http://localhost:8000/api/ai/stt`, formData).subscribe({
+    this.http.post<{text: string}>(`${environment.aiServiceUrl}/stt`, formData).subscribe({
       next: (res) => {
         if (this.onResultCallback) this.onResultCallback(res.text, true);
         if (this.onEndCallback) this.onEndCallback();
@@ -169,7 +170,7 @@ export class AiAssistantService {
 
   // ── 3. Text to Speech (ElevenLabs con Fallback nativo) ──
   hablar(texto: string): void {
-    const aiServiceTtsUrl = `http://localhost:8000/api/ai/tts?text=${encodeURIComponent(texto)}`;
+    const aiServiceTtsUrl = `${environment.aiServiceUrl}/tts?text=${encodeURIComponent(texto)}`;
     
     const audio = new Audio(aiServiceTtsUrl);
     audio.play().catch(err => {

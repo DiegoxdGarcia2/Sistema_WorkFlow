@@ -2,6 +2,7 @@ import { Injectable, signal, NgZone } from '@angular/core';
 import { Client, Message, StompHeaders } from '@stomp/stompjs';
 import { AuthService } from './auth.service';
 import { Subject, throttleTime } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 export interface ColaboradorDTO {
   id: string;
@@ -89,7 +90,7 @@ export class ColaboracionService {
     const token = this.authSvc.getToken();
 
     this.client = new Client({
-      brokerURL: 'ws://localhost:8080/ws-bpm',
+      brokerURL: environment.wsUrl,
       reconnectDelay: 5000,
       // ── JWT en headers STOMP para autenticación ──
       connectHeaders: token ? { 'Authorization': `Bearer ${token}` } as StompHeaders : {},

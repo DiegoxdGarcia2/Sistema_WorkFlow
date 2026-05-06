@@ -3,9 +3,11 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
 import { ProyectoDTO } from '../models/bpm.models';
 
+import { environment } from '../../environments/environment';
+
 @Injectable({ providedIn: 'root' })
 export class ProyectoService {
-  private readonly baseUrl = 'http://localhost:8080/api/proyectos';
+  private readonly baseUrl = `${environment.apiUrl}/proyectos`;
 
   proyectos = signal<ProyectoDTO[]>([]);
 

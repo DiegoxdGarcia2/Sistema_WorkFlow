@@ -67,9 +67,11 @@ export interface Departamento {
   atributosExtra?: AtributoExtra[];
 }
 
+import { environment } from '../../environments/environment';
+
 @Injectable({ providedIn: 'root' })
 export class AdminService {
-  private readonly baseUrl = 'http://localhost:8080/api';
+  private readonly baseUrl = environment.apiUrl;
 
   tenants = signal<TenantDTO[]>([]);
   usuarios = signal<UsuarioListDTO[]>([]);
