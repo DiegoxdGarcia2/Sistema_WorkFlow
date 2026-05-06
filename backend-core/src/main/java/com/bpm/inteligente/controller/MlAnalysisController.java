@@ -27,6 +27,12 @@ public class MlAnalysisController {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping("/insights")
+    public ResponseEntity<com.bpm.inteligente.dto.InsightsResultDTO> getInsights(@RequestParam(required = false) String politicaId) {
+        com.bpm.inteligente.dto.InsightsResultDTO result = mlAnalysisService.obtenerInsights(politicaId);
+        return ResponseEntity.ok(result);
+    }
+
     @PostMapping("/simulate")
     public ResponseEntity<AnalysisResultDTO.SimulationResult> simulate(@RequestBody SimulationRequest request) {
         AnalysisResultDTO.SimulationResult result = mlAnalysisService.simulate(request.getPolitica(), request.getInstances());

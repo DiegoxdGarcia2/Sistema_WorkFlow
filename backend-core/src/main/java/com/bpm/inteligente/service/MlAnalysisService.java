@@ -5,35 +5,127 @@ import com.bpm.inteligente.domain.RegistroActividad;
 import com.bpm.inteligente.domain.Transicion;
 import com.bpm.inteligente.domain.enums.EstadoRegistro;
 import com.bpm.inteligente.dto.AnalysisResultDTO;
+import com.bpm.inteligente.dto.InsightsResultDTO;
 import com.bpm.inteligente.dto.PoliticaDTO;
 import com.bpm.inteligente.repository.RegistroActividadRepository;
+import org.springframework.web.util.UriComponentsBuilder;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Servicio de Análisis ML y Simulación de Procesos BPM.
+ * 
+ * ARQUITECTURA (Fase 1 — Desacoplamiento):
+ * - analyze(PoliticaDTO)       → SE QUEDA EN JAVA (análisis estático de grafos, no requiere ML)
+ * - analyzeRealData(politicaId) → SE DELEGA A PYTHON (análisis de datos históricos, futuro Scikit-learn)
+ * - simulate(PoliticaDTO, n)    → SE QUEDA EN JAVA (simulación Monte Carlo, no requiere ML)
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class MlAnalysisService {
 
     private final RegistroActividadRepository registroRepo;
+    private final ObjectMapper objectMapper;
+
+    /** URL base del microservicio Python */
+    @Value("${ai.microservice.url:http://localhost:8000}")
+    private String aiMicroserviceUrl;
+
+    private final RestTemplate restTemplate = new RestTemplate();
 
     /**
      * Análisis basado en datos REALES de ejecución histórica.
-     * Calcula tiempos promedio por actividad e identifica cuellos de botella.
+     * DELEGADO AL MICROSERVICIO PYTHON (Fase 3).
+     * Ya no envía todos los registros, solo envía el politicaId para que Python lea de DB.
      */
     public AnalysisResultDTO analyzeRealData(String politicaId) {
+        try {
+            String url = aiMicroserviceUrl + "/api/ai/ml/analyze-bottlenecks";
+            log.info("Delegando análisis ML al microservicio Python: {}", url);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("politicaId", politicaId);
+            payload.put("registrosCompletados", new ArrayList<>()); // Vacío, Python lee directo de MongoDB
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+            ResponseEntity<AnalysisResultDTO> response = restTemplate.postForEntity(url, entity, AnalysisResultDTO.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                log.info("Respuesta exitosa del análisis ML Python");
+                return response.getBody();
+            }
+
+            log.warn("Microservicio Python respondió con status {}, usando fallback Java", response.getStatusCode());
+            return analyzeRealDataFallback(null);
+
+        } catch (Exception e) {
+            log.warn("Microservicio Python no disponible para ML ({}), usando fallback Java", e.getMessage());
+            return analyzeRealDataFallback(null);
+        }
+    }
+
+    /**
+     * Obtiene insights completos generados por ML y Groq.
+     * Llama al nuevo endpoint de Fase 3 en Python.
+     */
+    public InsightsResultDTO obtenerInsights(String politicaId) {
+        try {
+            UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(aiMicroserviceUrl + "/api/ai/ml/insights");
+            if (politicaId != null && !politicaId.isEmpty() && !politicaId.equals("null")) {
+                builder.queryParam("politicaId", politicaId);
+            }
+            
+            String url = builder.toUriString();
+            log.info("Obteniendo Insights ML desde Python: {}", url);
+
+            ResponseEntity<InsightsResultDTO> response = restTemplate.getForEntity(url, InsightsResultDTO.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+            
+            throw new RuntimeException("Error del servidor Python: " + response.getStatusCode());
+            
+        } catch (Exception e) {
+            log.error("No se pudieron obtener insights: {}", e.getMessage());
+            // Retorna un objeto vacío con mensaje de error
+            return InsightsResultDTO.builder()
+                .politicaId(politicaId)
+                .insightsNaturales("Error al contactar el motor de ML: " + e.getMessage())
+                .build();
+        }
+    }
+
+    /**
+     * Fallback local para análisis de datos reales.
+     * Usa la lógica original de Java cuando Python no está disponible.
+     */
+    private AnalysisResultDTO analyzeRealDataFallback(List<RegistroActividad> completados) {
         List<AnalysisResultDTO.Finding> findings = new ArrayList<>();
 
-        List<RegistroActividad> completados = registroRepo.findAll().stream()
-                .filter(r -> r.getEstado() == EstadoRegistro.HECHO
-                        && r.getAsignadoEn() != null
-                        && r.getCompletadoEn() != null)
-                .collect(Collectors.toList());
+        if (completados == null) {
+            completados = registroRepo.findAll().stream()
+                    .filter(r -> r.getEstado() == EstadoRegistro.HECHO
+                            && r.getAsignadoEn() != null
+                            && r.getCompletadoEn() != null)
+                    .collect(Collectors.toList());
+        }
 
         if (completados.isEmpty()) {
             findings.add(AnalysisResultDTO.Finding.builder()
@@ -52,12 +144,10 @@ public class MlAnalysisService {
             tiemposPorActividad.computeIfAbsent(r.getActividadId(), k -> new ArrayList<>()).add(duracionMinutos);
         }
 
-        // Calcular promedio global para detectar outliers
         double promedioGlobal = completados.stream()
                 .mapToLong(r -> Duration.between(r.getAsignadoEn(), r.getCompletadoEn()).toMinutes())
                 .average().orElse(0);
 
-        // Detectar actividades lentas
         for (Map.Entry<String, List<Long>> entry : tiemposPorActividad.entrySet()) {
             double promedio = entry.getValue().stream().mapToLong(Long::longValue).average().orElse(0);
             int count = entry.getValue().size();
@@ -79,23 +169,6 @@ public class MlAnalysisService {
             }
         }
 
-        // Detectar desbalanceo de carga por departamento
-        Map<String, Long> cargaPorDepto = completados.stream()
-                .filter(r -> r.getDepartamentoId() != null)
-                .collect(Collectors.groupingBy(RegistroActividad::getDepartamentoId, Collectors.counting()));
-
-        if (cargaPorDepto.size() > 1) {
-            long max = cargaPorDepto.values().stream().mapToLong(Long::longValue).max().orElse(0);
-            long min = cargaPorDepto.values().stream().mapToLong(Long::longValue).min().orElse(0);
-            if (max > min * 3 && min > 0) {
-                findings.add(AnalysisResultDTO.Finding.builder()
-                        .type("LOAD_IMBALANCE").severity("WARNING").nodeId("")
-                        .message(String.format("Desbalanceo de carga: el departamento más cargado tiene %dx más tareas que el menos cargado.", max / min))
-                        .suggestion("Redistribuya las responsabilidades entre departamentos.")
-                        .build());
-            }
-        }
-
         if (findings.isEmpty()) {
             findings.add(AnalysisResultDTO.Finding.builder()
                     .type("OK").severity("INFO").nodeId("")
@@ -107,6 +180,10 @@ public class MlAnalysisService {
         return AnalysisResultDTO.builder().findings(findings).build();
     }
 
+    /**
+     * Análisis ESTRUCTURAL del grafo BPM.
+     * SE QUEDA EN JAVA — No requiere ML, es lógica pura de grafos.
+     */
     public AnalysisResultDTO analyze(PoliticaDTO politica) {
         List<AnalysisResultDTO.Finding> findings = new ArrayList<>();
 
@@ -231,6 +308,10 @@ public class MlAnalysisService {
         return false;
     }
 
+    /**
+     * Simulación Monte Carlo de ejecución de procesos.
+     * SE QUEDA EN JAVA — No requiere ML, es simulación probabilística.
+     */
     public AnalysisResultDTO.SimulationResult simulate(PoliticaDTO politica, int instances) {
         Map<String, Actividad> nodeMap = new HashMap<>();
         politica.getCalles().forEach(c -> c.getActividades().forEach(a -> nodeMap.put(a.getId(), a)));

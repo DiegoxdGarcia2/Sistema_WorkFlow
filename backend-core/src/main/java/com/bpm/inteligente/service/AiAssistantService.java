@@ -15,101 +15,76 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
 
+/**
+ * Servicio de Asistente IA para el Diseñador BPM.
+ * 
+ * ARQUITECTURA (Fase 1 — Desacoplamiento):
+ * Este servicio actúa como PROXY/GATEWAY hacia el microservicio Python (FastAPI).
+ * - La lógica de IA (prompts, LLM, parsing) se procesa en Python.
+ * - Spring Boot delega la petición y retorna la respuesta al frontend.
+ * - Se mantiene un FALLBACK LOCAL (RegEx) como safety net si Python no responde.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AiAssistantService {
 
-    @Value("${groq.api.key}")
-    private String groqApiKey;
-
     private final ObjectMapper objectMapper;
+
+    /** URL base del microservicio Python (configurable vía application.yml) */
+    @Value("${ai.microservice.url:http://localhost:8000}")
+    private String aiMicroserviceUrl;
+
+    /** Timeout para la conexión al microservicio (ms) */
+    @Value("${ai.microservice.timeout:30000}")
+    private int aiTimeout;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
-    private static final String GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-
+    /**
+     * Ejecuta un comando de IA delegando al microservicio Python.
+     * Si el microservicio no responde, usa el fallback local basado en RegEx.
+     */
     public AiActionDTO ejecutarComando(AiCommandDTO request) {
         try {
-            // Si no hay API key o hay error, intentamos un fallback local
-            if (groqApiKey == null || groqApiKey.isEmpty()) {
-                return fallbackLocal(request);
-            }
+            // ── Delegar al microservicio Python ──────────────────────
+            String url = aiMicroserviceUrl + "/api/ai/assistant/prompt";
+            log.info("Delegando comando IA al microservicio Python: {}", url);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(groqApiKey);
 
-            String contextJson = objectMapper.writeValueAsString(request.getContexto());
+            // Construir payload compatible con el modelo Pydantic de Python
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("instruccion", request.getInstruccion());
+            payload.put("politicaId", request.getPoliticaId());
+            if (request.getContexto() != null) {
+                payload.put("contexto", objectMapper.convertValue(request.getContexto(), Map.class));
+            }
 
-            String systemPrompt = "Eres 'Antigravity AI', un arquitecto de procesos BPM avanzado. Tu objetivo es ayudar al usuario a diseñar flujos de trabajo profesionales sin que tenga que usar las manos.\n\n" +
-                    "INSTRUCCIONES CRÍTICAS:\n" +
-                    "1. DEBES responder UNICAMENTE con un JSON válido. Sin preámbulos ni explicaciones fuera del JSON.\n" +
-                    "2. Sé creativo y profesional. Si el usuario pide un proceso de 'Ventas', no crees solo un nodo, crea un flujo completo con al menos 2 calles (ej: Ventas, Almacén), 4-5 actividades, decisiones y conexiones.\n" +
-                    "3. Usa nombres de actividades claros y orientados a la acción (ej: 'Validar Documentación' en lugar de 'Tarea 1').\n" +
-                    "4. Para procesos complejos, genera una LISTA de acciones individuales en el orden lógico.\n" +
-                    "5. Si el usuario pide una acción que NO se puede hacer en el diseñador (ej: cambiar contraseña, generar código, interactuar con base de datos, o cualquier cosa fuera de esta lista), debes responder amablemente en 'explicacion' y retornar una única acción 'NOT_SUPPORTED'.\n\n" +
-                    "ESTRUCTURA DEL JSON:\n" +
-                    "{\n" +
-                    "  \"explicacion\": \"Un mensaje empoderador y técnico de lo que vas a construir\",\n" +
-                    "  \"acciones\": [\n" +
-                    "     { \"tipo\": \"CREAR_CALLE\", \"params\": { \"nombre\": \"RRHH\", \"color\": \"#6366f1\" } },\n" +
-                    "     { \"tipo\": \"CREAR_NODO\", \"params\": { \"tipo\": \"TAREA\", \"nombre\": \"Entrevista Técnica\", \"calleNombre\": \"RRHH\" } },\n" +
-                    "     { \"tipo\": \"CONECTAR_NODOS\", \"params\": { \"origenNombre\": \"Inicio\", \"destinoNombre\": \"Entrevista Técnica\" } },\n" +
-                    "     { \"tipo\": \"ASIGNAR_PLANTILLA\", \"params\": { \"nombreNodo\": \"Entrevista Técnica\", \"nombrePlantilla\": \"Formulario Contratación\" } }\n" +
-                    "  ]\n" +
-                    "}\n\n" +
-                    "ACCIONES SOPORTADAS:\n" +
-                    "- CREAR_CALLE (nombre, color)\n" +
-                    "- CREAR_NODO (tipo: INICIO|FIN|TAREA|DECISION|FORK|JOIN, nombre, calleNombre)\n" +
-                    "- ELIMINAR_NODO (nombre)\n" +
-                    "- CONECTAR_NODOS (origenNombre, destinoNombre)\n" +
-                    "- MODIFICAR_NODO (nombreActual, nuevoNombre)\n" +
-                    "- ELIMINAR_CALLE (nombre)\n" +
-                    "- MOVER_NODO (nombreNodo, nuevaCalleNombre)\n" +
-                    "- CAMBIAR_ESTILO (nombre, color, ancho, alto, fontSize: sm|md|lg)\n" +
-                    "- ASIGNAR_PLANTILLA (nombreNodo, nombrePlantilla)\n" +
-                    "- RENOMBRAR_CALLE (nombreActual, nuevoNombre)\n" +
-                    "- ELIMINAR_TRANSICION (origenNombre, destinoNombre)\n" +
-                    "- REORDENAR_CALLES (nombresOrdenados: array de strings)\n" +
-                    "- EDITAR_TRANSICION (origenNombre, destinoNombre, etiqueta, condicion, color, tipoLinea: solida|punteada|lineas, grosor)\n" +
-                    "- NOT_SUPPORTED (razon)\n\n" +
-                    "Contexto del diagrama actual: " + contextJson;
-
-            Map<String, Object> messageSystem = new HashMap<>();
-            messageSystem.put("role", "system");
-            messageSystem.put("content", systemPrompt);
-
-            Map<String, Object> messageUser = new HashMap<>();
-            messageUser.put("role", "user");
-            messageUser.put("content", request.getInstruccion());
-
-            Map<String, Object> body = new HashMap<>();
-            body.put("model", "llama-3.3-70b-versatile");
-            body.put("messages", Arrays.asList(messageSystem, messageUser));
-            body.put("temperature", 0.1);
-            body.put("response_format", Map.of("type", "json_object"));
-
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-            ResponseEntity<Map> response = restTemplate.postForEntity(GROQ_API_URL, entity, Map.class);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+            ResponseEntity<AiActionDTO> response = restTemplate.postForEntity(url, entity, AiActionDTO.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
-                    String content = (String) message.get("content");
-                    
-                    return objectMapper.readValue(content, AiActionDTO.class);
-                }
+                log.info("Respuesta exitosa del microservicio Python");
+                return response.getBody();
             }
-            
+
+            log.warn("Microservicio Python respondió con status {}, usando fallback local", response.getStatusCode());
             return fallbackLocal(request);
 
         } catch (Exception e) {
-            log.error("Error al llamar a Groq API: ", e);
-            return fallbackLocal(request); // RegEx Fallback si el LLM falla (Requerido por PDF)
+            // Si el microservicio Python no está disponible, usamos el fallback local
+            log.warn("Microservicio Python no disponible ({}), usando fallback local RegEx", e.getMessage());
+            return fallbackLocal(request);
         }
     }
 
+    /**
+     * FALLBACK LOCAL — Safety net basado en RegEx.
+     * Se activa cuando el microservicio Python no responde.
+     * Requerido por especificación para garantizar disponibilidad mínima.
+     */
     private AiActionDTO fallbackLocal(AiCommandDTO req) {
         log.info("Usando Fallback Local basado en RegEx para la instrucción: {}", req.getInstruccion());
         AiActionDTO result = new AiActionDTO();

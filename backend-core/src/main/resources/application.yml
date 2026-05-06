@@ -23,14 +23,18 @@ cloudinary:
   api-key: ${CLOUDINARY_API_KEY:}
   api-secret: ${CLOUDINARY_API_SECRET:}
 
-groq:
-  api:
-    key: ${GROQ_API_KEY:}
+# ═══ AI Microservice (Python/FastAPI) ═══
+# La lógica de IA se delega al microservicio Python.
+# Spring Boot actúa como API Gateway.
+ai:
+  microservice:
+    url: ${AI_MICROSERVICE_URL:http://localhost:8000}
+    timeout: 30000
 
 # ═══ JWT Configuration ═══
 jwt:
   secret: ${JWT_SECRET:bpm_inteligente_super_secret_key_1234567890_abcdef_9876543210}
-  expiration: 1800000
+  expiration: 604800000
 
 # ═══ Actuator ═══
 management:

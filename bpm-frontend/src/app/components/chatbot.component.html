@@ -32,10 +32,21 @@
       <div class="px-4 py-2.5 rounded-2xl shadow-sm text-sm"
            [ngClass]="msg.isBot ? 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50' : 'bg-emerald-600 text-white rounded-tr-sm'">
         <!-- Renderizado de Markdown para el Bot -->
-        <div *ngIf="msg.isBot" [innerHTML]="msg.text" class="leading-relaxed"></div>
+        <div *ngIf="msg.isBot" class="leading-relaxed">
+          <span [innerHTML]="formatMarkdown(msg.text)"></span><span *ngIf="msg.isStreaming" class="blinking-cursor">▌</span>
+        </div>
         <!-- Texto plano para el Usuario -->
         <span *ngIf="!msg.isBot" class="whitespace-pre-wrap leading-relaxed">{{ msg.text }}</span>
       </div>
+      
+      <!-- Action Buttons -->
+      <div *ngIf="msg.acciones && msg.acciones.length > 0" class="flex flex-wrap gap-2 mt-2">
+        <button *ngFor="let btn of msg.acciones" (click)="executeAction(btn)" 
+                class="px-3 py-1.5 text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg transition-colors shadow-sm">
+          {{ btn.label }}
+        </button>
+      </div>
+
       <span class="text-[9px] text-slate-500 mt-1 px-1">{{ msg.timestamp | date:'shortTime' }}</span>
     </div>
     

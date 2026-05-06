@@ -16,27 +16,42 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.publisher.Flux;
 
+import java.io.IOException;
 import java.util.*;
 
+/**
+ * Servicio de Chatbot conversacional.
+ * 
+ * ARQUITECTURA (Fase 1 — Desacoplamiento):
+ * - El CONTEXTO DINÁMICO (datos del sistema) se genera AQUÍ en Java
+ *   porque requiere acceso directo a los repositorios MongoDB.
+ * - La LÓGICA DE IA (prompt engineering, LLM) se delega al microservicio Python.
+ * - En la Fase 2 (RAG), Python accederá directamente a la BD.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChatbotService {
 
-    @Value("${groq.api.key}")
-    private String groqApiKey;
-
     private final ObjectMapper objectMapper;
     private final TramiteRepository tramiteRepo;
     private final RegistroActividadRepository registroRepo;
     private final PoliticaNegocioRepository politicaRepo;
+
+    /** URL base del microservicio Python */
+    @Value("${ai.microservice.url:http://localhost:8000}")
+    private String aiMicroserviceUrl;
+
     private final RestTemplate restTemplate = new RestTemplate();
-    private static final String GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+    private final WebClient.Builder webClientBuilder;
 
     /**
-     * Genera un snapshot dinámico del estado actual del sistema para inyectarlo
-     * en el system prompt del LLM, dándole contexto real.
+     * Genera un snapshot dinámico del estado actual del sistema.
+     * Se inyecta como contexto adicional en el payload hacia Python.
      */
     private String generarContextoDinamico() {
         try {
@@ -46,7 +61,7 @@ public class ChatbotService {
             long politicasActivas = politicaRepo.countByEstaActivaTrue();
 
             return String.format(
-                "\n\nESTADO ACTUAL DEL SISTEMA (datos reales en tiempo real):\n" +
+                "ESTADO ACTUAL DEL SISTEMA (datos reales en tiempo real):\n" +
                 "- Trámites activos (EN_PROGRESO): %d\n" +
                 "- Tareas pendientes de asignar: %d\n" +
                 "- Tareas en progreso (asignadas): %d\n" +
@@ -55,95 +70,116 @@ public class ChatbotService {
             );
         } catch (Exception e) {
             log.warn("No se pudo generar contexto dinámico para chatbot: {}", e.getMessage());
-            return "\n\n(No se pudo obtener el estado actual del sistema)\n";
+            return "(No se pudo obtener el estado actual del sistema)";
         }
     }
 
+    /**
+     * Consulta al chatbot delegando al microservicio Python.
+     * Incluye el contexto dinámico del sistema como parte del payload.
+     * (Versión Síncrona - Fallback)
+     */
     public ChatbotResponseDTO consultar(ChatbotRequestDTO request) {
         try {
-            if (groqApiKey == null || groqApiKey.isEmpty()) {
-                return new ChatbotResponseDTO("Modo sin conexión: Para poder ayudarte dinámicamente, por favor configura la GROQ_API_KEY en el servidor.", null);
-            }
+            // ── Generar contexto dinámico (acceso a MongoDB) ─────────
+            String contextoDinamico = generarContextoDinamico();
+
+            // ── Delegar al microservicio Python ─────────────────────
+            String url = aiMicroserviceUrl + "/api/ai/chatbot/chat";
+            log.info("Delegando consulta de chatbot al microservicio Python: {}", url);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(groqApiKey);
 
-            String contextoDinamico = generarContextoDinamico();
-
-            Map<String, String> messageSystem = new HashMap<>();
-            messageSystem.put("role", "system");
-            messageSystem.put("content", "Eres BPM-Guía, el asistente experto y navegador del sistema BPM Inteligente. " +
-                    "Tu objetivo es ayudar al usuario y, si es posible, LLEVARLO al lugar correcto del sistema.\n\n" +
-                    "REGLAS DE RESPUESTA:\n" +
-                    "1. Responde SIEMPRE en formato JSON con dos campos: 'respuesta' (texto corto y claro en Markdown) y 'rutaNavegacion' (string con la ruta o null).\n" +
-                    "2. Sé conciso pero específico. Usa los datos reales del sistema cuando estén disponibles para dar respuestas personalizadas.\n" +
-                    "3. RUTAS DISPONIBLES (Úsalas exactamente así):\n" +
-                    "   - '/admin?tab=monitor': Monitor de procesos y cuellos de botella.\n" +
-                    "   - '/admin?tab=usuarios': Gestión de Colaboradores/Usuarios.\n" +
-                    "   - '/admin?tab=departamentos': Estructura de Departamentos.\n" +
-                    "   - '/admin?tab=cargos': Gestión de Cargos institucionales.\n" +
-                    "   - '/admin?tab=tenants': Datos de la Empresa/Tenant.\n" +
-                    "   - '/admin?tab=audit': Auditoría del sistema.\n" +
-                    "   - '/admin?tab=formularios': Repositorio de Formularios.\n" +
-                    "   - '/designer': Hub de Proyectos y nuevas políticas.\n" +
-                    "   - '/designer/editor': Editor gráfico de flujos.\n" +
-                    "   - '/funcionario?tab=bandeja': Bandeja de tareas pendientes del usuario.\n" +
-                    "   - '/funcionario?tab=disponible': Mercado de tareas disponibles para tomar.\n" +
-                    "   - '/funcionario?tab=historial': Mi Historial personal de tareas realizadas.\n" +
-                    "   - '/funcionario?tab=iniciar': Iniciar un nuevo trámite.\n" +
-                    "   - '/tracking': Seguimiento de trámites.\n\n" +
-                    "4. DETALLES DE LA INTERFAZ (Instrucciones precisas):\n" +
-                    "   - Pestaña 'Usuarios': Botón '+ Nuevo Usuario'.\n" +
-                    "   - Pestaña 'Empresa': Botón 'Editar Perfil Institucional'.\n" +
-                    "   - Pestaña 'Departamentos': Botón '+ Nuevo Departamento'.\n" +
-                    "   - Pestaña 'Cargos': Botón '+ Nuevo Cargo'.\n" +
-                    "   - Pestaña 'Formularios': Botón '+ Crear Formulario'.\n" +
-                    "   - Designer Hub: Botón '+ Nuevo Proyecto'.\n" +
-                    "   - Funcionario: Botones 'Tomar Tarea', 'Completar Tarea', 'Iniciar Nuevo Proceso' (en pestaña Iniciar).\n\n" +
-                    "REGLAS DE ORO:\n" +
-                    "1. Sé descriptivo y específico: Di EXACTAMENTE qué botón presionar y dónde.\n" +
-                    "2. Usa los datos del sistema para personalizar la respuesta (ej: 'Tienes 3 trámites activos').\n" +
-                    "3. Si el usuario pregunta algo sobre el estado del sistema, usa los datos reales proporcionados.\n" +
-                    "4. NO repitas la misma respuesta genérica. Adapta según el contexto.\n\n" +
-                    contextoDinamico);
-
-            Map<String, String> messageUser = new HashMap<>();
-            messageUser.put("role", "user");
-            messageUser.put("content", request.getMensaje() + "\n(Contexto actual: " + request.getContextoSeccion() + ")");
-
-            Map<String, Object> body = new HashMap<>();
-            body.put("model", "llama-3.3-70b-versatile");
-            body.put("messages", Arrays.asList(messageSystem, messageUser));
-            body.put("temperature", 0.3);
-            body.put("response_format", Map.of("type", "json_object"));
-
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-            log.info("Enviando petición a Groq para Chatbot...");
-            ResponseEntity<Map> response = restTemplate.postForEntity(GROQ_API_URL, entity, Map.class);
-
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                log.info("Respuesta de Groq recibida. Status: {}", response.getStatusCode());
-                Map responseBody = response.getBody();
-                List<Map> choices = (List<Map>) responseBody.get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    String jsonText = (String) ((Map) choices.get(0).get("message")).get("content");
-                    log.debug("JSON de IA: {}", jsonText);
-                    
-                    Map<String, String> aiResult = objectMapper.readValue(jsonText, Map.class);
-                    
-                    return new ChatbotResponseDTO(
-                            aiResult.getOrDefault("respuesta", "Lo siento, no pude procesar la respuesta."),
-                            aiResult.get("rutaNavegacion")
-                    );
-                }
+            // Payload enriquecido con contexto del sistema
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("mensaje", request.getMensaje());
+            payload.put("contextoSeccion", request.getContextoSeccion());
+            payload.put("contextoDinamico", contextoDinamico);
+            if (request.getHistorial() != null) {
+                payload.put("historial", request.getHistorial());
             }
 
-            return new ChatbotResponseDTO("No pude contactar con el cerebro de IA.", null);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+            ResponseEntity<ChatbotResponseDTO> response = restTemplate.postForEntity(url, entity, ChatbotResponseDTO.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                log.info("Respuesta exitosa del chatbot Python");
+                return response.getBody();
+            }
+
+            log.warn("Microservicio Python respondió con status {}", response.getStatusCode());
+            return new ChatbotResponseDTO(
+                "No pude contactar con el cerebro de IA. Intenta de nuevo en unos segundos.",
+                null
+            );
 
         } catch (Exception e) {
-            log.error("ERROR CRÍTICO en ChatbotService: ", e);
-            return new ChatbotResponseDTO("No pude contactar con el cerebro de IA. Error: " + e.getMessage(), null);
+            log.error("Error al contactar microservicio Python para chatbot: {}", e.getMessage());
+            return new ChatbotResponseDTO(
+                "El servicio de IA no está disponible en este momento. " +
+                "Por favor verifica que el microservicio Python esté corriendo en " + aiMicroserviceUrl,
+                null
+            );
         }
+    }
+
+    /**
+     * Consulta al chatbot usando SSE (Server-Sent Events) para respuestas en streaming.
+     */
+    public SseEmitter consultarStream(ChatbotRequestDTO request) {
+        // Timeout de 60 segundos para evitar que la conexión cuelgue
+        SseEmitter emitter = new SseEmitter(60000L);
+
+        try {
+            String contextoDinamico = generarContextoDinamico();
+            String url = aiMicroserviceUrl + "/api/ai/chatbot/chat";
+            log.info("Iniciando stream de chatbot con microservicio Python: {}", url);
+
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("mensaje", request.getMensaje());
+            payload.put("contextoSeccion", request.getContextoSeccion());
+            payload.put("contextoDinamico", contextoDinamico);
+            if (request.getHistorial() != null) {
+                payload.put("historial", request.getHistorial());
+            }
+
+            WebClient webClient = webClientBuilder.build();
+
+            Flux<String> stream = webClient.post()
+                    .uri(url)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.TEXT_EVENT_STREAM)
+                    .bodyValue(payload)
+                    .retrieve()
+                    .bodyToFlux(String.class);
+
+            stream.subscribe(
+                chunk -> {
+                    try {
+                        // Spring WebFlux decodifica los eventos SSE automáticamente y nos da la cadena de 'data:'
+                        // Nosotros lo re-envolvemos en un evento SSE de SseEmitter
+                        emitter.send(SseEmitter.event().data(chunk));
+                    } catch (IOException e) {
+                        log.error("Error emitiendo chunk al cliente: {}", e.getMessage());
+                        emitter.completeWithError(e);
+                    }
+                },
+                error -> {
+                    log.error("Error leyendo stream de Python: {}", error.getMessage());
+                    emitter.completeWithError(error);
+                },
+                () -> {
+                    log.info("Stream completado exitosamente");
+                    emitter.complete();
+                }
+            );
+
+        } catch (Exception e) {
+            log.error("Error al inicializar el stream de chatbot: {}", e.getMessage());
+            emitter.completeWithError(e);
+        }
+
+        return emitter;
     }
 }

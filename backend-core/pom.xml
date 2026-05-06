@@ -60,6 +60,12 @@
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
 
+        <!-- WebFlux (Only for WebClient as HTTP client, server remains MVC) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
         <!-- ═══ SECURITY & JWT ═══ -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

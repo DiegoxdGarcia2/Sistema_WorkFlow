@@ -11,11 +11,12 @@ import { MonitorComponent } from './monitor.component';
 import { FormularioService } from '../../services/formulario.service';
 import { ClienteService } from '../../services/cliente.service';
 import { ClienteDTO } from '../../models/bpm.models';
+import { MlAnalyticsComponent } from './ml-analytics.component';
 
 @Component({
   selector: 'app-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, FormBuilderComponent, MonitorComponent],
+  imports: [CommonModule, FormsModule, FormBuilderComponent, MonitorComponent, MlAnalyticsComponent],
   template: `
     <div class="flex h-[calc(100vh-4rem)] bg-premium text-slate-100 relative overflow-hidden">
       <!-- Fondo con gradiente sutil -->
@@ -312,6 +313,11 @@ import { ClienteDTO } from '../../models/bpm.models';
           <!-- SECTION: MONITOR -->
           @if (seccionActiva() === 'monitor') {
             <app-monitor></app-monitor>
+          }
+
+          <!-- SECTION: ANALYTICS ML -->
+          @if (seccionActiva() === 'analytics') {
+            <app-ml-analytics></app-ml-analytics>
           }
 
           <!-- SECTION: CLIENTES -->
@@ -735,7 +741,7 @@ import { ClienteDTO } from '../../models/bpm.models';
 })
 export class AdminComponent implements OnInit {
   private sanitizer = inject(DomSanitizer);
-  seccionActiva = signal<'monitor' | 'tenants' | 'usuarios' | 'audit' | 'cargos' | 'departamentos' | 'formularios' | 'clientes'>('monitor');
+  seccionActiva = signal<'monitor' | 'tenants' | 'usuarios' | 'audit' | 'cargos' | 'departamentos' | 'formularios' | 'clientes' | 'analytics'>('monitor');
   
   getSafeIcon(svg: string): SafeHtml {
     return this.sanitizer.bypassSecurityTrustHtml(svg);
@@ -743,6 +749,7 @@ export class AdminComponent implements OnInit {
 
   secciones = [
     { key: 'monitor', label: 'Monitor de Procesos', svg: 'M3 3v18h18M19 9l-5 5-4-4-3 3' },
+    { key: 'analytics', label: 'Analytics ML', svg: 'M12 20V10M18 20V4M6 20v-4' },
     { key: 'formularios', label: 'Formularios', svg: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6' },
     { key: 'usuarios', label: 'Usuarios', svg: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75' },
     { key: 'departamentos', label: 'Departamentos', svg: 'M21 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7 M21 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2 M21 7h-6.5L12 3H5v4z' },
@@ -787,10 +794,23 @@ export class AdminComponent implements OnInit {
     this.route.queryParams.subscribe(params => {
       console.log('🔍 AdminComponent: QueryParams detectados:', params);
       const tab = params['tab'];
-      if (tab && ['monitor', 'tenants', 'usuarios', 'audit', 'cargos', 'departamentos', 'formularios', 'clientes'].includes(tab)) {
+      if (tab && ['monitor', 'analytics', 'tenants', 'usuarios', 'audit', 'cargos', 'departamentos', 'formularios', 'clientes'].includes(tab)) {
         console.log('🎯 AdminComponent: Cambiando a pestaña:', tab);
         this.seccionActiva.set(tab as any);
         this.refreshData();
+      }
+
+      // Procesar acciones especiales lanzadas desde el chatbot
+      const action = params['action'];
+      if (action === 'new') {
+        setTimeout(() => {
+          if (tab === 'clientes') this.abrirCrearCliente();
+          else if (tab === 'usuarios') this.abrirCrear();
+          else if (tab === 'departamentos') this.abrirCrearDepto();
+          else if (tab === 'cargos') this.abrirCrearCargo();
+        }, 100);
+      } else if (action === 'edit' && tab === 'tenants') {
+        setTimeout(() => this.abrirEditarTenant(), 100);
       }
     });
 
@@ -841,6 +861,7 @@ export class AdminComponent implements OnInit {
       departamentos: 'Estructura Organizacional', 
       formularios: 'Repositorio de Formularios',
       monitor: 'Monitor de Procesos',
+      analytics: 'Analytics y Predicciones ML',
       clientes: 'Base de Datos de Clientes'
     };
     return map[this.seccionActiva()] || 'Panel de Control';
@@ -855,6 +876,7 @@ export class AdminComponent implements OnInit {
       departamentos: 'Gestiona las unidades operativas y áreas funcionales.', 
       formularios: 'Biblioteca de estructuras de datos para procesos de negocio.',
       monitor: 'Vista en tiempo real del estado de los trámites y cuellos de botella.',
+      analytics: 'Métricas, predicciones e insights de IA basados en datos históricos.',
       clientes: 'Gestiona la información de contacto y legal de tus clientes.'
     };
     return map[this.seccionActiva()] || 'Administración central de la plataforma.';

@@ -39,7 +39,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   readonly LW = 270;   // lane width
   readonly NW = 210;   // node width
   readonly NH = 60;    // node height
-  readonly NG = 56;    // node gap
+  readonly NG = 80;    // node gap (increased for better auto-layout spacing)
   readonly TOP = 100;  // top offset (below lane header + toolbar)
 
   // ── Route ──
@@ -338,10 +338,15 @@ export class DesignerComponent implements OnInit, OnDestroy {
       next: (fresh) => {
         this.sel = JSON.parse(JSON.stringify(fresh));
         this.nodoSeleccionado = null;
-        this.colabSvc.notificarEdicionNodo(null); // Limpiar mi seleccion
+        this.colabSvc.notificarEdicionNodo(null);
         this.transicionSeleccionada = null;
         this.calleSeleccionada = null;
         this.generateLayout();
+        
+        // Inicializar historial con el estado fresco
+        this.historial = [];
+        this.historialIdx = -1;
+        this.pushHistorial();
       },
       error: () => {
         // Fallback to cached version
@@ -966,15 +971,57 @@ export class DesignerComponent implements OnInit, OnDestroy {
   resetAnchors(): void {
     if (!this.sel) return;
     this.pushHistorial();
+
+    // 1. Mejorar el enrutamiento visual (curvas suaves bezier)
     this.sel.transiciones.forEach(t => {
       t.origenAnchor = 'auto';
       t.destinoAnchor = 'auto';
-      t.enrutamiento = 'ortogonal';
+      t.enrutamiento = 'bezier';
     });
+
+    // 2. Calcular profundidad topológica de cada nodo
+    const depths = new Map<string, number>();
+    const calcDepth = (nodeId: string, currentDepth: number, visited: Set<string>) => {
+      if (visited.has(nodeId)) return; // Evitar ciclos infinitos
+      visited.add(nodeId);
+      
+      const existing = depths.get(nodeId) || 0;
+      if (currentDepth > existing) {
+        depths.set(nodeId, currentDepth);
+      }
+      
+      const outgoing = this.sel!.transiciones.filter(t => t.origenId === nodeId);
+      outgoing.forEach(t => calcDepth(t.destinoId, currentDepth + 1, new Set(visited)));
+    };
+
+    const allNodes = this.sel.calles.flatMap(c => c.actividades);
+    const roots = allNodes.filter(n => !this.sel!.transiciones.some(t => t.destinoId === n.id));
+    roots.forEach(r => calcDepth(r.id, 0, new Set()));
+
+    // 3. Ordenar nodos en sus calles y resetear posiciones para forzar snap de generateLayout()
+    this.sel.calles.forEach(c => {
+      c.actividades.sort((a, b) => {
+        // Asegurar que Inicio vaya siempre arriba y Fin abajo
+        if (a.tipo === 'INICIO') return -1;
+        if (b.tipo === 'INICIO') return 1;
+        if (a.tipo === 'FIN') return 1;
+        if (b.tipo === 'FIN') return -1;
+        
+        const da = depths.get(a.id) || 0;
+        const db = depths.get(b.id) || 0;
+        return da - db;
+      });
+
+      c.actividades.forEach(a => {
+        a.posX = undefined;
+        a.posY = undefined;
+      });
+    });
+
     this.generateLayout();
     this.broadcastPolicyState();
     this.triggerAutoSave();
-    this.showToast('Conexiones optimizadas', 'success');
+    this.showToast('Diagrama auto-acomodado y optimizado', 'success');
   }
 
   // ── CRUD: Policy ──
@@ -1037,13 +1084,16 @@ export class DesignerComponent implements OnInit, OnDestroy {
   // ── History (Undo/Redo) ──
   pushHistorial(): void {
     if (!this.sel || this.sel.estaActiva) return;
+    // Si estamos navegando el historial y hacemos un cambio, descartamos el 'futuro'
     if (this.historialIdx < this.historial.length - 1) {
       this.historial = this.historial.slice(0, this.historialIdx + 1);
     }
-    const snapshot = JSON.parse(JSON.stringify(this.sel));
-    this.historial.push(snapshot);
-    if (this.historial.length > 50) this.historial.shift();
-    else this.historialIdx++;
+    // Guardar copia profunda del estado actual
+    this.historial.push(JSON.parse(JSON.stringify(this.sel)));
+    if (this.historial.length > 50) {
+      this.historial.shift();
+    }
+    this.historialIdx = this.historial.length - 1;
   }
 
   undo(): void {
@@ -1496,7 +1546,8 @@ export class DesignerComponent implements OnInit, OnDestroy {
       (text, isFinal) => {
         this.aiInputText = text;
         if (isFinal) {
-          this.isAiListening = false;
+          // Detenemos el motor de voz correctamente y actualizamos el botón
+          this.stopAiListening();
           if (this.aiDirectSend) {
             this.enviarInstruccionAi();
           }
@@ -1505,11 +1556,13 @@ export class DesignerComponent implements OnInit, OnDestroy {
       },
       (err) => {
         console.error('Error de voz:', err);
-        this.isAiListening = false;
+        // También detener el motor ante un error
+        this.stopAiListening();
         this.showToast('Error de reconocimiento de voz', 'error');
         this.cdr.detectChanges();
       },
       () => {
+        // onEnd: asegurar que el estado del botón sea consistente
         this.isAiListening = false;
         this.cdr.detectChanges();
       }
@@ -1527,19 +1580,32 @@ export class DesignerComponent implements OnInit, OnDestroy {
     const instruccion = this.aiInputText;
     this.aiInputText = '';
 
-    this.aiSvc.ejecutarComando(this.sel.id, instruccion, this.sel).subscribe({
+    const todasActividades = this.getAllActividades();
+    const contextoLimpio = {
+      nodos: this.sel.calles.flatMap((c: any) => c.actividades.map((a: any) => ({ nombre: a.nombre, tipo: a.tipo, calleNombre: c.nombre }))),
+      conexiones: this.sel.transiciones.map((c: any) => {
+        const o = todasActividades.find((n: any) => n.id === c.origenId);
+        const d = todasActividades.find((n: any) => n.id === c.destinoId);
+        return { origen: o ? o.nombre : c.origenId, destino: d ? d.nombre : c.destinoId };
+      }),
+      calles: this.sel.calles.map((c: any) => ({ nombre: c.nombre }))
+    };
+
+    this.aiSvc.ejecutarComando(this.sel.id, instruccion, contextoLimpio).subscribe({
       next: (res: AiResponse) => {
+        console.log('[AiAssistant] Respuesta AI:', res);
         this.isAiProcessing = false;
         this.showToast('AI: ' + res.explicacion, 'info');
         this.aiSvc.hablar(res.explicacion);
         
         // Ejecutar las acciones
         if (res.acciones && res.acciones.length > 0) {
-          this.pushHistorial();
-          
+          console.log('[AiAssistant] Ejecutando acciones:', res.acciones);
           for (const acc of res.acciones) {
             this.ejecutarAccionAi(acc);
           }
+          // Guardar en el historial DESPUÉS de aplicar todas las acciones de la IA
+          this.pushHistorial();
           
           this.generateLayout();
           this.triggerAutoSave();
@@ -1663,8 +1729,8 @@ export class DesignerComponent implements OnInit, OnDestroy {
           break;
         }
         case 'MOVER_NODO': {
-          const nName = (acc.params.nombreNodo as string || '').toLowerCase().trim();
-          const targetLaneName = (acc.params.nuevaCalleNombre as string || '').toLowerCase().trim();
+          const nName = (acc.params.nombreNodo || acc.params.nombre || '').toString().toLowerCase().trim();
+          const targetLaneName = (acc.params.nuevaCalleNombre || acc.params.nuevaCalleName || acc.params.calleNombre || '').toString().toLowerCase().trim();
           if (!nName || !targetLaneName) break;
 
           let sourceNode: Actividad | null = null;
@@ -1685,10 +1751,18 @@ export class DesignerComponent implements OnInit, OnDestroy {
             const targetLaneIdx = sel.calles.findIndex(c => c.nombre.toLowerCase().includes(targetLaneName));
             if (targetLaneIdx >= 0 && targetLaneIdx !== sourceLaneIdx) {
               sel.calles[sourceLaneIdx].actividades.splice(nodeIdx, 1);
+              // Forzar que el nodo se reposicione automáticamente en la nueva calle
               sourceNode.posX = undefined;
               sourceNode.posY = undefined;
               sel.calles[targetLaneIdx].actividades.push(sourceNode);
+              console.log(`[AiAssistant] Nodo '${sourceNode.nombre}' movido de '${sel.calles[sourceLaneIdx].nombre}' a '${sel.calles[targetLaneIdx].nombre}'`);
+            } else if (targetLaneIdx === sourceLaneIdx) {
+              console.warn(`[AiAssistant] El nodo ya está en la calle '${targetLaneName}'`);
+            } else {
+              console.error(`[AiAssistant] No se encontró la calle destino: '${targetLaneName}'`);
             }
+          } else {
+            console.error(`[AiAssistant] No se encontró el nodo a mover: '${nName}'`);
           }
           break;
         }
