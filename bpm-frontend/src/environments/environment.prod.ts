@@ -1,6 +1,6 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://BACKEND_CLOUD_RUN_URL/api',
-  aiServiceUrl: 'https://AI_CLOUD_RUN_URL/api/ai',
-  wsUrl: 'wss://BACKEND_CLOUD_RUN_URL/ws-bpm'
+  apiUrl: 'https://bpm-backend-238791343286.us-central1.run.app/api',
+  aiServiceUrl: 'https://bpm-ai-service-238791343286.us-central1.run.app/api/ai',
+  wsUrl: 'wss://bpm-backend-238791343286.us-central1.run.app/ws-bpm'
 };

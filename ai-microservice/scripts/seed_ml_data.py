@@ -1,28 +1,15 @@
 """
-seed_ml_data.py — Simulador Corporativo de Datos Históricos para ML
-═══════════════════════════════════════════════════════════════════
-
-Genera ~1000+ registros de actividades simulando dos procesos corporativos reales:
-  1. "Instalación de Medidor Eléctrico" (CRE - Cooperativa Eléctrica)
-  2. "Aprobación de Crédito Personal" (Banco Nacional de Desarrollo)
-
-ANOMALÍAS MATEMÁTICAS INTENCIONALES:
-  - Legal/Riesgos: 4x más lento que el promedio → CRITICAL bottleneck
-  - Atención/Ventanilla: 2x más lento (spike 20%) → WARNING bottleneck
-  - Trámites después de las 14:00: 1.5x más lentos → Feature temporal para RF
-
-Ejecutar: cd ai-microservice && python scripts/seed_ml_data.py
+seed_ml_data.py - Simulador Corporativo de Datos Historicos para ML
 """
 
 import os
 import sys
 import random
-import uuid
 from datetime import datetime, timedelta
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
-# ── Cargar .env del directorio padre ──────────────────────────────
+# --- Cargar .env ---
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(parent_dir, '.env'))
 
@@ -30,144 +17,87 @@ MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("MONGO_DB_NAME", "bpm_inteligente")
 
 if not MONGO_URI:
-    print("❌ Error: MONGO_URI no encontrada en .env")
+    print("Error: MONGO_URI no encontrada en .env")
     sys.exit(1)
 
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
-collection = db["registro_actividades"]
+collection = db["registros_actividad"]
 
-# ═══════════════════════════════════════════════════════════════════
-# CONFIGURACIÓN DE PROCESOS
-# ═══════════════════════════════════════════════════════════════════
+# --- CONFIGURACION ---
+TENANT_ID = "f68512a1-95e3-4133-9571-84147ea8e10b"
 
-# IDs reales de las políticas LIVE en la BD
-POLITICA_CRE = "88dd3ebc-8f37-4124-a1ce-6ecc8e401cee"         # Instalación de Medidor
-POLITICA_BANCO = "2b5f0bd0-345a-45e1-9f6a-36c521359c64"       # Aprobación de Crédito
-
-# ── Proceso 1: Instalación de Medidor Eléctrico (CRE) ────────────
 PROCESO_CRE = {
-    "nombre": "Instalación de Medidor Eléctrico",
-    "politicaId": POLITICA_CRE,
+    "nombre": "Instalacion de Medidor Electrico",
+    "politicaId": "88dd3ebc-8f37-4124-a1ce-6ecc8e401cee",
+    "tenantId": TENANT_ID,
     "actividades": [
-        # (id, nombre, departamento, base_min, std_dev)
-        ("cre_1", "Recepción de Solicitud",        "Atención",     15,  3),
-        ("cre_2", "Verificación Documental",        "Operaciones",  25,  5),
-        ("cre_3", "Revisión Legal del Predio",      "Legal",       240, 40),  # ⚠️ BOTTLENECK CRITICAL: 4x
-        ("cre_4", "Inspección Técnica en Campo",    "IT",           45, 10),
-        ("cre_5", "Aprobación de Presupuesto",      "Gerencia",     30,  8),
-        ("cre_6", "Instalación Física del Medidor", "Operaciones",  60, 15),
-        ("cre_7", "Registro en Sistema Comercial",  "Atención",     20,  4),
+        ("09f36993-c72f-453b-80c2-4c3b3a222af9", "Recepcion de Solicitud", "de444444-4444-4444-4444-444444444444", 15, 3),
+        ("625b7022-5200-4a5a-9114-5ef0da95f596", "Inspeccion de Terreno", "de333333-3333-3333-3333-333333333333", 45, 10),
+        ("ae09104b-27ff-49af-a5bb-660a161fa8db", "Evaluacion Tecnica", "de333333-3333-3333-3333-333333333333", 240, 40),
+        ("aee7e856-3f7e-41f1-ba7c-7a936980ec32", "Calculo de Presupuesto", "de222222-2222-2222-2222-222222222222", 30, 8),
+        ("e03ee9a7-6b84-455d-94b2-34265319a467", "Emision de Factura", "de222222-2222-2222-2222-222222222222", 20, 4),
+        ("a43837e5-5111-421b-8433-59c608efd0db", "Entrega de Medidor", "de444444-4444-4444-4444-444444444444", 10, 2),
     ]
 }
 
-# ── Proceso 2: Aprobación de Crédito Personal (Banco) ────────────
 PROCESO_BANCO = {
-    "nombre": "Aprobación de Crédito Personal",
-    "politicaId": POLITICA_BANCO,
+    "nombre": "Aprobacion de Credito Personal",
+    "politicaId": "2b5f0bd0-345a-45e1-9f6a-36c521359c64",
+    "tenantId": "04bd9c22-5a50-4480-9978-dd9784b75a74",
     "actividades": [
-        ("bnk_1", "Recepción de Solicitud de Crédito", "Comercial",   20,  4),
-        ("bnk_2", "Verificación de Identidad",          "Comercial",   15,  3),
-        ("bnk_3", "Evaluación de Riesgo Crediticio",    "Riesgos",    200, 35),  # ⚠️ BOTTLENECK CRITICAL: 4x
-        ("bnk_4", "Validación de Garantías",            "Riesgos",    180, 30),  # ⚠️ BOTTLENECK CRITICAL: 4x
-        ("bnk_5", "Aprobación del Comité de Crédito",   "Gerencia",    40, 10),
-        ("bnk_6", "Firma de Contrato",                  "Comercial",   35,  8),
-        ("bnk_7", "Desembolso de Fondos",               "Comercial",   10,  2),
+        ("7051d789-7473-4800-8ce6-51591969e0f9", "Recepcion de Solicitud", "69ed6ed50fbd072b82a3b586", 20, 4),
+        ("2ae38899-8b7d-4147-a5e6-6a82d931211f", "Verificacion Riesgo", "69ed6ed50fbd072b82a3b587", 200, 35),
+        ("2e9c007b-6ea8-4581-98af-65de6d4fc33e", "Evaluacion Score", "69ed6ed50fbd072b82a3b587", 180, 30),
+        ("1ab5405d-e926-45fa-acf4-944ed94d8892", "Aprobacion Comite", "69ed6ed50fbd072b82a3b587", 40, 10),
+        ("e885b3a1-ca32-4f24-9180-815852ca4370", "Generacion Contrato", "69ed6ed50fbd072b82a3b586", 35, 8),
+        ("1341c8ac-f257-4cde-8183-58a9c609782e", "Desembolso Fondos", "69ed6ed50fbd072b82a3b586", 15, 3),
+        ("85eb3494-0740-4be7-901f-72b38112f202", "Entrega Contrato", "69ed6ed50fbd072b82a3b586", 10, 2),
     ]
 }
 
-
-# ═══════════════════════════════════════════════════════════════════
-# GENERADOR
-# ═══════════════════════════════════════════════════════════════════
-
-def generar_registros(proceso: dict, num_tramites: int, base_date: datetime) -> list:
-    """Genera registros históricos para un proceso dado."""
+def generar_registros(proceso, num_tramites, base_date):
     registros = []
-
     for t in range(1, num_tramites + 1):
         tramite_id = f"tramite_{proceso['politicaId'][:8]}_{t}"
-        
-        # Variar la hora de inicio: 50% mañana (8-13h), 50% tarde (14-18h)
         hora_inicio = random.choice(range(8, 14)) if random.random() < 0.5 else random.choice(range(14, 19))
-        current_time = base_date + timedelta(
-            days=random.randint(0, 89),  # Distribuir en 90 días
-            hours=hora_inicio,
-            minutes=random.randint(0, 59)
-        )
-
-        # Factor temporal: trámites de la tarde son 1.5x más lentos
+        current_time = base_date + timedelta(days=random.randint(0, 89), hours=hora_inicio, minutes=random.randint(0, 59))
         factor_tarde = 1.5 if hora_inicio >= 14 else 1.0
-
-        for act_id, act_nombre, dept, base_min, std_dev in proceso["actividades"]:
-            # Duración base con variación gaussiana
-            duracion_min = max(1, random.gauss(base_min, std_dev))
-
-            # Aplicar factor temporal
-            duracion_min *= factor_tarde
-
-            # ── Anomalía: spike aleatorio del 20% en Atención/Comercial ──
-            if dept in ("Atención", "Comercial") and random.random() < 0.20:
-                duracion_min += random.uniform(120, 240)  # +2 a 4 horas extra
-
-            # ── Anomalía: Riesgos/Legal ocasionalmente AÚN PEOR ──
-            if dept in ("Legal", "Riesgos") and random.random() < 0.15:
-                duracion_min += random.uniform(300, 600)  # +5 a 10 horas extra
-
+        for act_id, act_nombre, dept_id, base_min, std_dev in proceso["actividades"]:
+            duracion_min = max(1, random.gauss(base_min, std_dev)) * factor_tarde
+            if random.random() < 0.15:
+                duracion_min += random.uniform(100, 300)
             asignado = current_time
             completado = current_time + timedelta(minutes=duracion_min)
-
             registros.append({
-                "actividadId": act_id,
-                "actividadNombre": act_nombre,
-                "departamentoId": dept,
                 "tramiteId": tramite_id,
-                "politicaId": proceso["politicaId"],
+                "actividadId": act_id,
+                "departamentoId": dept_id,
+                "tenantId": proceso["tenantId"],
                 "estado": "HECHO",
+                "ejecutadoPor": "Simulador ML",
+                "ejecutadoPorId": "system-sim-001",
                 "asignadoEn": asignado,
                 "completadoEn": completado,
-                "isSeedData": True,  # Marcador para limpieza segura
+                "isSeedData": True,
+                "_class": "com.bpm.inteligente.domain.RegistroActividad"
             })
-
-            # Avanzar el reloj: pausa entre actividades (5 a 90 min)
-            current_time = completado + timedelta(minutes=random.randint(5, 90))
-
+            current_time = completado + timedelta(minutes=random.randint(5, 60))
     return registros
 
-
-# ═══════════════════════════════════════════════════════════════════
-# EJECUCIÓN
-# ═══════════════════════════════════════════════════════════════════
-
 if __name__ == "__main__":
-    print("═" * 60)
-    print("  BPM Inteligente — Simulador Corporativo de Datos ML")
-    print("═" * 60)
-
-    # 1. Limpiar datos de semilla anteriores (NO toca datos reales)
+    print("=" * 60)
+    print("  BPM Inteligente - Seed Data Realista (registros_actividad)")
+    print("=" * 60)
     deleted = collection.delete_many({"isSeedData": True})
-    print(f"\n🧹 Limpiados {deleted.deleted_count} registros seed anteriores.")
-
-    # 2. Generar datos para ambos procesos
+    print(f"Limpiados {deleted.deleted_count} registros seed anteriores.")
     base_date = datetime.utcnow() - timedelta(days=90)
-
-    print(f"\n📊 Generando datos para: {PROCESO_CRE['nombre']}...")
-    registros_cre = generar_registros(PROCESO_CRE, num_tramites=75, base_date=base_date)
-    print(f"   → {len(registros_cre)} registros ({75} trámites × {len(PROCESO_CRE['actividades'])} actividades)")
-
-    print(f"\n📊 Generando datos para: {PROCESO_BANCO['nombre']}...")
-    registros_banco = generar_registros(PROCESO_BANCO, num_tramites=75, base_date=base_date)
-    print(f"   → {len(registros_banco)} registros ({75} trámites × {len(PROCESO_BANCO['actividades'])} actividades)")
-
-    # 3. Insertar en MongoDB
-    todos = registros_cre + registros_banco
-    result = collection.insert_many(todos)
-    print(f"\n✅ ¡Éxito! Se insertaron {len(result.inserted_ids)} registros históricos simulados.")
-
-    # 4. Mostrar resumen estadístico
-    print("\n📈 Resumen de anomalías plantadas:")
-    print("   • Legal/Riesgos: ~240 min promedio (4x el promedio global de ~50 min) → CRITICAL")
-    print("   • Atención/Comercial: spike del 20% con +2-4h extra → WARNING")
-    print("   • Trámites de tarde (>14h): 1.5x más lentos → Feature temporal RF")
-    print(f"\n🎯 Total en colección 'registro_actividades': {collection.count_documents({})}")
-    print("\n💡 Abre el Dashboard ML Analytics en el frontend para ver los resultados.")
+    reg1 = generar_registros(PROCESO_CRE, 75, base_date)
+    reg2 = generar_registros(PROCESO_BANCO, 75, base_date)
+    todos = reg1 + reg2
+    if todos:
+        collection.insert_many(todos)
+        print(f"Insertados {len(todos)} registros en 'registros_actividad'.")
+        print(f"Total actual: {collection.count_documents({})}")
+    db["registro_actividades"].drop()
+    print("Eliminada coleccion obsoleta 'registro_actividades'.")

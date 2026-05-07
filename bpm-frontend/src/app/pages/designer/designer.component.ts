@@ -138,6 +138,13 @@ export class DesignerComponent implements OnInit, OnDestroy {
   // ── Modals ──
   mostrarModalCrear = false;
   errorCrear = '';
+
+  // --- Optimizaciones de Rendimiento ---
+  private nodeToLaneMap = new Map<string, number>(); // ActId -> LaneIndex
+  private actividadesMap = new Map<string, Actividad>(); // ActId -> Actividad
+  private cachedConnPaths: any[] = [];
+  private needsConnRefresh = true;
+  private lastConnRefresh = 0;
   nuevaPolitica = { nombre: '', descripcion: '' };
   mostrarModalAddCalle = false;
   nuevaCalleNombre = '';
@@ -189,6 +196,20 @@ export class DesignerComponent implements OnInit, OnDestroy {
       if (msg) this.procesarEventoRemoto(msg);
     });
 
+    // Escuchar movimientos de alta frecuencia fuera de NgZone
+    this.colabSvc.highFreqUpdates$.pipe(
+      throttleTime(25) // Máximo 40fps para actualizaciones remotas de posición
+    ).subscribe(msg => {
+      if (msg.type === 'NODE_MOVED' && msg.payload) {
+        const data = msg.payload as { id: string; x: number; y: number };
+        if (this.nodePositions[data.id]) {
+          this.nodePositions[data.id] = { x: data.x, y: data.y };
+          this.needsConnRefresh = true;
+          this.cdr.detectChanges();
+        }
+      }
+    });
+
     // Escuchar cambios en la lista de colaboradores para liberar nodos bloqueados por usuarios que se desconectan
     effect(() => {
       const colaboradoresActivos = this.colabSvc.colaboradores();
@@ -210,9 +231,14 @@ export class DesignerComponent implements OnInit, OnDestroy {
     }, { allowSignalWrites: true });
   }
 
+  private isRemoteUpdate = false;
+
   procesarEventoRemoto(msg: SocketMessageDTO) {
     // Ignorar mis propios mensajes retransmitidos
     if (msg.colaborador.id === this.auth.usuario()?.id) return;
+
+    this.isRemoteUpdate = true;
+    try {
 
     if (msg.type === 'NODE_MOVED' && msg.payload) {
       // Actualizar posición visual instantáneamente sin disparar guardado
@@ -272,9 +298,14 @@ export class DesignerComponent implements OnInit, OnDestroy {
         this.showToast(`${msg.colaborador.nombre} actualizó el diagrama`, 'success');
       }
     }
-
-    // Forzar render de Angular para movimiento fluido en vivo (~60fps)
-    this.cdr.detectChanges();
+    } catch (e) {
+      console.error('Error procesando evento remoto:', e);
+    } finally {
+      // Retrasar el flag para absorber eventos ngModelChange disparados por la reconstrucción del DOM
+      setTimeout(() => {
+        this.isRemoteUpdate = false;
+      }, 300);
+    }
   }
 
   ngOnInit(): void {
@@ -365,6 +396,9 @@ export class DesignerComponent implements OnInit, OnDestroy {
   generateLayout(): void {
     if (!this.sel) return;
     this.nodePositions = {};
+    this.nodeToLaneMap.clear();
+    this.actividadesMap.clear();
+
     for (let ci = 0; ci < this.sel.calles.length; ci++) {
       const laneX = this.getLaneX(ci);
       const laneW = this.sel.calles[ci].ancho || this.LW;
@@ -373,10 +407,12 @@ export class DesignerComponent implements OnInit, OnDestroy {
         const act = this.sel.calles[ci].actividades[ai];
         const w = act.ancho || this.NW;
         
+        this.nodeToLaneMap.set(act.id, ci);
+        this.actividadesMap.set(act.id, act);
+
         if (act.posX != null && act.posY != null) {
           this.nodePositions[act.id] = { x: act.posX, y: act.posY };
         } else {
-          // Default layout: column centered in lane, rows based on index
           const initialX = laneX + (laneW - w) / 2;
           const initialY = this.TOP + ai * (this.NH + this.NG);
           this.nodePositions[act.id] = { x: initialX, y: initialY };
@@ -385,6 +421,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
         }
       }
     }
+    this.needsConnRefresh = true;
   }
 
   getNodoPos(actId: string): { x: number; y: number } {
@@ -477,6 +514,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
   // ── Auto-change callback (called from template via ngModelChange) ──
   onNodeChange(): void {
+    if (this.isRemoteUpdate) return;
     if (this.nodoSeleccionado) {
       this.generateLayout();
       this.broadcastPolicyState();
@@ -484,6 +522,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
     }
   }
   onNodeLaneChange(newCi: number): void {
+    if (this.isRemoteUpdate) return;
     if (newCi !== this.editCalleIdx) {
       this.moveNodeToLane(newCi);
     }
@@ -491,6 +530,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
     this.triggerAutoSave();
   }
   onTransChange(): void {
+    if (this.isRemoteUpdate) return;
     this.broadcastPolicyState();
     this.triggerAutoSave();
   }
@@ -606,7 +646,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges(); // IMPORTANTE: Forzar actualización de líneas de conexión durante el arrastre
 
     const now = Date.now();
-    if (now - this.lastSyncTime > 16) {
+    if (now - this.lastSyncTime > 16 && !this.isRemoteUpdate) {
       this.colabSvc.notificarMovimientoNodo(this.dragNodeId, snappedX, snappedY);
       this.lastSyncTime = now;
     }
@@ -801,7 +841,17 @@ export class DesignerComponent implements OnInit, OnDestroy {
   // ── SVG Connections ──
   getConnectionPaths(): any[] {
     if (!this.sel) return [];
-    return this.sel.transiciones.map(t => {
+
+    // --- Optimizador de Rendimiento: Caché de Caminos de Conexión ---
+    const now = Date.now();
+    const isInteracting = this.isDragging || this.isDraggingConn || this.isResizingLane;
+    
+    // Si no hay cambios, no estamos interactuando y pasó poco tiempo, devolver caché
+    if (!this.needsConnRefresh && !isInteracting && (now - this.lastConnRefresh < 50)) {
+      return this.cachedConnPaths;
+    }
+
+    this.cachedConnPaths = this.sel.transiciones.map(t => {
       // Force 'auto' behavior visually if dragging the related nodes
       const isSourceDragging = this.isDragging && this.dragNodeId === t.origenId;
       const isTargetDragging = this.isDragging && this.dragNodeId === t.destinoId;
@@ -885,13 +935,17 @@ export class DesignerComponent implements OnInit, OnDestroy {
         color: t.color || '#475569', dash, width: t.grosor || 2, trans: t,
       };
     }).filter(Boolean);
+
+    this.needsConnRefresh = false;
+    this.lastConnRefresh = now;
+    return this.cachedConnPaths;
   }
 
   private calculateBestAnchor(sourceId: string, targetId: string, isDest: boolean): 'top' | 'bottom' | 'left' | 'right' {
     const sPos = this.getNodoPos(sourceId);
     const tPos = this.getNodoPos(targetId);
-    const sNode = this.getAllActividades().find(a => a.id === sourceId);
-    const tNode = this.getAllActividades().find(a => a.id === targetId);
+    const sNode = this.actividadesMap.get(sourceId);
+    const tNode = this.actividadesMap.get(targetId);
     if (!sPos || !tPos || !sNode || !tNode) return isDest ? 'top' : 'bottom';
 
     const sCenterX = sPos.x + (sNode.ancho || this.NW) / 2;
@@ -902,26 +956,21 @@ export class DesignerComponent implements OnInit, OnDestroy {
     const dx = tCenterX - sCenterX;
     const dy = tCenterY - sCenterY;
 
-    // Smart Anchor Selection:
-    // Si están en la misma calle (vertical), preferimos arriba/abajo.
-    // Si están en calles distintas (horizontal), preferimos izquierda/derecha.
-    const sLane = this.sel?.calles.find(c => c.actividades.some(a => a.id === sourceId));
-    const tLane = this.sel?.calles.find(c => c.actividades.some(a => a.id === targetId));
-    const sameLane = !!sLane && !!tLane && sLane.id === tLane.id;
-    const horizontalBias = sameLane ? 0.6 : 2.5; // Bias mucho más fuerte si son carriles distintos
+    // Smart Anchor Selection: O(1) usando el mapa de calles
+    const sLaneIdx = this.nodeToLaneMap.get(sourceId);
+    const tLaneIdx = this.nodeToLaneMap.get(targetId);
+    const sameLane = sLaneIdx != null && tLaneIdx != null && sLaneIdx === tLaneIdx;
+    const horizontalBias = sameLane ? 0.6 : 2.5; 
     
-    // Si están en diferentes calles y no hay una distancia vertical extrema, forzar izquierda/derecha
     if (!sameLane && Math.abs(dy) < 300) {
        if (isDest) return dx > 0 ? 'left' : 'right';
        return dx > 0 ? 'right' : 'left';
     }
     
     if (Math.abs(dx) * horizontalBias > Math.abs(dy)) {
-      // Horizontal preference
       if (isDest) return dx > 0 ? 'left' : 'right';
       return dx > 0 ? 'right' : 'left';
     } else {
-      // Vertical preference
       if (isDest) return dy > 0 ? 'top' : 'bottom';
       return dy > 0 ? 'bottom' : 'top';
     }
@@ -929,12 +978,11 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
   findNodeAnchor(actId: string, anchor?: 'top' | 'bottom' | 'left' | 'right', isDest = false): { x: number; y: number } | null {
     if (!this.sel) return null;
-    for (const c of this.sel.calles) {
-      const a = c.actividades.find(act => act.id === actId);
-      if (a) {
-        const pos = this.getNodoPos(actId);
-        const w = a.ancho || this.NW;
-        const h = a.alto || this.NH;
+    const a = this.actividadesMap.get(actId);
+    if (a) {
+      const pos = this.getNodoPos(actId);
+      const w = a.ancho || this.NW;
+      const h = a.alto || this.NH;
         const type = anchor || (isDest ? 'top' : 'bottom');
         
         // Small padding to ensure arrow touches boundary but doesn't overlap border too much
@@ -1121,13 +1169,19 @@ export class DesignerComponent implements OnInit, OnDestroy {
     this.showToast('Estado restaurado', 'info');
   }
 
-  /** Difunde INMEDIATAMENTE el estado completo a todos los colaboradores.
-   *  Llamar en cada cambio estructural (lanes, colores, conexiones, etc.)
-   *  sin esperar al ciclo de auto-guardado. */
+  /** Difunde el estado completo a todos los colaboradores con un pequeño debounce
+   *  para evitar saturar el socket en cambios rápidos. */
+  private broadcastTimer: any = null;
   broadcastPolicyState(): void {
-    if (this.sel) {
-      this.colabSvc.notificarCambioCompleto(this.sel);
-    }
+    if (this.isRemoteUpdate) return; // NUNCA emitir si estamos aplicando un cambio remoto
+    if (!this.sel) return;
+
+    if (this.broadcastTimer) clearTimeout(this.broadcastTimer);
+    this.broadcastTimer = setTimeout(() => {
+      if (this.sel) {
+        this.colabSvc.notificarCambioCompleto(this.sel);
+      }
+    }, 150); // 150ms de gracia para acumular cambios rápidos
   }
 
   // ── Lane Reorder ──
@@ -1540,38 +1594,51 @@ export class DesignerComponent implements OnInit, OnDestroy {
     }
   }
 
-  startAiListening() {
+  isAiInitializing = false;
+
+  async startAiListening() {
+    if (this.isAiInitializing) return;
+    this.isAiInitializing = true;
     this.isAiListening = true;
-    this.aiSvc.empezarAEscuchar(
-      (text, isFinal) => {
-        this.aiInputText = text;
-        if (isFinal) {
-          // Detenemos el motor de voz correctamente y actualizamos el botón
-          this.stopAiListening();
-          if (this.aiDirectSend) {
-            this.enviarInstruccionAi();
+    
+    try {
+      await this.aiSvc.empezarAEscuchar(
+        (text, isFinal) => {
+          this.isAiInitializing = false;
+          this.aiInputText = text;
+          if (isFinal) {
+            this.stopAiListening();
+            if (this.aiDirectSend) {
+              this.enviarInstruccionAi();
+            }
           }
+          this.cdr.detectChanges();
+        },
+        (err) => {
+          console.error('Error de voz:', err);
+          this.isAiInitializing = false;
+          this.stopAiListening();
+          this.showToast('Error: ' + err, 'error');
+          this.cdr.detectChanges();
+        },
+        () => {
+          this.isAiInitializing = false;
+          this.isAiListening = false;
+          this.cdr.detectChanges();
         }
-        this.cdr.detectChanges();
-      },
-      (err) => {
-        console.error('Error de voz:', err);
-        // También detener el motor ante un error
-        this.stopAiListening();
-        this.showToast('Error de reconocimiento de voz', 'error');
-        this.cdr.detectChanges();
-      },
-      () => {
-        // onEnd: asegurar que el estado del botón sea consistente
-        this.isAiListening = false;
-        this.cdr.detectChanges();
-      }
-    );
+      );
+    } catch (e) {
+      this.isAiInitializing = false;
+      this.isAiListening = false;
+      this.cdr.detectChanges();
+    }
   }
 
   stopAiListening() {
+    if (this.isAiInitializing) return;
     this.aiSvc.detenerEscucha();
     this.isAiListening = false;
+    this.isAiInitializing = false;
   }
 
   enviarInstruccionAi() {

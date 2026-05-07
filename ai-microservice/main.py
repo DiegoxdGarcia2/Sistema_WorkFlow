@@ -56,6 +56,7 @@ for env_key in ("CORS_ORIGIN", "BACKEND_ORIGIN"):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
+    allow_origin_regex=r"https://.*\.run\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -485,29 +486,42 @@ from fastapi import Response
 @app.get("/api/ai/tts")
 async def text_to_speech(text: str, voice_id: Optional[str] = None):
     """
-    Convierte texto a voz usando ElevenLabs.
-    Retorna el flujo de audio MPEG.
+    Convierte texto a voz usando ElevenLabs. Si ElevenLabs falla (por restricciones de IP en Cloud Run),
+    realiza un fallback automático a edge-tts para mantener calidad premium sin costo.
     """
-    # Usar voz de env si no viene en el query param
     final_voice_id = voice_id or ELEVENLABS_VOICE_ID
-    if not el_client:
-        raise HTTPException(status_code=400, detail="ElevenLabs no configurado o sin API Key válida.")
     
+    if el_client:
+        try:
+            audio_iter = el_client.generate(
+                text=text,
+                voice=final_voice_id,
+                model="eleven_multilingual_v2"
+            )
+            audio_data = b"".join(audio_iter)
+            return Response(content=audio_data, media_type="audio/mpeg")
+        except Exception as e:
+            import logging
+            logging.error("Error en TTS ElevenLabs (fallback a edge-tts): %s", str(e))
+            # No levantar error, pasar al fallback
+            
+    # --- FALLBACK A EDGE-TTS (Voz neuronal de Microsoft, alta calidad y gratis) ---
     try:
-        # Generar audio
-        audio_iter = el_client.generate(
-            text=text,
-            voice=final_voice_id,
-            model="eleven_multilingual_v2"
-        )
+        import edge_tts
+        import io
+        # 'es-ES-ElviraNeural' o 'es-MX-DaliaNeural' son excelentes opciones
+        voice = "es-ES-ElviraNeural" 
+        communicate = edge_tts.Communicate(text, voice)
         
-        # Consumir el iterador para obtener los bytes
-        audio_data = b"".join(audio_iter)
-        
-        return Response(content=audio_data, media_type="audio/mpeg")
+        audio_data = bytearray()
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_data.extend(chunk["data"])
+                
+        return Response(content=bytes(audio_data), media_type="audio/mpeg")
     except Exception as e:
         import logging
-        logging.error("Error en TTS: %s", str(e))
+        logging.error("Error en TTS Edge: %s", str(e))
         raise HTTPException(status_code=500, detail=f"Error generando audio: {str(e)}")
 
 
@@ -544,5 +558,5 @@ async def speech_to_text(file: UploadFile = File(...)):
 # ═══════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("AI_SERVICE_PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    port = int(os.getenv("PORT", os.getenv("AI_SERVICE_PORT", 8000)))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)

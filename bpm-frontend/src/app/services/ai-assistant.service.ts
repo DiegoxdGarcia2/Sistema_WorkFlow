@@ -47,15 +47,16 @@ export class AiAssistantService {
   }
 
   // ── 2. Speech to Text (Voz a Texto) ──
-  empezarAEscuchar(onResult: (text: string, isFinal: boolean) => void, onError: (err: any) => void, onEnd: () => void): void {
-    if (!this.recognition) {
-      // Detección de Brave para mensaje específico
-      const isBrave = !!(navigator as any).brave && (navigator as any).brave.isBrave();
-      if (isBrave) {
-        onError('Brave deshabilita el reconocimiento de voz de Google por defecto. Debes habilitar "Google Services" en la configuración de Brave o usar Chrome.');
-      } else {
-        onError('El navegador no soporta reconocimiento de voz');
-      }
+  async empezarAEscuchar(onResult: (text: string, isFinal: boolean) => void, onError: (err: any) => void, onEnd: () => void): Promise<void> {
+    // Detectar Brave para evitar el cuelgue de la Web Speech API nativa
+    let isBrave = false;
+    try { 
+      isBrave = !!(navigator as any).brave && (await (navigator as any).brave.isBrave());
+    } catch (e) { isBrave = false; }
+
+    if (!this.recognition || isBrave) {
+      if (isBrave) console.log('[AiAssistant] Brave detectado: Usando Whisper directamente.');
+      await this.iniciarGrabacionWhisper(onResult, onError, onEnd);
       return;
     }
 
@@ -79,7 +80,7 @@ export class AiAssistantService {
       console.warn('[AiAssistant] Error de SpeechRecognition:', event.error);
       if (event.error === 'network' || event.error === 'not-allowed') {
         console.log('[AiAssistant] Fallback a Whisper (MediaRecorder)...');
-        this.iniciarGrabacionWhisper(onResult, onError, onEnd);
+        this.iniciarGrabacionWhisper(onResult, onError, onEnd).catch(e => onError(e));
         return; // No disparamos el error hacia arriba para que la UI no se rompa
       }
       this.isListening = false;
@@ -99,7 +100,7 @@ export class AiAssistantService {
       this.isListening = true;
     } catch(e) {
       console.warn('[AiAssistant] Error iniciando Web Speech API, intentando fallback...', e);
-      this.iniciarGrabacionWhisper(onResult, onError, onEnd);
+      this.iniciarGrabacionWhisper(onResult, onError, onEnd).catch(ex => onError(ex));
     }
   }
 
@@ -110,32 +111,76 @@ export class AiAssistantService {
   private onEndCallback: (() => void) | null = null;
   private onErrorCallback: ((err: any) => void) | null = null;
 
-  private iniciarGrabacionWhisper(onResult: (text: string, isFinal: boolean) => void, onError: (err: any) => void, onEnd: () => void) {
+  private iniciarGrabacionWhisper(onResult: (text: string, isFinal: boolean) => void, onError: (err: any) => void, onEnd: () => void): Promise<void> {
     this.onResultCallback = onResult;
     this.onEndCallback = onEnd;
     this.onErrorCallback = onError;
+    this.isListening = true; 
 
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-      this.mediaRecorder = new MediaRecorder(stream);
-      this.audioChunks = [];
-      
-      this.mediaRecorder.ondataavailable = e => {
-        if (e.data.size > 0) this.audioChunks.push(e.data);
-      };
+    return new Promise((resolve, reject) => {
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        this.mediaRecorder = new MediaRecorder(stream);
+        this.audioChunks = [];
+        
+        this.mediaRecorder.ondataavailable = e => {
+          if (e.data.size > 0) this.audioChunks.push(e.data);
+        };
 
-      this.mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
-        this.transcribirConWhisper(audioBlob);
-        stream.getTracks().forEach(track => track.stop()); // Apagar micrófono
-      };
+        this.mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+          this.transcribirConWhisper(audioBlob);
+          stream.getTracks().forEach(track => track.stop()); // Apagar micrófono
+          this.isListening = false;
+        };
 
-      this.mediaRecorder.start();
-      this.isListening = true;
-      // Enviamos un texto temporal a la UI para indicar que estamos grabando
-      onResult('Grabando audio (Brave/Fallback)...', false);
-    }).catch(err => {
-      this.isListening = false;
-      onError('Permiso de micrófono denegado para Whisper.');
+        this.mediaRecorder.start();
+        this.isListening = true;
+        onResult('Escuchando (Brave)... Hable ahora.', false);
+        
+        // --- Detector automático de silencio (VAD simple) ---
+        try {
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const source = audioContext.createMediaStreamSource(stream);
+          const analyser = audioContext.createAnalyser();
+          analyser.minDecibels = -50; // Umbral de silencio
+          source.connect(analyser);
+
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          let silenceStart = Date.now();
+          let hasSpoken = false;
+
+          const checkSilence = () => {
+            if (!this.mediaRecorder || this.mediaRecorder.state !== 'recording') {
+               audioContext.close().catch(() => {});
+               return;
+            }
+
+            analyser.getByteFrequencyData(dataArray);
+            const sum = dataArray.reduce((a, b) => a + b, 0);
+            
+            if (sum > 0) {
+              hasSpoken = true;
+              silenceStart = Date.now();
+            } else if (hasSpoken && Date.now() - silenceStart > 1800) {
+              // Si ya habló y hubo 1.8s de silencio, detenemos automáticamente
+              this.detenerEscucha();
+              audioContext.close().catch(() => {});
+              return;
+            }
+
+            requestAnimationFrame(checkSilence);
+          };
+          checkSilence();
+        } catch(err) {
+          console.warn('No se pudo inicializar detector de silencio:', err);
+        }
+        // ----------------------------------------------------
+
+        resolve();
+      }).catch(err => {
+        this.isListening = false;
+        reject('Permiso de micrófono denegado para Whisper.');
+      });
     });
   }
 
@@ -160,10 +205,12 @@ export class AiAssistantService {
   detenerEscucha(): void {
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       this.mediaRecorder.stop();
+      // El stream se apaga en el callback onstop de mediaRecorder
       this.mediaRecorder = null;
-      // isListening se apagará cuando termine Whisper
     } else if (this.recognition && this.isListening) {
-      this.recognition.stop();
+      try {
+        this.recognition.stop();
+      } catch (e) {}
       this.isListening = false;
     }
   }
@@ -174,12 +221,33 @@ export class AiAssistantService {
     
     const audio = new Audio(aiServiceTtsUrl);
     audio.play().catch(err => {
-      console.warn('[AiAssistant] ElevenLabs fallo o no esta configurado, usando voz nativa:', err);
+      console.warn('[AiAssistant] ElevenLabs falló (posible restricción de cuenta gratuita en Cloud Run), usando voz nativa optimizada:', err);
       // Fallback a voz nativa si falla ElevenLabs
       if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(texto);
-        utterance.lang = 'es-ES';
-        window.speechSynthesis.speak(utterance);
+        const speak = () => {
+          const utterance = new SpeechSynthesisUtterance(texto);
+          const voices = window.speechSynthesis.getVoices();
+          
+          // Intentar buscar una voz más natural (Google, Helena, Monica)
+          const preferredVoice = voices.find(v => v.lang.startsWith('es') && v.name.includes('Google')) ||
+                                 voices.find(v => v.lang.startsWith('es') && v.name.includes('Helena')) ||
+                                 voices.find(v => v.lang.startsWith('es') && v.name.includes('Natural')) ||
+                                 voices.find(v => v.lang.startsWith('es') && v.lang.includes('ES'));
+          
+          if (preferredVoice) utterance.voice = preferredVoice;
+          utterance.lang = 'es-ES';
+          utterance.rate = 1.0; 
+          utterance.pitch = 1.0; 
+          
+          window.speechSynthesis.cancel(); 
+          window.speechSynthesis.speak(utterance);
+        };
+
+        if (window.speechSynthesis.getVoices().length === 0) {
+          window.speechSynthesis.onvoiceschanged = () => { speak(); window.speechSynthesis.onvoiceschanged = null; };
+        } else {
+          speak();
+        }
       }
     });
   }

@@ -12,6 +12,6 @@ COPY --from=builder /app/target/*.jar app.jar
 
 # Cloud Run inyecta PORT=8080
 EXPOSE 8080
-ENV JAVA_OPTS="-Xmx384m -Xms128m"
+ENV JAVA_OPTS="-Xmx512m -Xms256m"
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

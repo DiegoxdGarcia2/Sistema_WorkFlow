@@ -39,6 +39,7 @@ export class ColaboracionService {
   // Estado reactivo para la UI
   public colaboradores = signal<ColaboradorDTO[]>([]);
   public nodeUpdates = signal<SocketMessageDTO | null>(null);
+  public highFreqUpdates$ = new Subject<SocketMessageDTO>();
 
   // ── Throttling para eventos de arrastre (docs/WEBSOCKET_RULES.md) ──
   private dragSubject = new Subject<{ nodoId: string; posX: number; posY: number }>();
@@ -64,10 +65,12 @@ export class ColaboracionService {
     });
   }
 
+  private fallbackId = crypto.randomUUID();
+
   private getMe(): ColaboradorDTO {
     const user = this.authSvc.usuario();
     const name = user?.nombre || 'Usuario Desconocido';
-    const id = user?.id || crypto.randomUUID();
+    const id = user?.id || this.fallbackId;
     
     const parts = name.split(' ');
     const avatar = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.substring(0, 2).toUpperCase();
@@ -103,22 +106,20 @@ export class ColaboracionService {
     this.client.onConnect = () => {
       console.log('🔗 [Colaboración] Conectado a sala:', politicaId);
       
-      const myId = me.id;
-
       // Suscribirse a la sala con filtro de eco
       this.client?.subscribe('/topic/politica/' + politicaId, (message: Message) => {
         if (message.body) {
           const msg: SocketMessageDTO = JSON.parse(message.body);
           
           // ── ECHO LOOP PREVENTION (docs/WEBSOCKET_RULES.md) ──
-          // Ignorar mensajes propios para NODE_MOVED y NODE_EDITING
-          if (msg.colaborador?.id === myId && 
-              (msg.type === 'NODE_MOVED' || msg.type === 'NODE_EDITING')) {
+          // Ignorar TODO mensaje que provenga de mí mismo para evitar bucles de retroalimentación.
+          // Usamos this.getMe().id dinámicamente porque el ID puede cambiar si la autenticación es asíncrona.
+          if (msg.colaborador?.id === this.getMe().id) {
             return;
           }
           
-          // Ejecutar fuera de NgZone para animaciones, re-entrar para state
-          this.ngZone.run(() => this.handleMessage(msg));
+          // No entrar a NgZone inmediatamente para evitar storm de Change Detection
+          this.handleMessage(msg);
         }
       });
 
@@ -159,13 +160,22 @@ export class ColaboracionService {
   private handleMessage(msg: SocketMessageDTO) {
     switch (msg.type) {
       case 'ROOM_STATE':
-        const lista = msg.payload as ColaboradorDTO[];
-        this.colaboradores.set(lista);
+        this.ngZone.run(() => {
+          const lista = msg.payload as ColaboradorDTO[];
+          this.colaboradores.set(lista);
+        });
+        break;
+      case 'NODE_MOVED':
+      case 'CURSOR_MOVED':
+        // Eventos de alta frecuencia: procesar fuera de NgZone (via Subject)
+        this.highFreqUpdates$.next(msg);
         break;
       case 'NODE_EDITING':
-      case 'NODE_MOVED':
       case 'POLICY_UPDATED':
-        this.nodeUpdates.set(msg);
+        // Cambios de estado pesados: entrar a NgZone para actualizar la señal y UI
+        this.ngZone.run(() => {
+          this.nodeUpdates.set(msg);
+        });
         break;
     }
   }

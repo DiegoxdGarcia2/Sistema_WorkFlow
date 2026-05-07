@@ -46,6 +46,14 @@ public class DatabaseSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        try {
+            runSeeder();
+        } catch (Exception e) {
+            log.error("⚠️ Seeder falló pero la aplicación continuará normalmente: {}", e.getMessage());
+        }
+    }
+
+    private void runSeeder() {
         log.info("🌱 Iniciando seeder masivo de datos de prueba...");
 
         if (tenantRepo.count() > 0) {

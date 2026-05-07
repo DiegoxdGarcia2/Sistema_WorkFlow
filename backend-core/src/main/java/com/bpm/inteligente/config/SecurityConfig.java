@@ -46,6 +46,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // ── Endpoints públicos ──
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/tenants").permitAll() // Público para login y dashboards
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/ws-bpm/**", "/ws-bpm-sockjs/**").permitAll()

@@ -28,17 +28,21 @@ public class PasswordMigrationRunner implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        List<Usuario> users = usuarioRepo.findAll();
-        int migrated = 0;
-        for (Usuario user : users) {
-            if (user.getPassword() != null && !user.getPassword().startsWith("$2a$")) {
-                user.setPassword(passwordEncoder.encode(user.getPassword()));
-                usuarioRepo.save(user);
-                migrated++;
+        try {
+            List<Usuario> users = usuarioRepo.findAll();
+            int migrated = 0;
+            for (Usuario user : users) {
+                if (user.getPassword() != null && !user.getPassword().startsWith("$2a$")) {
+                    user.setPassword(passwordEncoder.encode(user.getPassword()));
+                    usuarioRepo.save(user);
+                    migrated++;
+                }
             }
-        }
-        if (migrated > 0) {
-            log.info("🔐 Migrated {} user passwords to BCrypt", migrated);
+            if (migrated > 0) {
+                log.info("🔐 Migrated {} user passwords to BCrypt", migrated);
+            }
+        } catch (Exception e) {
+            log.error("⚠️ Password migration failed but application will continue: {}", e.getMessage());
         }
     }
 }

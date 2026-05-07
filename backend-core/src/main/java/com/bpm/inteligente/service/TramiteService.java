@@ -182,17 +182,32 @@ public class TramiteService {
     }
 
     private List<com.bpm.inteligente.dto.MonitorTramiteDTO> mappingMonitor(List<Tramite> lista) {
+        // Optimización: Cachear políticas y departamentos en memoria para evitar el problema N+1
+        java.util.Map<String, PoliticaNegocio> politicasCache = new java.util.HashMap<>();
+        java.util.Map<String, Departamento> deptosCache = new java.util.HashMap<>();
+
         return lista.stream().map(t -> {
             try {
-                PoliticaNegocio p = politicaService.buscarPorId(t.getPoliticaId());
+                // Obtener Política con caché
+                PoliticaNegocio p = politicasCache.computeIfAbsent(t.getPoliticaId(), id -> {
+                    try { return politicaService.buscarPorId(id); }
+                    catch (Exception e) { return null; }
+                });
+                
+                if (p == null) throw new RuntimeException("Politica no encontrada");
+
                 List<RegistroActividad> regs = registroRepo.findByTramiteId(t.getId());
                 
                 List<com.bpm.inteligente.dto.MonitorTramiteDTO.PasoActual> pasos = regs.stream().map(r -> {
                     Calle calle = buscarCalleDeActividad(p, r.getActividadId());
                     Actividad act = buscarActividadEnCalle(calle, r.getActividadId());
-                    Departamento dep = (calle != null && calle.getDepartamentoId() != null) 
-                            ? deptoRepo.findById(calle.getDepartamentoId()).orElse(null) 
-                            : null;
+                    
+                    Departamento dep = null;
+                    if (calle != null && calle.getDepartamentoId() != null) {
+                        dep = deptosCache.computeIfAbsent(calle.getDepartamentoId(), id -> 
+                            deptoRepo.findById(id).orElse(null)
+                        );
+                    }
                     
                     return com.bpm.inteligente.dto.MonitorTramiteDTO.PasoActual.builder()
                             .registroId(r.getId())
@@ -215,7 +230,7 @@ public class TramiteService {
                         .pasosActuales(pasos)
                         .build();
             } catch (Exception e) {
-                // Si falla un trámite específico (ej: política eliminada), lo omitimos o enviamos info mínima
+                // Si falla un trámite específico, lo omitimos o enviamos info mínima
                 return com.bpm.inteligente.dto.MonitorTramiteDTO.builder()
                         .tramiteId(t.getId())
                         .politicaNombre("Política no encontrada o Error")

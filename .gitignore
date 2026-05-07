@@ -28,6 +28,7 @@ build/
 # ── Node / Angular ──
 node_modules/
 dist/
+dist_ready/
 .angular/
 .cache/
 
