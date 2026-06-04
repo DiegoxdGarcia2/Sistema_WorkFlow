@@ -44,9 +44,9 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
-                // ── Endpoints públicos ──
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/tenants").permitAll() // Público para login y dashboards
+                .requestMatchers("/api/archivos/download/**").permitAll() // URLs públicas y ofuscadas por UUID
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/ws-bpm/**", "/ws-bpm-sockjs/**").permitAll()
@@ -64,7 +64,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
-        List<String> origins = new ArrayList<>(Arrays.asList("http://localhost:4200"));
+        List<String> origins = new ArrayList<>(Arrays.asList("http://localhost:4200", "http://localhost:50000"));
         if (corsAllowedOrigin != null && !corsAllowedOrigin.isEmpty()) {
             origins.add(corsAllowedOrigin);
         }

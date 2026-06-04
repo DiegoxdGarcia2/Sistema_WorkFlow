@@ -66,6 +66,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     if (userDetails instanceof Usuario user) {
                         TenantContext.setCurrentTenant(user.getTenantId());
                         TenantContext.setCurrentUserId(user.getId());
+                        
+                        String clienteId = jwtService.extractClienteId(jwt);
+                        if (clienteId != null) {
+                            TenantContext.setCurrentClienteId(clienteId);
+                        }
                     }
                 }
             }

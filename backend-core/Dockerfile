@@ -1,12 +1,12 @@
 # ── Stage 1: Build ──
-FROM eclipse-temurin:17-jdk-alpine AS builder
+FROM eclipse-temurin:17-jdk AS builder
 WORKDIR /app
 COPY pom.xml .
 COPY src ./src
-RUN apk add --no-cache maven && mvn clean package -DskipTests
+RUN apt-get update && apt-get install -y maven && mvn clean package -DskipTests
 
 # ── Stage 2: Run ──
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=builder /app/target/*.jar app.jar
 

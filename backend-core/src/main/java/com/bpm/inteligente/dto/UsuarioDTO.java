@@ -26,4 +26,5 @@ public class UsuarioDTO {
     private boolean activo;
     private String creadoEn;
     private String token;
+    private String clienteId;
 }

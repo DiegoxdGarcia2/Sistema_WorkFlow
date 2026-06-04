@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { WorkflowService } from '../../services/workflow.service';
 import { TrackingDTO, PasoTimeline } from '../../models/bpm.models';
+import { ChangeDetectorRef, NgZone } from '@angular/core';
 
 @Component({
   selector: 'app-tracking',
@@ -56,10 +57,35 @@ import { TrackingDTO, PasoTimeline } from '../../models/bpm.models';
           </div>
         }
 
-        <!-- Multiple Results State -->
+        <!-- Multiple Clients Selection -->
+        @if (clientesEncontrados && !tracking && !cargando) {
+          <div class="mb-8 animate-in fade-in zoom-in duration-300">
+            <h3 class="text-lg font-bold text-slate-200 mb-4 italic">
+              {{ clientesEncontrados.length === 1 ? 'Se encontró el siguiente cliente:' : 'Se encontraron varios clientes con ese nombre. Selecciona el correcto:' }}
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              @for (c of clientesEncontrados; track c.documento) {
+                <div (click)="seleccionarCliente(c)" class="p-6 rounded-2xl border border-slate-700 bg-slate-800/50 hover:bg-slate-800 cursor-pointer transition-all hover:border-indigo-500 group">
+                  <div class="flex justify-between items-center mb-3">
+                    <div class="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                      👤
+                    </div>
+                    <span class="px-2 py-0.5 rounded bg-slate-700 text-[10px] font-bold text-slate-300">
+                      {{ c.tramites.length }} Trámite(s)
+                    </span>
+                  </div>
+                  <h4 class="text-md font-bold text-white group-hover:text-indigo-400 transition-colors uppercase">{{ c.nombre }}</h4>
+                  <p class="text-xs text-slate-500 font-mono mt-1">Doc: {{ c.documento }}</p>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- Multiple Results Selection (Processes of a specific client) -->
         @if (resultadosMultiple && !tracking && !cargando) {
           <div class="mb-8 animate-in fade-in zoom-in duration-300">
-            <h3 class="text-lg font-bold text-slate-200 mb-4">Se encontraron varios trámites. Selecciona uno para ver su estado:</h3>
+            <h3 class="text-lg font-bold text-slate-200 mb-4">Trámites de {{ resultadosMultiple[0].tramite.clienteNombre }}:</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               @for (t of resultadosMultiple; track t.tramite.id) {
                 <div (click)="seleccionarTramite(t)" class="p-6 rounded-2xl border border-slate-700 bg-slate-800/50 hover:bg-slate-800 cursor-pointer transition-all hover:border-indigo-500 group">
@@ -200,6 +226,7 @@ export class TrackingComponent {
   searchId = '';
   tracking: TrackingDTO | null = null;
   resultadosMultiple: TrackingDTO[] | null = null;
+  clientesEncontrados: any[] | null = null;
   cargando = false;
   errorMsg = '';
   private searchTimeout: any;
@@ -207,6 +234,8 @@ export class TrackingComponent {
   constructor(
     private workflowService: WorkflowService,
     private route: ActivatedRoute,
+    private cdr: ChangeDetectorRef,
+    private zone: NgZone
   ) {}
 
   onSearchChange(event: any) {
@@ -216,11 +245,14 @@ export class TrackingComponent {
     if (this.searchId.trim() === '') {
        this.tracking = null;
        this.resultadosMultiple = null;
+       this.clientesEncontrados = null;
        this.errorMsg = '';
        return;
     }
     this.searchTimeout = setTimeout(() => {
-      this.buscarTramite();
+      this.zone.run(() => {
+        this.buscarTramite();
+      });
     }, 500); // 500ms debounce
   }
 
@@ -241,23 +273,42 @@ export class TrackingComponent {
     this.errorMsg = '';
     this.tracking = null;
     this.resultadosMultiple = null;
+    this.clientesEncontrados = null;
+    this.cdr.detectChanges();
 
     this.workflowService.buscarTracking(q).subscribe({
       next: (data) => {
         if (data && data.length > 0) {
-           if (data.length === 1) {
-             this.tracking = data[0];
-           } else {
-             this.resultadosMultiple = data;
+           // Agrupar por documento de cliente
+           const clientesMap = new Map();
+           data.forEach(t => {
+             const doc = t.tramite.documentoCliente || 'SIN_DOC';
+             if (!clientesMap.has(doc)) {
+               clientesMap.set(doc, { 
+                 nombre: t.tramite.clienteNombre || 'Anónimo', 
+                 documento: doc,
+                 tramites: [] 
+               });
+             }
+             clientesMap.get(doc).tramites.push(t);
+           });
+
+           const uniqueClients = Array.from(clientesMap.values());
+
+           if (uniqueClients.length > 0) {
+             this.clientesEncontrados = uniqueClients;
+             // Don't auto-select anymore to improve UX as requested
            }
         } else {
            this.errorMsg = 'No se encontraron trámites con esos datos.';
         }
         this.cargando = false;
+        this.cdr.detectChanges();
       },
       error: (err) => {
         this.errorMsg = 'Error al buscar el trámite. Intenta nuevamente.';
         this.cargando = false;
+        this.cdr.detectChanges();
       },
     });
   }
@@ -265,6 +316,13 @@ export class TrackingComponent {
   seleccionarTramite(t: TrackingDTO) {
     this.tracking = t;
     this.resultadosMultiple = null;
+    this.clientesEncontrados = null;
+  }
+
+  seleccionarCliente(cliente: any) {
+    this.resultadosMultiple = cliente.tramites;
+    this.clientesEncontrados = null;
+    this.cdr.detectChanges();
   }
 
   calcularProgreso(): number {

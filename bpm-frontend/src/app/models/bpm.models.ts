@@ -135,6 +135,8 @@ export interface RegistroActividadDTO {
   notas: string;
   asignadoEn: string;
   completadoEn: string | null;
+  clienteNombre?: string;
+  politicaId?: string;
 }
 
 // ── Requests ──

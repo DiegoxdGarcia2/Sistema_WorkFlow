@@ -1,9 +1,11 @@
 package com.bpm.inteligente.controller;
 
+import com.bpm.inteligente.config.TenantContext;
 import com.bpm.inteligente.dto.DomainMapper;
 import com.bpm.inteligente.dto.TenantDTO;
 import com.bpm.inteligente.repository.TenantRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,6 +19,12 @@ public class TenantController {
 
     @GetMapping
     public List<TenantDTO> listar() {
+        String currentTenant = TenantContext.getCurrentTenant();
+        if (currentTenant != null) {
+            return tenantRepo.findById(currentTenant).stream()
+                    .map(DomainMapper::toDTO)
+                    .toList();
+        }
         return tenantRepo.findAll().stream()
                 .map(DomainMapper::toDTO)
                 .toList();
@@ -24,6 +32,10 @@ public class TenantController {
 
     @GetMapping("/{id}")
     public TenantDTO buscarPorId(@PathVariable String id) {
+        String currentTenant = TenantContext.getCurrentTenant();
+        if (currentTenant != null && !currentTenant.equals(id)) {
+            throw new AccessDeniedException("Acceso no autorizado a este tenant");
+        }
         return tenantRepo.findById(id)
                 .map(DomainMapper::toDTO)
                 .orElseThrow();
@@ -31,6 +43,10 @@ public class TenantController {
 
     @PutMapping("/{id}")
     public TenantDTO actualizar(@PathVariable String id, @RequestBody TenantDTO dto) {
+        String currentTenant = TenantContext.getCurrentTenant();
+        if (currentTenant != null && !currentTenant.equals(id)) {
+            throw new AccessDeniedException("Acceso no autorizado a este tenant");
+        }
         com.bpm.inteligente.domain.Tenant t = tenantRepo.findById(id).orElseThrow();
         t.setNombre(dto.getNombre());
         t.setNit(dto.getNit());

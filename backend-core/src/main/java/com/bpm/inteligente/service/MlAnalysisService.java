@@ -9,6 +9,7 @@ import com.bpm.inteligente.dto.InsightsResultDTO;
 import com.bpm.inteligente.dto.PoliticaDTO;
 import com.bpm.inteligente.repository.RegistroActividadRepository;
 import org.springframework.web.util.UriComponentsBuilder;
+import com.bpm.inteligente.config.TenantContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -67,6 +68,7 @@ public class MlAnalysisService {
             Map<String, Object> payload = new HashMap<>();
             payload.put("politicaId", politicaId);
             payload.put("registrosCompletados", new ArrayList<>()); // Vacío, Python lee directo de MongoDB
+            payload.put("tenantId", TenantContext.getCurrentTenant());
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
             ResponseEntity<AnalysisResultDTO> response = restTemplate.postForEntity(url, entity, AnalysisResultDTO.class);
@@ -94,6 +96,10 @@ public class MlAnalysisService {
             UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(aiMicroserviceUrl + "/api/ai/ml/insights");
             if (politicaId != null && !politicaId.isEmpty() && !politicaId.equals("null")) {
                 builder.queryParam("politicaId", politicaId);
+            }
+            String tid = TenantContext.getCurrentTenant();
+            if (tid != null && !tid.isEmpty()) {
+                builder.queryParam("tenantId", tid);
             }
             
             String url = builder.toUriString();

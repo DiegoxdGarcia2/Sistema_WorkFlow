@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${PORT:8080}
 
 spring:
   application:
@@ -12,6 +12,11 @@ spring:
     mongodb:
       uri: ${MONGO_URI:mongodb://localhost:27017/bpm_inteligente}
       auto-index-creation: true
+      uuid-representation: standard
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
 
 logging:
   level:
@@ -46,3 +51,19 @@ management:
   endpoint:
     health:
       show-details: always
+
+redis:
+  host: ${REDIS_HOST:localhost}
+  port: ${REDIS_PORT:6379}
+  password: ${REDIS_PASSWORD:}
+
+# ═══ AWS S3 Configuration ═══
+aws:
+  s3:
+    bucket: ${AWS_S3_BUCKET:bucket-bpm}
+    region: ${AWS_REGION:us-east-1}
+  credentials:
+    access-key: ${AWS_ACCESS_KEY_ID:}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:}
+
+

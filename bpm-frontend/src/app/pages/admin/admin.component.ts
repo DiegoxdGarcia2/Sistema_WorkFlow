@@ -12,11 +12,12 @@ import { FormularioService } from '../../services/formulario.service';
 import { ClienteService } from '../../services/cliente.service';
 import { ClienteDTO } from '../../models/bpm.models';
 import { MlAnalyticsComponent } from './ml-analytics.component';
+import { TensorflowDashboardComponent } from './tensorflow-dashboard.component';
 
 @Component({
   selector: 'app-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, FormBuilderComponent, MonitorComponent, MlAnalyticsComponent],
+  imports: [CommonModule, FormsModule, FormBuilderComponent, MonitorComponent, MlAnalyticsComponent, TensorflowDashboardComponent],
   template: `
     <div class="flex h-[calc(100vh-4rem)] bg-premium text-slate-100 relative overflow-hidden">
       <!-- Fondo con gradiente sutil -->
@@ -97,6 +98,31 @@ import { MlAnalyticsComponent } from './ml-analytics.component';
 
           <!-- SECTION: USUARIOS -->
           @if (seccionActiva() === 'usuarios') {
+            <div class="mb-6 flex items-center justify-between gap-4">
+              <div class="relative flex-1 max-w-md group">
+                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-indigo-400 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </div>
+                <input type="text" [(ngModel)]="usuariosSearchTerm" (ngModelChange)="usuariosCurrentPage.set(1)"
+                       placeholder="Buscar por nombre, email, cargo o área..." 
+                       class="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-900/40 border border-slate-800/60 text-sm text-slate-200 focus:border-indigo-500 outline-none transition-all ring-1 ring-white/5 shadow-xl">
+              </div>
+              
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mr-2">Página {{ usuariosCurrentPage() }} de {{ totalUsuariosPages() }}</span>
+                <button (click)="cambiarPaginaUsuarios(usuariosCurrentPage() - 1)" 
+                        [disabled]="usuariosCurrentPage() === 1"
+                        class="p-2 rounded-xl bg-slate-900/60 border border-slate-800/60 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <button (click)="cambiarPaginaUsuarios(usuariosCurrentPage() + 1)" 
+                        [disabled]="usuariosCurrentPage() === totalUsuariosPages()"
+                        class="p-2 rounded-xl bg-slate-900/60 border border-slate-800/60 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+              </div>
+            </div>
+
             <div class="rounded-3xl border border-slate-800/60 bg-slate-900/30 backdrop-blur-md shadow-2xl overflow-hidden ring-1 ring-white/5 animate-in fade-in duration-500">
               <div class="overflow-x-auto">
                 <table class="w-full border-collapse">
@@ -112,7 +138,7 @@ import { MlAnalyticsComponent } from './ml-analytics.component';
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-800/40">
-                    @for (user of svc.usuarios(); track user.id) {
+                    @for (user of paginatedUsuarios(); track user.id) {
                       <tr class="hover:bg-indigo-500/[0.02] transition-colors group" [class.opacity-40]="!user.activo">
                         <td class="px-8 py-5">
                           <div class="flex items-center gap-3">
@@ -287,25 +313,145 @@ import { MlAnalyticsComponent } from './ml-analytics.component';
 
           <!-- SECTION: AUDIT -->
           @if (seccionActiva() === 'audit') {
-            <div class="rounded-3xl border border-slate-800/60 bg-slate-900/30 backdrop-blur-md shadow-2xl overflow-hidden ring-1 ring-white/5 animate-in fade-in duration-500">
-              <div class="divide-y divide-slate-800/40 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                @for (log of svc.auditLogs(); track log.id) {
-                  <div class="px-8 py-5 flex items-start gap-5 hover:bg-white/[0.02] transition-colors">
-                    <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400 shrink-0 shadow-lg">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <p class="text-sm text-slate-100 font-bold"><span class="text-indigo-400">{{ log.usuarioNombre }}</span> · {{ log.accion }}</p>
-                      <p class="text-xs text-slate-500 mt-1 font-medium leading-relaxed">{{ log.detalle }}</p>
-                      <div class="flex items-center gap-2 mt-2">
-                        <span class="text-[9px] font-bold uppercase tracking-wider text-slate-600 bg-slate-800/40 px-2 py-0.5 rounded-md">{{ log.entidad }}</span>
-                        <span class="text-[9px] text-slate-700">{{ log.timestamp | date:'dd MMM yyyy, HH:mm' }}</span>
+            <div class="flex flex-col gap-6 animate-in fade-in duration-500">
+              <!-- FILTERS PANEL -->
+              <div class="p-6 rounded-[2.5rem] border border-white/5 bg-slate-900/40 backdrop-blur-md shadow-xl flex flex-col gap-4 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-[60px] rounded-full pointer-events-none"></div>
+                
+                <!-- Main Filters Row -->
+                <div class="w-full flex flex-wrap gap-4 items-end relative z-10">
+                  <!-- Usuario Autocomplete -->
+                  <div class="flex-1 min-w-[200px] flex flex-col gap-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Buscar Usuario</label>
+                    <input type="text" [(ngModel)]="filtroUsuario" list="usuarios-list" placeholder="Nombre o email..." class="w-full px-4 py-2.5 rounded-2xl bg-slate-950/50 border border-slate-800 focus:border-indigo-500/50 text-slate-200 text-sm focus:outline-none transition-all placeholder:text-slate-600" />
+                    <datalist id="usuarios-list">
+                      @for (user of svc.usuarios(); track user.id) {
+                        <option [value]="user.nombre + ' ' + user.apellido">{{ user.email }}</option>
+                        <option [value]="user.email">{{ user.nombre }} {{ user.apellido }}</option>
+                      }
+                    </datalist>
+                  </div>
+                  
+                  <!-- Acción Dropdown -->
+                  <div class="flex-1 min-w-[150px] flex flex-col gap-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Acción</label>
+                    <select [(ngModel)]="filtroAccion" class="w-full px-4 py-2.5 rounded-2xl bg-slate-950/50 border border-slate-800 focus:border-indigo-500/50 text-slate-200 text-sm focus:outline-none transition-all">
+                      <option value="">Todas las Acciones</option>
+                      <option value="LOGIN">LOGIN</option>
+                      <option value="LOGOUT">LOGOUT</option>
+                      <option value="REGISTRO_CLIENTE">REGISTRO_CLIENTE</option>
+                      <option value="REGISTRO_EMPRESA">REGISTRO_EMPRESA</option>
+                      <option value="INICIAR_TRAMITE">INICIAR_TRAMITE</option>
+                      <option value="COMPLETAR_ACTIVIDAD">COMPLETAR_ACTIVIDAD</option>
+                      <option value="CREAR_USUARIO">CREAR_USUARIO</option>
+                      <option value="EDITAR_USUARIO">EDITAR_USUARIO</option>
+                      <option value="ACTIVAR_USUARIO">ACTIVAR_USUARIO</option>
+                      <option value="SUSPENDER_USUARIO">SUSPENDER_USUARIO</option>
+                      <option value="CREAR_PROYECTO">CREAR_PROYECTO</option>
+                      <option value="EDITAR_PROYECTO">EDITAR_PROYECTO</option>
+                      <option value="CREAR_DEPARTAMENTO">CREAR_DEPARTAMENTO</option>
+                      <option value="EDITAR_DEPARTAMENTO">EDITAR_DEPARTAMENTO</option>
+                      <option value="CREAR_CARGO">CREAR_CARGO</option>
+                      <option value="EDITAR_CARGO">EDITAR_CARGO</option>
+                      <option value="DESCARGAR_REPORTE">DESCARGAR_REPORTE</option>
+                      <option value="EDITAR_DOCUMENTO">EDITAR_DOCUMENTO</option>
+                      <option value="ELIMINAR_REGISTRO">ELIMINAR_REGISTRO</option>
+                    </select>
+                  </div>
+
+                  <!-- Cargo Dropdown -->
+                  <div class="flex-1 min-w-[150px] flex flex-col gap-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cargo</label>
+                    <select [(ngModel)]="filtroCargo" class="w-full px-4 py-2.5 rounded-2xl bg-slate-950/50 border border-slate-800 focus:border-indigo-500/50 text-slate-200 text-sm focus:outline-none transition-all">
+                      <option value="">Todos los Cargos</option>
+                      @for (cargo of svc.cargos(); track cargo.id) {
+                        <option [value]="cargo.nombre">{{ cargo.nombre }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <!-- Departamento Dropdown -->
+                  <div class="flex-1 min-w-[150px] flex flex-col gap-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Departamento</label>
+                    <select [(ngModel)]="filtroDepartamento" class="w-full px-4 py-2.5 rounded-2xl bg-slate-950/50 border border-slate-800 focus:border-indigo-500/50 text-slate-200 text-sm focus:outline-none transition-all">
+                      <option value="">Todos los Deptos</option>
+                      @for (depto of svc.departamentos(); track depto.id) {
+                        <option [value]="depto.id">{{ depto.nombre }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <!-- Rol Dropdown -->
+                  <div class="flex-1 min-w-[150px] flex flex-col gap-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rol</label>
+                    <select [(ngModel)]="filtroRol" class="w-full px-4 py-2.5 rounded-2xl bg-slate-950/50 border border-slate-800 focus:border-indigo-500/50 text-slate-200 text-sm focus:outline-none transition-all">
+                      <option value="">Todos los Roles</option>
+                      <option value="ADMINISTRADOR">Administrador</option>
+                      <option value="DISENADOR">Diseñador</option>
+                      <option value="FUNCIONARIO">Funcionario</option>
+                      <option value="CLIENTE">Cliente</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Date Filters Row & Action Buttons -->
+                <div class="w-full flex flex-wrap gap-4 items-end relative z-10">
+                  <div class="flex-1 min-w-[150px] flex flex-col gap-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha Inicio</label>
+                    <input type="date" [(ngModel)]="filtroFechaInicio" class="w-full px-4 py-2.5 rounded-2xl bg-slate-950/50 border border-slate-800 focus:border-indigo-500/50 text-slate-200 text-sm focus:outline-none transition-all" />
+                  </div>
+                  <div class="flex-1 min-w-[150px] flex flex-col gap-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha Fin</label>
+                    <input type="date" [(ngModel)]="filtroFechaFin" class="w-full px-4 py-2.5 rounded-2xl bg-slate-950/50 border border-slate-800 focus:border-indigo-500/50 text-slate-200 text-sm focus:outline-none transition-all" />
+                  </div>
+                  
+                  <div class="flex gap-2 shrink-0">
+                    <button (click)="aplicarFiltros()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-all flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                      Filtrar
+                    </button>
+                    <button (click)="limpiarFiltros()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-2xl border border-white/5 active:scale-95 transition-all">
+                      Limpiar
+                    </button>
+                  </div>
+                </div>
+
+                <div class="w-full h-px bg-slate-800/40 my-1 relative z-10"></div>
+                
+                <div class="w-full flex items-center justify-between relative z-10">
+                  <span class="text-xs text-slate-500 font-medium">Mostrando {{ svc.auditLogs().length }} registros</span>
+                  <div class="flex gap-3">
+                    <button (click)="exportarExcel()" class="px-4 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 font-bold rounded-2xl active:scale-95 transition-all flex items-center gap-2 text-xs">
+                      📊 Exportar Excel
+                    </button>
+                    <button (click)="exportarPDF()" class="px-4 py-2 bg-red-600/10 hover:bg-red-600/20 text-red-400 border border-red-500/20 font-bold rounded-2xl active:scale-95 transition-all flex items-center gap-2 text-xs">
+                      📄 Exportar PDF
+                    </button>
+                  </div>
+                </div>
+              </div>
+ 
+              <!-- AUDIT LOG LIST -->
+              <div class="rounded-3xl border border-slate-800/60 bg-slate-900/30 backdrop-blur-md shadow-2xl overflow-hidden ring-1 ring-white/5">
+                <div class="divide-y divide-slate-800/40 max-h-[50vh] overflow-y-auto custom-scrollbar">
+                  @for (log of svc.auditLogs(); track log.id) {
+                    <div class="px-8 py-5 flex items-start gap-5 hover:bg-white/[0.02] transition-colors">
+                      <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400 shrink-0 shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm text-slate-100 font-bold"><span class="text-indigo-400">{{ log.usuarioNombre }}</span> · {{ log.accion }}</p>
+                        <p class="text-xs text-slate-500 mt-1 font-medium leading-relaxed">{{ log.detalle }}</p>
+                        <div class="flex items-center gap-2 mt-2">
+                          <span class="text-[9px] font-bold uppercase tracking-wider text-slate-600 bg-slate-800/40 px-2 py-0.5 rounded-md">{{ log.entidad }}</span>
+                          <span class="text-[9px] text-slate-700">{{ log.timestamp | date:'dd MMM yyyy, HH:mm' }}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                } @empty {
-                  <div class="px-8 py-20 text-center text-slate-600 text-sm font-medium">Sin registros de actividad reciente.</div>
-                }
+                  } @empty {
+                    <div class="px-8 py-20 text-center text-slate-600 text-sm font-medium">Sin registros de actividad reciente o coincidentes con los filtros.</div>
+                  }
+                </div>
               </div>
             </div>
           }
@@ -320,8 +466,38 @@ import { MlAnalyticsComponent } from './ml-analytics.component';
             <app-ml-analytics></app-ml-analytics>
           }
 
+          <!-- SECTION: TENSORFLOW -->
+          @if (seccionActiva() === 'tensorflow') {
+            <app-tensorflow-dashboard></app-tensorflow-dashboard>
+          }
+
           <!-- SECTION: CLIENTES -->
           @if (seccionActiva() === 'clientes') {
+            <div class="mb-6 flex items-center justify-between gap-4">
+              <div class="relative flex-1 max-w-md group">
+                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-indigo-400 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </div>
+                <input type="text" [(ngModel)]="clientesSearchTerm" (ngModelChange)="clientesCurrentPage.set(1)"
+                       placeholder="Buscar por nombre, CI o correo..." 
+                       class="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-900/40 border border-slate-800/60 text-sm text-slate-200 focus:border-indigo-500 outline-none transition-all ring-1 ring-white/5 shadow-xl">
+              </div>
+              
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mr-2">Página {{ clientesCurrentPage() }} de {{ totalClientesPages() }}</span>
+                <button (click)="cambiarPaginaClientes(clientesCurrentPage() - 1)" 
+                        [disabled]="clientesCurrentPage() === 1"
+                        class="p-2 rounded-xl bg-slate-900/60 border border-slate-800/60 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <button (click)="cambiarPaginaClientes(clientesCurrentPage() + 1)" 
+                        [disabled]="clientesCurrentPage() === totalClientesPages()"
+                        class="p-2 rounded-xl bg-slate-900/60 border border-slate-800/60 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+              </div>
+            </div>
+
             <div class="rounded-3xl border border-slate-800/60 bg-slate-900/30 backdrop-blur-md shadow-2xl overflow-hidden ring-1 ring-white/5 animate-in fade-in duration-500">
                <div class="overflow-x-auto">
                  <table class="w-full border-collapse">
@@ -335,7 +511,7 @@ import { MlAnalyticsComponent } from './ml-analytics.component';
                      </tr>
                    </thead>
                    <tbody class="divide-y divide-slate-800/40">
-                     @for (c of cs.clientes(); track c.id) {
+                     @for (c of paginatedClientes(); track c.id) {
                        <tr class="hover:bg-indigo-500/[0.02] transition-colors group">
                          <td class="px-8 py-5">
                             <div class="flex items-center gap-3">
@@ -741,7 +917,7 @@ import { MlAnalyticsComponent } from './ml-analytics.component';
 })
 export class AdminComponent implements OnInit {
   private sanitizer = inject(DomSanitizer);
-  seccionActiva = signal<'monitor' | 'tenants' | 'usuarios' | 'audit' | 'cargos' | 'departamentos' | 'formularios' | 'clientes' | 'analytics'>('monitor');
+  seccionActiva = signal<'monitor' | 'tenants' | 'usuarios' | 'audit' | 'cargos' | 'departamentos' | 'formularios' | 'clientes' | 'analytics' | 'tensorflow'>('monitor');
   
   getSafeIcon(svg: string): SafeHtml {
     return this.sanitizer.bypassSecurityTrustHtml(svg);
@@ -749,6 +925,7 @@ export class AdminComponent implements OnInit {
 
   secciones = [
     { key: 'monitor', label: 'Monitor de Procesos', svg: 'M3 3v18h18M19 9l-5 5-4-4-3 3' },
+    { key: 'tensorflow', label: 'TensorFlow AI', svg: 'M12 2L2 7l10 5 10-5-10-5z M2 17l10 5 10-5 M2 12l10 5 10-5' },
     { key: 'analytics', label: 'Analytics ML', svg: 'M12 20V10M18 20V4M6 20v-4' },
     { key: 'formularios', label: 'Formularios', svg: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6' },
     { key: 'usuarios', label: 'Usuarios', svg: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75' },
@@ -779,22 +956,79 @@ export class AdminComponent implements OnInit {
   modalEditCliente: any = null;
   formCliente: Partial<ClienteDTO> = { nombre: '', apellido: '', ci: '', correo: '', telefono: '', direccion: '' };
 
+  // --- Pagination & Filtering ---
+  usuariosSearchTerm = signal('');
+  usuariosCurrentPage = signal(1);
+  clientesSearchTerm = signal('');
+  clientesCurrentPage = signal(1);
+  itemsPerPage = 10;
+
+  filteredUsuarios = computed(() => {
+    const term = this.usuariosSearchTerm().toLowerCase();
+    const all = this.svc.usuarios();
+    return all.filter(u => 
+      (u.nombre || '').toLowerCase().includes(term) || 
+      (u.apellido || '').toLowerCase().includes(term) || 
+      (u.email || '').toLowerCase().includes(term) ||
+      (u.cargo || '').toLowerCase().includes(term) ||
+      (u.departamento || '').toLowerCase().includes(term)
+    );
+  });
+
+  paginatedUsuarios = computed(() => {
+    const start = (this.usuariosCurrentPage() - 1) * this.itemsPerPage;
+    return this.filteredUsuarios().slice(start, start + this.itemsPerPage);
+  });
+
+  totalUsuariosPages = computed(() => Math.ceil(this.filteredUsuarios().length / this.itemsPerPage) || 1);
+
+  filteredClientes = computed(() => {
+    const term = this.clientesSearchTerm().toLowerCase();
+    const all = this.cs.clientes();
+    return all.filter(c => 
+      (c.nombre || '').toLowerCase().includes(term) || 
+      (c.apellido || '').toLowerCase().includes(term) || 
+      (c.correo || '').toLowerCase().includes(term) ||
+      (c.ci || '').toLowerCase().includes(term)
+    );
+  });
+
+  paginatedClientes = computed(() => {
+    const start = (this.clientesCurrentPage() - 1) * this.itemsPerPage;
+    return this.filteredClientes().slice(start, start + this.itemsPerPage);
+  });
+
+  totalClientesPages = computed(() => Math.ceil(this.filteredClientes().length / this.itemsPerPage) || 1);
+
   constructor(
     public svc: AdminService, 
     public auth: AuthService, 
     private fs: FormularioService,
     public cs: ClienteService,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private sanitizerAdmin: DomSanitizer // Renombrado para evitar conflicto con la propiedad privada
   ) {}
+
+  cambiarPaginaUsuarios(p: number) {
+    if (p > 0 && p <= this.totalUsuariosPages()) {
+      this.usuariosCurrentPage.set(p);
+    }
+  }
+
+  cambiarPaginaClientes(p: number) {
+    if (p > 0 && p <= this.totalClientesPages()) {
+      this.clientesCurrentPage.set(p);
+    }
+  }
+
 
   ngOnInit(): void {
     this.svc.cargarTenants().subscribe();
     
-    // Escuchar parámetros de la URL para navegación desde el chatbot
     this.route.queryParams.subscribe(params => {
       console.log('🔍 AdminComponent: QueryParams detectados:', params);
       const tab = params['tab'];
-      if (tab && ['monitor', 'analytics', 'tenants', 'usuarios', 'audit', 'cargos', 'departamentos', 'formularios', 'clientes'].includes(tab)) {
+      if (tab && ['monitor', 'analytics', 'tensorflow', 'tenants', 'usuarios', 'audit', 'cargos', 'departamentos', 'formularios', 'clientes'].includes(tab)) {
         console.log('🎯 AdminComponent: Cambiando a pestaña:', tab);
         this.seccionActiva.set(tab as any);
         this.refreshData();
@@ -836,7 +1070,12 @@ export class AdminComponent implements OnInit {
       }
       if (sa === 'cargos') this.svc.cargarCargos(user.tenantId).subscribe();
       if (sa === 'departamentos') this.svc.cargarDepartamentos(user.tenantId).subscribe();
-      if (sa === 'audit') this.svc.cargarAuditLog(user.tenantId).subscribe();
+      if (sa === 'audit') {
+        this.svc.cargarAuditLog(user.tenantId).subscribe();
+        this.svc.cargarUsuarios(user.tenantId).subscribe();
+        this.svc.cargarCargos(user.tenantId).subscribe();
+        this.svc.cargarDepartamentos(user.tenantId).subscribe();
+      }
       if (sa === 'tenants') this.svc.cargarTenants().subscribe();
       if (sa === 'formularios') this.fs.listarPorTenant(user.tenantId).subscribe();
       if (sa === 'clientes') this.cs.listarPorTenant(user.tenantId).subscribe();
@@ -850,6 +1089,88 @@ export class AdminComponent implements OnInit {
 
   verInfo(data: any, type: 'cargo' | 'departamento') {
     this.abrirModalMaster('view', type === 'cargo' ? 'Cargo' : 'Departamento', data);
+  }
+
+  // --- Filtros y Exportación de Auditoría ---
+  filtroUsuario = '';
+  filtroAccion = '';
+  filtroFechaInicio = '';
+  filtroFechaFin = '';
+  filtroCargo = '';
+  filtroDepartamento = '';
+  filtroRol = '';
+
+  aplicarFiltros() {
+    const user = this.auth.usuario();
+    if (!user) return;
+    const params = this.getFiltrosParams();
+    this.svc.cargarAuditLogConFiltros(user.tenantId, params).subscribe();
+  }
+
+  limpiarFiltros() {
+    this.filtroUsuario = '';
+    this.filtroAccion = '';
+    this.filtroFechaInicio = '';
+    this.filtroFechaFin = '';
+    this.filtroCargo = '';
+    this.filtroDepartamento = '';
+    this.filtroRol = '';
+    const user = this.auth.usuario();
+    if (user) {
+      this.svc.cargarAuditLog(user.tenantId).subscribe();
+    }
+  }
+
+  exportarExcel() {
+    const user = this.auth.usuario();
+    if (!user) return;
+    const params = this.getFiltrosParams();
+    this.svc.exportarAuditLogExcel(user.tenantId, params).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `reporte_auditoria_${new Date().toISOString().split('T')[0]}.xlsx`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (err) => alert('Error al exportar Excel: ' + (err.message || err))
+    });
+  }
+
+  exportarPDF() {
+    const user = this.auth.usuario();
+    if (!user) return;
+    const params = this.getFiltrosParams();
+    this.svc.exportarAuditLogPDF(user.tenantId, params).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `reporte_auditoria_${new Date().toISOString().split('T')[0]}.pdf`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (err) => alert('Error al exportar PDF: ' + (err.message || err))
+    });
+  }
+
+  getFiltrosParams() {
+    const params: any = {};
+    if (this.filtroUsuario) params.usuarioNombre = this.filtroUsuario;
+    if (this.filtroAccion) params.accion = this.filtroAccion;
+    if (this.filtroFechaInicio) {
+      params.fechaInicio = new Date(this.filtroFechaInicio).toISOString();
+    }
+    if (this.filtroFechaFin) {
+      const end = new Date(this.filtroFechaFin);
+      end.setHours(23, 59, 59, 999);
+      params.fechaFin = end.toISOString();
+    }
+    if (this.filtroCargo) params.cargo = this.filtroCargo;
+    if (this.filtroDepartamento) params.departamentoId = this.filtroDepartamento;
+    if (this.filtroRol) params.rol = this.filtroRol;
+    return params;
   }
 
   getTitulo(): string {

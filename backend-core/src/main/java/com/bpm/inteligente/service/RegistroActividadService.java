@@ -18,7 +18,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import com.bpm.inteligente.config.TenantContext;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RegistroActividadService {
@@ -27,6 +30,8 @@ public class RegistroActividadService {
     private final TramiteRepository tramiteRepo;
     private final PoliticaNegocioService politicaService;
     private final UsuarioRepository usuarioRepo;
+    private final DocumentoService documentoService;
+    private final NotificationService notificationService;
 
     /**
      * El funcionario toma una tarea pendiente y pasa a EN_PROGRESO.
@@ -35,9 +40,10 @@ public class RegistroActividadService {
     public RegistroActividad tomarTarea(String registroId, String userId) {
         RegistroActividad registro = buscarPorId(registroId);
 
-        if (registro.getEstado() != EstadoRegistro.PENDIENTE) {
+        if (registro.getEstado() != EstadoRegistro.PENDIENTE && 
+            !(registro.getEstado() == EstadoRegistro.EN_PROGRESO && registro.getEjecutadoPor() == null)) {
             throw new BusinessRuleException(
-                    "Solo se pueden tomar tareas en estado PENDIENTE. Estado actual: " + registro.getEstado());
+                    "Solo se pueden tomar tareas en estado PENDIENTE o en progreso sin asignar. Estado actual: " + registro.getEstado());
         }
 
         Usuario user = usuarioRepo.findById(userId)
@@ -85,6 +91,63 @@ public class RegistroActividadService {
         registro.setEstado(EstadoRegistro.HECHO);
         registro.setCompletadoEn(Instant.now());
         registroRepo.save(registro);
+
+        // Registrar documentos en el Repositorio Documental Versionado (MongoDB + S3 context)
+        Usuario usuarioActual = null;
+        try {
+            String currentUserId = TenantContext.getCurrentUserId();
+            if (currentUserId != null) {
+                usuarioActual = usuarioRepo.findById(currentUserId).orElse(null);
+            }
+        } catch (Exception e) {
+            log.warn("No se pudo obtener el usuario del contexto al registrar documentos: {}", e.getMessage());
+        }
+
+        // 1. Registrar archivos adjuntos generales
+        if (archivos != null) {
+            for (RegistroActividad.ArchivoInfo arch : archivos) {
+                try {
+                    documentoService.registrarDocumentoPreexistente(
+                            registro.getTramiteId(),
+                            arch.getNombre(),
+                            arch.getId(),
+                            arch.getTipo(),
+                            usuarioActual
+                    );
+                } catch (Exception e) {
+                    log.error("Error al registrar archivo adjunto en repositorio: {}", e.getMessage());
+                }
+            }
+        }
+
+        // 2. Registrar archivos dinámicos del formulario
+        if (datosFormulario != null) {
+            for (Map.Entry<String, Object> entry : datosFormulario.entrySet()) {
+                Object val = entry.getValue();
+                if (val instanceof Map) {
+                    Map<?, ?> fileMap = (Map<?, ?>) val;
+                    if (fileMap.containsKey("id") && fileMap.containsKey("nombre") && fileMap.containsKey("tipo")) {
+                        try {
+                            String fId = (String) fileMap.get("id");
+                            String fNombre = (String) fileMap.get("nombre");
+                            String fTipo = (String) fileMap.get("tipo");
+                            
+                            if (fId != null && !fId.trim().isEmpty() && !fId.startsWith("offline://")) {
+                                documentoService.registrarDocumentoPreexistente(
+                                        registro.getTramiteId(),
+                                        fNombre,
+                                        fId,
+                                        fTipo,
+                                        usuarioActual
+                                );
+                            }
+                        } catch (Exception e) {
+                            log.error("Error al registrar archivo de formulario dinámico en repositorio: {}", e.getMessage());
+                        }
+                    }
+                }
+            }
+        }
 
         // 3. Motor de derivación: leer la política y avanzar
         Tramite tramite = tramiteRepo.findById(registro.getTramiteId())
@@ -174,6 +237,12 @@ public class RegistroActividadService {
             System.out.println("🔄 Derivación: Pasando trámite " + tramite.getId() + " a EN_PROGRESO");
             tramite.setEstado(EstadoTramite.EN_PROGRESO);
             tramiteRepo.save(tramite);
+
+            notificationService.enviarNotificacionTramite(
+                tramite,
+                "TRAMITE_EN_PROGRESO",
+                "Tu trámite '" + (politica != null ? politica.getNombre() : "Desconocido") + "' ahora está EN PROGRESO."
+            );
         }
 
         boolean algunDestinoEsFin = false;
@@ -209,12 +278,19 @@ public class RegistroActividadService {
                     .tramiteId(tramite.getId())
                     .tenantId(tramite.getTenantId())
                     .actividadId(destino.getId())
+                    .actividadNombre(destino.getNombre())
                     .departamentoId(deptoId)
                     .estado(EstadoRegistro.PENDIENTE)
                     .asignadoEn(Instant.now())
                     .esquemaFormulario(destino.getEsquemaFormulario() != null ? destino.getEsquemaFormulario() : new java.util.HashMap<>())
                     .build();
             registroRepo.save(nuevoRegistro);
+
+            notificationService.enviarNotificacionTramite(
+                tramite,
+                "TRAMITE_PASO_ACTUALIZADO",
+                "Tu trámite '" + (politica != null ? politica.getNombre() : "Desconocido") + "' avanzó a la fase: " + destino.getNombre()
+            );
         }
 
         // Si todas las transiciones llevan a FIN, completar el trámite
@@ -222,7 +298,13 @@ public class RegistroActividadService {
                 buscarActividadEnPolitica(politica, t.getDestinoId()).getTipo() == TipoActividad.FIN)) {
             tramite.setEstado(EstadoTramite.COMPLETADO);
             tramite.setFinalizadoEn(Instant.now());
-            tramiteRepo.save(tramite);
+            Tramite saved = tramiteRepo.save(tramite);
+
+            notificationService.enviarNotificacionTramite(
+                saved,
+                "TRAMITE_COMPLETADO",
+                "¡Tu trámite '" + (politica != null ? politica.getNombre() : "Desconocido") + "' ha sido COMPLETADO con éxito!"
+            );
         }
     }
 
@@ -238,7 +320,18 @@ public class RegistroActividadService {
         if (todosHechos) {
             tramite.setEstado(EstadoTramite.COMPLETADO);
             tramite.setFinalizadoEn(Instant.now());
-            tramiteRepo.save(tramite);
+            Tramite saved = tramiteRepo.save(tramite);
+
+            try {
+                PoliticaNegocio politica = politicaService.buscarPorId(saved.getPoliticaId());
+                notificationService.enviarNotificacionTramite(
+                    saved,
+                    "TRAMITE_COMPLETADO",
+                    "¡Tu trámite '" + (politica != null ? politica.getNombre() : "Desconocido") + "' ha sido COMPLETADO con éxito!"
+                );
+            } catch (Exception e) {
+                System.err.println("Error al enviar notificación de completitud de trámite: " + e.getMessage());
+            }
         }
     }
 

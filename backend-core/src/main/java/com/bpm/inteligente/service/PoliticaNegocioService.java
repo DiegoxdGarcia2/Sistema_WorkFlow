@@ -11,6 +11,9 @@ import com.bpm.inteligente.exception.ResourceNotFoundException;
 import com.bpm.inteligente.repository.PoliticaNegocioRepository;
 import com.bpm.inteligente.repository.TenantRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +35,7 @@ public class PoliticaNegocioService {
      * La validación de grafo se aplica solo al ACTIVAR, no al crear.
      */
     @Transactional
+    @CachePut(value = "politicas", key = "#result.id")
     public PoliticaNegocio crear(PoliticaNegocio politica) {
         // 1. Validar que el Tenant exista
         if (!tenantRepo.existsById(politica.getTenantId())) {
@@ -67,6 +71,7 @@ public class PoliticaNegocioService {
      * que NO esté activa. Las políticas activas son inmutables.
      */
     @Transactional
+    @CachePut(value = "politicas", key = "#politicaId")
     public PoliticaNegocio actualizar(String politicaId, PoliticaNegocio datosActualizados) {
         PoliticaNegocio existente = buscarPorId(politicaId);
 
@@ -88,6 +93,7 @@ public class PoliticaNegocioService {
      * Valida la estructura del grafo antes de activar.
      */
     @Transactional
+    @CachePut(value = "politicas", key = "#politicaId")
     public PoliticaNegocio activar(String politicaId) {
         PoliticaNegocio politica = buscarPorId(politicaId);
         validarEstructuraGrafo(politica);
@@ -100,6 +106,7 @@ public class PoliticaNegocioService {
      * Elimina una política que NO esté activa.
      */
     @Transactional
+    @CacheEvict(value = "politicas", key = "#politicaId")
     public void eliminar(String politicaId) {
         PoliticaNegocio politica = buscarPorId(politicaId);
         if (politica.isEstaActiva()) {
@@ -108,6 +115,7 @@ public class PoliticaNegocioService {
         politicaRepo.deleteById(politicaId);
     }
 
+    @Cacheable(value = "politicas", key = "#id")
     public PoliticaNegocio buscarPorId(String id) {
         return politicaRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("PoliticaNegocio", "id", id));

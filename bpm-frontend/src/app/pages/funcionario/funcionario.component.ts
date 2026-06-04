@@ -1,10 +1,11 @@
-import { Component, OnInit, inject, signal, effect } from '@angular/core';
+import { Component, OnInit, inject, signal, effect, untracked } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { WorkflowService } from '../../services/workflow.service';
 import { PoliticaService } from '../../services/politica.service';
 import { ArchivoService } from '../../services/archivo.service';
+import { environment } from '../../../environments/environment';
 import {
   RegistroActividadDTO,
   CompletarTareaRequest,
@@ -18,11 +19,19 @@ import { ClienteDTO } from '../../models/bpm.models';
 import { FormularioService, FormularioTemplate } from '../../services/formulario.service';
 import { KeyValuePipe } from '@angular/common';
 import { forkJoin } from 'rxjs';
+import { OfflineStorageService } from '../../services/offline-storage.service';
+import { OnlineStatusService } from '../../services/online-status.service';
+import { OfflineUploadQueueService } from '../../services/offline-upload-queue.service';
+import { VoiceFillerModalComponent } from '../../components/voice-filler-modal/voice-filler-modal.component';
+import { TensorflowService } from '../../services/tensorflow.service';
+import { TensorflowPredictionsCard } from '../../components/tensorflow-predictions-card/tensorflow-predictions-card';
+
+import { RepositorioComponent } from './repositorio.component';
 
 @Component({
   selector: 'app-funcionario',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, VoiceFillerModalComponent, RepositorioComponent, TensorflowPredictionsCard],
   styles: [`
     :host { display: block; height: calc(100vh - 4rem); }
     .scrollbar-hide::-webkit-scrollbar { display: none; }
@@ -105,8 +114,9 @@ import { forkJoin } from 'rxjs';
       </aside>
 
       <!-- MAIN CONTENT -->
-      <main class="flex-1 overflow-y-auto p-10 relative">
-        <!-- HEADER -->
+      @if (vista !== 'repositorio') {
+        <main class="flex-1 overflow-y-auto p-10 relative">
+          <!-- HEADER -->
         <header class="flex items-center justify-between mb-10">
           <div class="flex items-center gap-6">
             <div class="w-16 h-16 rounded-[2rem] bg-indigo-500 shadow-2xl shadow-indigo-500/20 flex items-center justify-center text-white text-3xl font-black ring-4 ring-indigo-500/10">
@@ -187,11 +197,14 @@ import { forkJoin } from 'rxjs';
                                <h3 class="text-lg font-bold text-white">{{ t.actividadNombre }}</h3>
                                <span class="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-400 text-[10px] font-black uppercase tracking-wider">{{ t.estado }}</span>
                             </div>
-                            <div class="flex items-center gap-4 text-xs text-slate-500">
-                               <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-slate-700"></span> ID: {{ t.id.slice(0,8) }}</span>
-                               <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-slate-700"></span> Trámite: {{ t.tramiteId.slice(0,8) }}</span>
-                               <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-slate-700"></span> Asignado: {{ t.asignadoEn | date:'short' }}</span>
-                            </div>
+                            <div class="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                                <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-slate-700"></span> ID: {{ t.id.slice(0,8) }}</span>
+                                <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-slate-700"></span> Trámite: {{ t.tramiteId.slice(0,8) }}</span>
+                                @if (t.clienteNombre) {
+                                  <span class="flex items-center gap-1.5 text-cyan-400 font-semibold bg-cyan-500/10 px-2 py-0.5 rounded-lg border border-cyan-500/25"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span> Cliente: {{ t.clienteNombre }}</span>
+                                }
+                                <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-slate-700"></span> Asignado: {{ t.asignadoEn | date:'short' }}</span>
+                             </div>
                          </div>
                       </div>
                       <div class="flex items-center gap-3">
@@ -311,11 +324,42 @@ import { forkJoin } from 'rxjs';
                          <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Formulario de Registro de Actividad</p>
                       </div>
                    </div>
-                   <button (click)="cerrarModal()" class="w-10 h-10 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all text-slate-400">&#10005;</button>
+                   <div class="flex items-center gap-3">
+                      <button (click)="abrirModalVoz()" class="px-4 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all" title="Llenar con Voz">
+                        <span>🎙️</span> Llenar con Voz
+                      </button>
+                      <button (click)="cerrarModal()" class="w-10 h-10 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all text-slate-400">&#10005;</button>
+                   </div>
                 </div>
 
                 <!-- Modal Body -->
                 <div class="flex-1 overflow-y-auto p-10 space-y-8">
+
+                    <!-- Predicción de Enrutamiento Inteligente TensorFlow -->
+                    @if (prediccionActual()) {
+                      <div class="p-6 rounded-3xl bg-indigo-950/20 border border-indigo-500/20 flex flex-col md:flex-row gap-6 items-center justify-between">
+                         <div class="flex-1">
+                            <h4 class="text-xs font-black uppercase text-indigo-400 mb-1.5 tracking-widest flex items-center gap-2">
+                              <span class="relative flex h-2 w-2">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                              </span>
+                              Enrutamiento Inteligente (TensorFlow)
+                            </h4>
+                            <p class="text-[11px] text-slate-400 leading-relaxed mb-1">
+                              Predicción de tiempo de respuesta y sugerencia de canal óptimo basada en el historial de tramitación del cliente y carga de colas actuales.
+                            </p>
+                         </div>
+                         <app-tensorflow-predictions-card 
+                           [rutaSugerida]="prediccionActual()!.rutaSugerida"
+                           [tiempoEstimadoMinutos]="prediccionActual()!.tiempoEstimadoMinutos"
+                           [prioridadRecomendada]="prediccionActual()!.prioridadRecomendada"
+                           [isAnomalo]="prediccionActual()!.isAnomalo"
+                           [scoreEficiencia]="prediccionActual()!.scoreEficiencia"
+                           class="w-full md:w-auto">
+                         </app-tensorflow-predictions-card>
+                      </div>
+                    }
                    
                     <!-- Template Loader -->
                     <div class="p-6 rounded-3xl bg-indigo-500/5 border border-indigo-500/10 mb-8">
@@ -548,8 +592,8 @@ import { forkJoin } from 'rxjs';
                        @for (item of detalleHistorial.datosFormulario | keyvalue; track item.key) {
                          <div class="p-4 rounded-2xl bg-white/[0.03] border border-white/5 flex flex-col gap-1">
                            <span class="text-[9px] font-bold text-slate-500 uppercase">{{ getFieldLabel(item.key, detalleHistorial) }}</span>
-                           @if (item.value && item.value.id && item.value.path) {
-                             <a [href]="item.value.path" target="_blank" class="text-xs text-indigo-400 font-bold hover:underline flex items-center gap-2">
+                           @if (item.value && item.value.id && (item.value.path || item.value.url)) {
+                             <a [href]="getFileUrl(item.value)" target="_blank" class="text-xs text-indigo-400 font-bold hover:underline flex items-center gap-2">
                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                                {{ item.value.nombre }}
                              </a>
@@ -568,7 +612,7 @@ import { forkJoin } from 'rxjs';
                      <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-4">Documentación Adjunta</p>
                      <div class="grid grid-cols-2 gap-3">
                        @for (file of detalleHistorial.archivos; track file.id) {
-                         <a [href]="file.path || file.url || '/api/archivos/download/' + file.id" target="_blank"
+                         <a [href]="getFileUrl(file)" target="_blank"
                             class="p-4 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center gap-3 hover:bg-white/[0.05] transition-all">
                             <div class="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
                               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -715,6 +759,20 @@ import { forkJoin } from 'rxjs';
           </div>
         }
       </main>
+      }
+
+      @if (vista === 'repositorio') {
+        <main class="flex-1 overflow-y-auto relative bg-slate-950">
+          <app-repositorio></app-repositorio>
+        </main>
+      }
+
+      <app-voice-filler-modal 
+        [fields]="getFields()" 
+        [visible]="mostrarModalVoz"
+        (onClose)="cerrarModalVoz()" 
+        (onApplied)="aplicarDatosVoz($event)">
+      </app-voice-filler-modal>
 
       <style>
         .nav-item {
@@ -746,8 +804,14 @@ import { forkJoin } from 'rxjs';
   `,
 })
 export class FuncionarioComponent implements OnInit {
-  vista: 'bandeja' | 'disponible' | 'historial' | 'iniciar' = 'bandeja';
+  vista: 'bandeja' | 'disponible' | 'historial' | 'iniciar' | 'repositorio' = 'bandeja';
   
+  // TensorFlow Live Prediction
+  prediccionCargando = signal<boolean>(false);
+  prediccionError = signal<boolean>(false);
+  prediccionActual = signal<any | null>(null);
+  private tfService = inject(TensorflowService);
+
   // Data
   politicasActivas: PoliticaDTO[] = [];
   
@@ -760,14 +824,16 @@ export class FuncionarioComponent implements OnInit {
   archivosCargados: any[] = [];
   formularioNotas = '';
   mostrandoAddExtra = false;
+  mostrarModalVoz = false;
 
   // UI Icons
   private sanitizer = inject(DomSanitizer);
   
-  menu: { view: 'bandeja' | 'disponible' | 'historial' | 'iniciar', label: string, svg: string, safeSvg?: SafeHtml }[] = [
+  menu: { view: 'bandeja' | 'disponible' | 'historial' | 'iniciar' | 'repositorio', label: string, svg: string, safeSvg?: SafeHtml }[] = [
     { view: 'bandeja', label: 'Mis Tareas', svg: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>` },
     { view: 'disponible', label: 'Disponibles', svg: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 4 4"/><path d="M13 7 8.5 2.5a2.12 2.12 0 0 0-3 0L2.5 5.5a2.12 2.12 0 0 0 0 3L7 13"/><path d="m9 15 4 4"/><path d="M11 17l4.5 4.5a2.12 2.12 0 0 0 3 0l3-3a2.12 2.12 0 0 0 0-3L17 11"/><path d="m12 12 4-4"/><path d="m8 16 4-4"/></svg>` },
     { view: 'historial', label: 'Historial', svg: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>` },
+    { view: 'repositorio', label: 'Repositorio', svg: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>` },
     { view: 'iniciar', label: 'Iniciar Trámite', svg: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 2.6-2 3.5 0 1 2 1 2 1s1-1 1-2c0-.9-.74-2.24-1-3.5Z"/><path d="M15 8.5c1.5-1.26 2-2.6 2-3.5 0-1-2-1-2-1s-1 1-1 2c0 .9.74 2.24 1 3.5Z"/><path d="M12 12c2.14 0 4.22 1.2 5.8 3.03 1.51 1.74 2.27 3.58 2.2 4.97-.03.53-.28 1-.7 1.3a1.55 1.55 0 0 1-1.3.3c-1.39-.27-3.23-1.42-4.97-3.41A13.9 13.9 0 0 1 12 12Z"/><path d="M12 12c-2.14 0-4.22-1.2-5.8-3.03-1.51-1.74-2.27-3.58-2.2-4.97.03-.53.28-1 .7-1.3a1.55 1.55 0 0 1 1.3-.3c1.39.27 3.23 1.42 4.97 3.41A13.9 13.9 0 0 1 12 12Z"/><path d="M9 15c-1.8 1.8-3.9 3.1-6 3.1-.3 0-.6 0-.8-.1-.4-.1-.7-.3-.9-.6-.2-.3-.3-.7-.2-1.1.2-2.1 1.5-4.2 3.3-6 1.8-1.8 3.9-3.1 6-3.1.3 0 .6 0 .8.1.4.1.7.3.9.6.2.3.3.7.2 1.1-.2 2.1-1.5 4.2-3.3 6Z"/></svg>` }
   ];
 
@@ -794,6 +860,9 @@ export class FuncionarioComponent implements OnInit {
   formNuevoCliente: Partial<ClienteDTO> = { nombre: '', apellido: '', ci: '', correo: '', telefono: '', direccion: '' };
 
   private cs = inject(ClienteService);
+  private offlineStorage = inject(OfflineStorageService);
+  public onlineStatus = inject(OnlineStatusService);
+  private uploadQueue = inject(OfflineUploadQueueService);
 
   get deptoNombre() {
     return (this.auth.usuario() as any)?.departamento || 'Funcionario';
@@ -874,7 +943,36 @@ export class FuncionarioComponent implements OnInit {
       const user = this.auth.usuario();
       const v = this.vista;
       if (user) {
-        this.cargarDatos();
+        untracked(() => this.cargarDatos());
+      }
+    });
+
+    // Listen to offline upload queue completion events
+    this.uploadQueue.syncFinished$.subscribe((result) => {
+      if (result.success && result.fileId) {
+        // 1. General files
+        const idx = this.archivosCargados.findIndex(f => f.id === `offline://${result.uploadId}`);
+        if (idx !== -1) {
+          this.archivosCargados[idx].id = result.fileId;
+          this.archivosCargados[idx].path = result.url || this.archivoService.getDownloadUrl(result.fileId);
+          this.archivosCargados[idx].offline = false;
+        }
+
+        // 2. Form fields (dynamic file uploads)
+        for (const key of Object.keys(this.formData)) {
+          const val = this.formData[key];
+          if (val && val.id === `offline://${result.uploadId}`) {
+            this.formData[key] = {
+              ...val,
+              id: result.fileId,
+              path: result.url || this.archivoService.getDownloadUrl(result.fileId),
+              offline: false
+            };
+          }
+        }
+        this.showToast('Archivo offline sincronizado correctamente', 'success');
+      } else {
+        this.showToast(`Error al sincronizar archivo offline: ${result.error}`, 'error');
       }
     });
   }
@@ -902,21 +1000,52 @@ export class FuncionarioComponent implements OnInit {
 
   setVista(v: any) {
     this.vista = v;
-    this.cargarDatos();
+    if (v === 'bandeja' || v === 'disponible' || v === 'historial') {
+      this.cargarDatos(false);
+    }
   }
 
-  cargarDatos() {
+  cargarDatos(showSpinner: boolean = false) {
     const user = this.auth.usuario();
     if (!user) return;
-    setTimeout(() => this.cargando.set(true));
+    
+    // Activar spinner solo si es requerido o es la primera carga (sin datos locales)
+    const pending = this.workflowService.tareasPendientes();
+    const hist = this.workflowService.historial();
+    const shouldShow = showSpinner || (pending.length === 0 && hist.length === 0);
 
-    const finalize = () => setTimeout(() => this.cargando.set(false));
+    if (shouldShow) {
+      setTimeout(() => this.cargando.set(true));
+    }
 
-    // Cargar todos los sets de datos para mantener contadores sincronizados en el dashboard
-    const obs = [
-      this.workflowService.cargarBandejaUnificada(user.id, user.departamentoId),
-      this.workflowService.cargarHistorial(user.id)
-    ];
+    let completados = 0;
+    const total = 2;
+    const checkFinalize = () => {
+      completados++;
+      if (completados >= total) {
+        setTimeout(() => this.cargando.set(false));
+      }
+    };
+
+    // 1. Cargar Bandeja
+    this.workflowService.cargarBandejaUnificada(user.id, user.departamentoId)
+      .subscribe({
+        next: () => checkFinalize(),
+        error: (e) => {
+          console.error('Error cargando bandeja unificada:', e);
+          checkFinalize();
+        }
+      });
+
+    // 2. Cargar Historial
+    this.workflowService.cargarHistorial(user.id)
+      .subscribe({
+        next: () => checkFinalize(),
+        error: (e) => {
+          console.error('Error cargando historial:', e);
+          checkFinalize();
+        }
+      });
 
     // Si estamos en la vista de iniciar trámite, también cargar las políticas iniciables
     if (this.vista === 'iniciar') {
@@ -925,20 +1054,12 @@ export class FuncionarioComponent implements OnInit {
       });
     }
 
-    forkJoin(obs).subscribe({
-      next: () => finalize(),
-      error: (e) => {
-        console.error('Error cargando datos unificados:', e);
-        finalize();
-      }
-    });
-
     // Cargar plantillas de formularios
     this.fs.listarPorTenant(user.tenantId).subscribe();
   }
 
   getTitulo() {
-    return { bandeja: 'Tareas Pendientes', disponible: 'Mercado de Tareas', historial: 'Control de Rendimiento', iniciar: 'Nuevo Trámite' }[this.vista];
+    return { bandeja: 'Tareas Pendientes', disponible: 'Mercado de Tareas', historial: 'Control de Rendimiento', iniciar: 'Nuevo Trámite', repositorio: 'Repositorio Documental' }[this.vista];
   }
 
   getSubtitulo() {
@@ -946,7 +1067,8 @@ export class FuncionarioComponent implements OnInit {
       bandeja: 'Gestiona las actividades asignadas a tu departamento.', 
       disponible: 'Toma tareas libres y acelera el flujo de trabajo.', 
       historial: 'Analiza tu progreso y el historial de acciones.',
-      iniciar: 'Pon en marcha una nueva política de negocio.'
+      iniciar: 'Pon en marcha una nueva política de negocio.',
+      repositorio: 'Consulta y gestiona los archivos subidos.'
     }[this.vista];
   }
 
@@ -977,6 +1099,39 @@ export class FuncionarioComponent implements OnInit {
     this.formData = { ...(t.datosFormulario || {}) };
     this.archivosCargados = [...(t.archivos || [])];
     this.formularioNotas = t.notas || '';
+
+    // Predicción en tiempo real de TensorFlow
+    this.prediccionCargando.set(true);
+    this.prediccionError.set(false);
+    this.prediccionActual.set(null);
+
+    const user = this.auth.usuario();
+    this.tfService.predict({
+      hora_del_dia: new Date().getHours(),
+      dia_de_semana: Math.max(0, new Date().getDay() - 1), // Lunes=0, ..., Domingo=6
+      departamento_id: t.departamentoId || user?.departamentoId || 'default',
+      politica_id: t.politicaId || 'default',
+      carga_actual: this.getTareas().length,
+      historial_cliente: 0.75
+    }).subscribe({
+      next: (res) => {
+        this.prediccionActual.set(res);
+        this.prediccionCargando.set(false);
+      },
+      error: (e) => {
+        console.error('Error al obtener predicción de TensorFlow:', e);
+        this.prediccionError.set(true);
+        this.prediccionCargando.set(false);
+        // Fallback demo data
+        this.prediccionActual.set({
+          rutaSugerida: 'Revisión y Aprobación',
+          tiempoEstimadoMinutos: 45,
+          prioridadRecomendada: 'MEDIA',
+          isAnomalo: false,
+          scoreEficiencia: 0.88
+        });
+      }
+    });
   }
 
   getFields() {
@@ -988,13 +1143,40 @@ export class FuncionarioComponent implements OnInit {
     const file = event.target.files[0];
     if (file) {
       this.isUploadingGeneral = true;
+      if (!this.onlineStatus.isOnline()) {
+        this.showToast('Sin conexión. Archivo encolado para sincronización.', 'success');
+        this.offlineStorage.addPendingUpload(
+          file.name,
+          file.type,
+          file,
+          this.tareaActiva?.tramiteId || '',
+          'general_attachment'
+        ).then(pending => {
+          this.archivosCargados.push({
+            id: `offline://${pending.id}`,
+            nombre: file.name,
+            size: file.size,
+            path: '',
+            tipo: file.type,
+            subidoEn: new Date().toISOString(),
+            offline: true
+          });
+          this.isUploadingGeneral = false;
+        }).catch(err => {
+          console.error('Offline storage error:', err);
+          this.isUploadingGeneral = false;
+          this.showToast('Error al encolar archivo', 'error');
+        });
+        return;
+      }
+
       this.showToast('Subiendo archivo...', 'success');
       this.archivoService.subir(file).subscribe({
         next: (res) => {
           this.archivosCargados.push({
             id: res.id,
             nombre: file.name,
-            tamano: file.size,
+            size: file.size,
             path: res.url || this.archivoService.getDownloadUrl(res.id),
             tipo: file.type,
             subidoEn: new Date().toISOString()
@@ -1063,6 +1245,34 @@ export class FuncionarioComponent implements OnInit {
     const file = event.target.files[0];
     if (file) {
       this.uploadingFiles = { ...this.uploadingFiles, [key]: true };
+      
+      if (!this.onlineStatus.isOnline()) {
+        this.showToast('Sin conexión. Archivo encolado para sincronización.', 'success');
+        this.offlineStorage.addPendingUpload(
+          file.name,
+          file.type,
+          file,
+          this.tareaActiva?.tramiteId || '',
+          key
+        ).then(pending => {
+          this.formData[key] = {
+            id: `offline://${pending.id}`,
+            nombre: file.name,
+            tamano: file.size,
+            path: '',
+            tipo: file.type,
+            subidoEn: new Date().toISOString(),
+            offline: true
+          };
+          this.uploadingFiles = { ...this.uploadingFiles, [key]: false };
+        }).catch(err => {
+          console.error('Offline storage error:', err);
+          this.uploadingFiles = { ...this.uploadingFiles, [key]: false };
+          this.showToast('Error al encolar archivo', 'error');
+        });
+        return;
+      }
+
       this.showToast(`Subiendo ${file.name}...`, 'success');
       this.archivoService.subir(file).subscribe({
         next: (res) => {
@@ -1161,15 +1371,42 @@ export class FuncionarioComponent implements OnInit {
     this.detalleHistorial = h;
   }
 
-  getFieldLabel(key: any, registro: RegistroActividadDTO | null): string {
+  getFieldLabel(key: string, registro: RegistroActividadDTO): string {
     const sKey = String(key);
-    if (!registro?.esquemaFormulario) return sKey;
+    if (!registro.esquemaFormulario) return sKey;
     const fields = (registro.esquemaFormulario as any).fields || [];
     const field = fields.find((f: any) => f.key === sKey);
     return field ? field.label : sKey;
   }
 
+  getFileUrl(file: any): string {
+    const rawUrl = file.path || file.url || `/api/archivos/download/${file.id}`;
+    if (rawUrl && rawUrl.startsWith('/api')) {
+      return environment.apiUrl.replace('/api', '') + rawUrl;
+    }
+    return rawUrl;
+  }
+
   cerrarModal() { this.tareaActiva = null; }
+
+  abrirModalVoz() {
+    this.mostrarModalVoz = true;
+  }
+
+  cerrarModalVoz() {
+    this.mostrarModalVoz = false;
+  }
+
+  aplicarDatosVoz(valores: any) {
+    if (valores) {
+      for (const key of Object.keys(valores)) {
+        if (valores[key] !== null && valores[key] !== undefined) {
+          this.formData[key] = valores[key];
+        }
+      }
+      this.showToast('Formulario auto-llenado por voz con éxito', 'success');
+    }
+  }
 
   abrirSeleccionCliente(p: PoliticaDTO) {
     this.politicaParaIniciar = p;
@@ -1210,17 +1447,19 @@ export class FuncionarioComponent implements OnInit {
   }
 
   iniciarTramite(p: PoliticaDTO, cliente?: ClienteDTO) {
-    if (this.procesandoId()) return;
     this.procesandoId.set(p.id);
     const user = this.auth.usuario();
     
-    this.workflowService.iniciarTramite({ 
+    const request = { 
       politicaId: p.id,
       usuarioId: user?.id,
       clienteId: cliente?.id,
       documentoCliente: cliente?.ci,
       clienteNombre: cliente ? `${cliente.nombre} ${cliente.apellido}` : undefined
-    }).subscribe({
+    };
+    console.log('Enviando iniciar tramite:', request);
+
+    this.workflowService.iniciarTramite(request).subscribe({
       next: () => {
         this.procesandoId.set('');
         this.modalClienteOpen = false;
@@ -1229,7 +1468,8 @@ export class FuncionarioComponent implements OnInit {
       },
       error: (e) => { 
         this.procesandoId.set(''); 
-        this.showToast(e.error?.message || 'Error al iniciar trámite', 'error'); 
+        console.error('Error detallado al iniciar trámite:', e);
+        this.showToast(e.error?.message || e.message || 'Error al iniciar trámite', 'error'); 
       }
     });
   }

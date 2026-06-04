@@ -63,7 +63,7 @@ public final class DomainMapper {
     }
 
 
-    public static RegistroActividadDTO toDTO(RegistroActividad entity, String actividadNombre) {
+    public static RegistroActividadDTO toDTO(RegistroActividad entity, String actividadNombre, String clienteNombre, String politicaId) {
         return RegistroActividadDTO.builder()
                 .id(entity.getId())
                 .tramiteId(entity.getTramiteId())
@@ -77,6 +77,8 @@ public final class DomainMapper {
                 .notas(entity.getNotas())
                 .asignadoEn(entity.getAsignadoEn())
                 .completadoEn(entity.getCompletadoEn())
+                .clienteNombre(clienteNombre)
+                .politicaId(politicaId)
                 .build();
     }
 

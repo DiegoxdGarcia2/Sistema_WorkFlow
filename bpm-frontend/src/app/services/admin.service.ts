@@ -120,7 +120,27 @@ export class AdminService {
   }
 
   cargarAuditLog(tenantId: string): Observable<AuditLogDTO[]> {
-    return this.http.get<AuditLogDTO[]>(`${this.baseUrl}/audit/tenant/${tenantId}`).pipe(tap(d => this.auditLogs.set(d)));
+    return this.cargarAuditLogConFiltros(tenantId, {});
+  }
+
+  cargarAuditLogConFiltros(tenantId: string, params: any): Observable<AuditLogDTO[]> {
+    return this.http.get<AuditLogDTO[]>(`${this.baseUrl}/audit/tenant/${tenantId}`, { params }).pipe(
+      tap(d => this.auditLogs.set(d))
+    );
+  }
+
+  exportarAuditLogExcel(tenantId: string, params: any): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/audit/tenant/${tenantId}/export/excel`, {
+      params,
+      responseType: 'blob'
+    });
+  }
+
+  exportarAuditLogPDF(tenantId: string, params: any): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/audit/tenant/${tenantId}/export/pdf`, {
+      params,
+      responseType: 'blob'
+    });
   }
 
   // --- Cargos ---

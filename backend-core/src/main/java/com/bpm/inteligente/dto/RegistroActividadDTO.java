@@ -27,4 +27,6 @@ public class RegistroActividadDTO {
     private java.util.List<com.bpm.inteligente.domain.RegistroActividad.ArchivoInfo> archivos;
     private Instant asignadoEn;
     private Instant completadoEn;
+    private String clienteNombre;
+    private String politicaId;
 }

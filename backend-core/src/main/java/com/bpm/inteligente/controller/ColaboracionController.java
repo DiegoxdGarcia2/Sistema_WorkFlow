@@ -8,8 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.CrossOrigin;
 
@@ -21,7 +19,6 @@ import java.util.Set;
 @CrossOrigin(origins = "*")
 public class ColaboracionController {
 
-    private final SimpMessagingTemplate messagingTemplate;
     private final ColaboracionService colaboracionService;
 
     @MessageMapping("/politica/{politicaId}/join")
@@ -34,7 +31,7 @@ public class ColaboracionController {
                 .payload(colaboradores)
                 .build();
                 
-        messagingTemplate.convertAndSend("/topic/politica/" + politicaId, msg);
+        colaboracionService.publishToRoom(politicaId, msg);
     }
 
     @MessageMapping("/politica/{politicaId}/leave")
@@ -47,23 +44,26 @@ public class ColaboracionController {
                 .payload(colaboradores)
                 .build();
                 
-        messagingTemplate.convertAndSend("/topic/politica/" + politicaId, msg);
+        colaboracionService.publishToRoom(politicaId, msg);
     }
 
     @MessageMapping("/politica/{politicaId}/node-editing")
     public void nodeEditing(@DestinationVariable String politicaId, @Payload SocketMessageDTO message) {
         // Actualizamos el estado de qué nodo está tocando
-        String nodoId = (String) message.getPayload();
+        // JACKSON deserializa el payload como LinkedHashMap en producción, evitamos ClassCastException
+        Object raw = message.getPayload();
+        String nodoId = raw != null ? raw.toString() : null;
+        
         colaboracionService.updateColaboradorStatus(politicaId, message.getColaborador().getId(), nodoId);
         
         // Retransmitimos para que los demás lo bloqueen
-        messagingTemplate.convertAndSend("/topic/politica/" + politicaId, message);
+        colaboracionService.publishToRoom(politicaId, message);
     }
 
     @MessageMapping("/politica/{politicaId}/node-moved")
     public void nodeMoved(@DestinationVariable String politicaId, @Payload SocketMessageDTO message) {
         // Simplemente retransmitimos el movimiento a todos los demás en la sala
-        messagingTemplate.convertAndSend("/topic/politica/" + politicaId, message);
+        colaboracionService.publishToRoom(politicaId, message);
     }
 
     @MessageMapping("/politica/{politicaId}/policy-updated")
@@ -72,6 +72,52 @@ public class ColaboracionController {
         // El payload contiene el JSON completo de la PoliticaDTO actualizada
         log.info("Política {} actualizada por {}. Retransmitiendo a la sala.", politicaId,
                 message.getColaborador() != null ? message.getColaborador().getNombre() : "desconocido");
-        messagingTemplate.convertAndSend("/topic/politica/" + politicaId, message);
+        colaboracionService.publishToRoom(politicaId, message);
+    }
+
+    // ── WebSocket Endpoints para Colaboración en Documentos ──
+
+    @MessageMapping("/documento/{docId}/join")
+    public void joinDocRoom(@DestinationVariable String docId, @Payload ColaboradorDTO colaborador, @org.springframework.messaging.handler.annotation.Header("simpSessionId") String sessionId) {
+        log.info("Colaborador {} se unió al documento {} (Session: {})", colaborador.getNombre(), docId, sessionId);
+        Set<ColaboradorDTO> colaboradores = colaboracionService.joinDocRoom(docId, colaborador, sessionId);
+        
+        SocketMessageDTO msg = SocketMessageDTO.builder()
+                .type("ROOM_STATE")
+                .payload(colaboradores)
+                .build();
+                
+        colaboracionService.publishToDocRoom(docId, msg);
+    }
+
+    @MessageMapping("/documento/{docId}/leave")
+    public void leaveDocRoom(@DestinationVariable String docId, @Payload ColaboradorDTO colaborador) {
+        log.info("Colaborador {} salió del documento {}", colaborador.getNombre(), docId);
+        Set<ColaboradorDTO> colaboradores = colaboracionService.leaveDocRoom(docId, colaborador.getId());
+        
+        SocketMessageDTO msg = SocketMessageDTO.builder()
+                .type("ROOM_STATE")
+                .payload(colaboradores)
+                .build();
+                
+        colaboracionService.publishToDocRoom(docId, msg);
+    }
+
+    @MessageMapping("/documento/{docId}/edit")
+    public void docEdit(@DestinationVariable String docId, @Payload SocketMessageDTO message) {
+        // Retransmitir cambios de texto del documento a todos los demás en la sala
+        colaboracionService.publishToDocRoom(docId, message);
+    }
+
+    @MessageMapping("/documento/{docId}/cursor")
+    public void docCursor(@DestinationVariable String docId, @Payload SocketMessageDTO message) {
+        // Retransmitir movimientos de cursor a la sala
+        colaboracionService.publishToDocRoom(docId, message);
+    }
+
+    @MessageMapping("/documento/{docId}/log")
+    public void docLog(@DestinationVariable String docId, @Payload SocketMessageDTO message) {
+        // Retransmitir log de actividad (join, edit, undo, redo, format) a la sala
+        colaboracionService.publishToDocRoom(docId, message);
     }
 }

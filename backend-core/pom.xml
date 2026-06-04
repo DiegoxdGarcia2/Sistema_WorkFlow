@@ -60,6 +60,12 @@
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
 
+        <!-- Redis for WebSocket Scaling -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <!-- WebFlux (Only for WebClient as HTTP client, server remains MVC) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -108,6 +114,27 @@
             <groupId>com.cloudinary</groupId>
             <artifactId>cloudinary-http45</artifactId>
             <version>1.39.0</version>
+        </dependency>
+
+        <!-- AWS S3 SDK v2 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.25.15</version>
+        </dependency>
+
+        <!-- Excel Export -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
+        </dependency>
+
+        <!-- PDF Export -->
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>1.3.39</version>
         </dependency>
     </dependencies>
 

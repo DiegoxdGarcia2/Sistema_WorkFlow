@@ -4,88 +4,64 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.Instant;
-import java.util.Map;
-import java.util.UUID;
-
-import com.cloudinary.Cloudinary;
-import com.cloudinary.utils.ObjectUtils;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.servlet.HandlerMapping;
+
+import com.bpm.inteligente.service.S3StorageService;
+import com.bpm.inteligente.domain.DocumentoVersionado;
+import com.bpm.inteligente.repository.DocumentoVersionadoRepository;
+
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
+import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/archivos")
 public class ArchivoController {
 
-    private final Cloudinary cloudinary;
-    private final Path root = Paths.get("uploads");
+    private final S3StorageService s3StorageService;
+    private final DocumentoVersionadoRepository documentoRepository;
 
-    @Autowired
-    public ArchivoController(Cloudinary cloudinary) {
-        this.cloudinary = cloudinary;
+    public ArchivoController(S3StorageService s3StorageService, DocumentoVersionadoRepository documentoRepository) {
+        this.s3StorageService = s3StorageService;
+        this.documentoRepository = documentoRepository;
     }
 
     @PostMapping("/upload")
     public ResponseEntity<ArchivoResponse> upload(@RequestParam("file") MultipartFile file) {
         String originalName = file.getOriginalFilename();
-        System.out.println("📤 Iniciando subida a CLOUDINARY: " + originalName);
+        System.out.println("📤 Iniciando subida a AWS S3: " + originalName);
         try {
-            String contentType = file.getContentType();
-            String resourceType = "auto";
-            
-            // Si es PDF o similar, forzar resource_type 'raw' para evitar bloqueos de 'image' en Cloudinary
-            if (contentType != null && (contentType.contains("pdf") || contentType.contains("zip") || contentType.contains("msword"))) {
-                resourceType = "raw";
-            }
-
-            // Public ID sin extensión (Cloudinary la maneja dinámicamente para imágenes)
-            // Pero para 'raw' es mejor incluirla para que el link sea directo.
             String ext = "";
             if (originalName != null && originalName.contains(".")) {
                 ext = originalName.substring(originalName.lastIndexOf("."));
             }
             
-            String customPublicId = UUID.randomUUID().toString();
-            if ("raw".equals(resourceType)) {
-                customPublicId += ext;
-            }
+            String key = UUID.randomUUID().toString() + ext;
+            
+            // Subir a S3
+            s3StorageService.uploadFile(key, file.getBytes(), file.getContentType());
+            
+            // La URL estática que se guardará en la BD será la ruta a nuestro endpoint de descarga
+            String localDownloadUrl = "/api/archivos/download/" + key;
 
-            Map uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
-                    "resource_type", resourceType,
-                    "folder", "bpm_inteligente",
-                    "public_id", customPublicId
-            ));
-
-            String url = (String) uploadResult.get("secure_url");
-            String publicId = (String) uploadResult.get("public_id");
-
-            System.out.println("✅ Subida exitosa [" + resourceType + "]: " + url);
+            System.out.println("✅ Subida exitosa a S3. Key: " + key);
 
             return ResponseEntity.ok(ArchivoResponse.builder()
-                    .id(publicId)
+                    .id(key)
                     .nombre(originalName)
-                    .tipo(contentType)
+                    .tipo(file.getContentType())
                     .tamano(file.getSize())
                     .subidoEn(Instant.now())
-                    .url(url)
+                    .url(localDownloadUrl)
                     .build());
         } catch (Exception e) {
-            System.err.println("❌ ERROR en subida: " + e.getMessage());
+            System.err.println("❌ ERROR en subida S3: " + e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -94,40 +70,31 @@ public class ArchivoController {
     public ResponseEntity<?> download(HttpServletRequest request) {
         try {
             String fullPath = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
-            String filename = fullPath.substring(fullPath.indexOf("/download/") + 10);
+            String key = fullPath.substring(fullPath.indexOf("/download/") + 10);
 
-            // Intentar detectar si es imagen o raw por la extensión en el nombre
-            String type = "image";
-            if (filename.toLowerCase().endsWith(".pdf") || filename.toLowerCase().endsWith(".docx") || filename.toLowerCase().endsWith(".zip")) {
-                type = "raw";
+            // Intentar resolver si la clave es el ID de un DocumentoVersionado en MongoDB
+            Optional<DocumentoVersionado> docOpt = documentoRepository.findById(key);
+            if (docOpt.isPresent()) {
+                DocumentoVersionado doc = docOpt.get();
+                int currentVersion = doc.getVersionActual();
+                DocumentoVersionado.Revision revision = doc.getHistorial().stream()
+                        .filter(r -> r.getVersion() == currentVersion)
+                        .findFirst()
+                        .orElse(doc.getHistorial().isEmpty() ? null : doc.getHistorial().get(doc.getHistorial().size() - 1));
+                if (revision != null && revision.getS3Key() != null) {
+                    System.out.println("🔄 Resolviendo documento ID: " + key + " a clave S3: " + revision.getS3Key());
+                    key = revision.getS3Key();
+                }
             }
 
-            if (filename.startsWith("bpm_inteligente/")) {
-                String cloudUrl = "https://res.cloudinary.com/dfnseyypi/" + type + "/upload/" + filename;
-                return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(cloudUrl)).build();
-            }
-
-            // 2. Si no, buscar localmente
-            Path file = root.resolve(filename);
-            Resource resource = new UrlResource(file.toUri());
-
-            if (resource.exists() || resource.isReadable()) {
-                String contentType = Files.probeContentType(file);
-                if (contentType == null) contentType = "application/octet-stream";
-
-                String disposition = (contentType.equals("application/pdf") || contentType.startsWith("image/")) 
-                    ? "inline" : "attachment";
-
-                return ResponseEntity.ok()
-                        .contentType(MediaType.parseMediaType(contentType))
-                        .header(HttpHeaders.CONTENT_DISPOSITION, disposition + "; filename=\"" + resource.getFilename() + "\"")
-                        .body(resource);
-            } else {
-                return ResponseEntity.notFound().build();
-            }
+            // Generar URL prefirmada temporal
+            String presignedUrl = s3StorageService.generatePresignedUrl(key);
+            
+            // Redirigir al cliente a la URL de S3 directamente (HTTP 302)
+            return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(presignedUrl)).build();
         } catch (Exception e) {
-            System.err.println("❌ Error en download: " + e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            System.err.println("❌ Error en download S3: " + e.getMessage());
+            return ResponseEntity.notFound().build();
         }
     }
 

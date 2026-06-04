@@ -48,6 +48,7 @@ public class Usuario implements UserDetails {
 
     private String password;
     private RolUsuario rol;
+    private String clienteId;
 
     @Builder.Default
     private boolean activo = true;

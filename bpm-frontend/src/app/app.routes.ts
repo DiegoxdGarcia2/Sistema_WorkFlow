@@ -21,6 +21,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/admin/admin.component').then(m => m.AdminComponent),
   },
   {
+    path: 'analytics',
+    canActivate: [authGuard, roleGuard(['ADMINISTRADOR', 'DISENADOR'])],
+    loadComponent: () => import('./pages/analytics-dashboard/analytics-dashboard.component').then(m => m.NlpAnalyticsDashboardComponent),
+  },
+  {
     path: 'designer',
     canActivate: [authGuard, roleGuard(['ADMINISTRADOR', 'DISENADOR'])],
     loadComponent: () => import('./pages/designer/projects-hub.component').then(m => m.ProjectsHubComponent),
@@ -32,10 +37,20 @@ export const routes: Routes = [
   },
   {
     path: 'funcionario',
-    canActivate: [authGuard],
+    canActivate: [authGuard, roleGuard(['ADMINISTRADOR', 'DISENADOR', 'FUNCIONARIO'])],
     loadComponent: () => import('./pages/funcionario/funcionario.component').then(m => m.FuncionarioComponent),
   },
-  // ── Portal del Cliente (público, sin autenticación) ──
+  // ── Portal del Cliente (Público / Autenticado) ──
+  {
+    path: 'registro-cliente',
+    canActivate: [loggedInGuard],
+    loadComponent: () => import('./pages/login/register-client.component').then(m => m.RegisterClientComponent),
+  },
+  {
+    path: 'portal-cliente',
+    canActivate: [authGuard, roleGuard(['CLIENTE'])],
+    loadComponent: () => import('./pages/tracking/client-portal.component').then(m => m.ClientPortalComponent),
+  },
   {
     path: 'tracking',
     loadComponent: () => import('./pages/tracking/tracking.component').then(m => m.TrackingComponent),

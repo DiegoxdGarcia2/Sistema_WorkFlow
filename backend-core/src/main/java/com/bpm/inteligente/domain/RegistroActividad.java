@@ -23,6 +23,10 @@ import java.util.Map;
 @Document(collection = "registros_actividad")
 @CompoundIndex(name = "idx_tramite_estado", def = "{'tramiteId': 1, 'estado': 1}")
 @CompoundIndex(name = "idx_ejecutor_estado", def = "{'ejecutadoPor': 1, 'estado': 1}")
+@CompoundIndex(name = "idx_ejecutor_id_estado", def = "{'ejecutadoPorId': 1, 'estado': 1}")
+@CompoundIndex(name = "idx_depto_estado", def = "{'departamentoId': 1, 'estado': 1}")
+@CompoundIndex(name = "idx_depto_ejecutor_estado", def = "{'departamentoId': 1, 'ejecutadoPorId': 1, 'estado': 1}")
+@CompoundIndex(name = "idx_ejecutor_id_estado_completado", def = "{'ejecutadoPorId': 1, 'estado': 1, 'completadoEn': -1}")
 public class RegistroActividad {
 
     @Id
@@ -32,6 +36,7 @@ public class RegistroActividad {
     private String tramiteId;
 
     private String actividadId;
+    private String actividadNombre;
     private String ejecutadoPor;
     private String ejecutadoPorId;
     @Indexed

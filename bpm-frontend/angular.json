@@ -30,7 +30,8 @@
             ],
             "allowedCommonJsDependencies": [
               "@stomp/stompjs"
-            ]
+            ],
+            "serviceWorker": "src/ngsw-config.json"
           },
             "configurations": {
               "production": {

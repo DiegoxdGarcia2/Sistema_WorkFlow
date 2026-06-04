@@ -14,7 +14,11 @@ export const roleGuard = (allowedRoles: string[]): CanActivateFn => {
     }
 
     if (!allowedRoles.includes(user.rol)) {
-      router.navigate(['/funcionario']);
+      if (user.rol === 'CLIENTE') {
+        router.navigate(['/portal-cliente']);
+      } else {
+        router.navigate(['/funcionario']);
+      }
       return false;
     }
 

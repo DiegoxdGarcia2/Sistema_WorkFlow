@@ -19,19 +19,35 @@
             </a>
           }
           @if (auth.usuario()?.rol === 'ADMINISTRADOR' || auth.usuario()?.rol === 'DISENADOR') {
+            <a routerLink="/analytics" routerLinkActive="bg-indigo-500/15 text-indigo-400"
+               class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all flex items-center gap-2">
+              Analítica NLP
+            </a>
+          }
+          @if (auth.usuario()?.rol === 'ADMINISTRADOR' || auth.usuario()?.rol === 'DISENADOR') {
             <a routerLink="/designer" routerLinkActive="bg-indigo-500/15 text-indigo-400"
                class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all flex items-center gap-2">
               Diseñador
             </a>
           }
-          <a routerLink="/funcionario" routerLinkActive="bg-indigo-500/15 text-indigo-400"
-             class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all flex items-center gap-2">
-            Funcionario
-          </a>
-          <a routerLink="/tracking" routerLinkActive="bg-indigo-500/15 text-indigo-400"
-             class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all flex items-center gap-2">
-            Tracking
-          </a>
+          @if (auth.usuario()?.rol !== 'CLIENTE') {
+            <a routerLink="/funcionario" routerLinkActive="bg-indigo-500/15 text-indigo-400"
+               class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all flex items-center gap-2">
+              Funcionario
+            </a>
+          }
+          @if (auth.usuario()?.rol === 'CLIENTE') {
+            <a routerLink="/portal-cliente" routerLinkActive="bg-indigo-500/15 text-indigo-400"
+               class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all flex items-center gap-2">
+              Mis Trámites
+            </a>
+          }
+          @if (auth.usuario()?.rol !== 'CLIENTE') {
+            <a routerLink="/tracking" routerLinkActive="bg-indigo-500/15 text-indigo-400"
+               class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-all flex items-center gap-2">
+              Tracking
+            </a>
+          }
         </div>
         <div class="flex items-center gap-3">
           <div class="text-right hidden sm:block">

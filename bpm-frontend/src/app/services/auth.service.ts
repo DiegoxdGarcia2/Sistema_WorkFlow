@@ -21,6 +21,7 @@ export interface UsuarioSesion {
 
 export interface LoginRequest { email:  string; password: string; }
 export interface RegistroEmpresaRequest { nombreEmpresa: string; nombreAdmin: string; email: string; password: string; }
+export interface RegistroClienteRequest { ci: string; email: string; password: string; }
 
 import { environment } from '../../environments/environment';
 
@@ -144,6 +145,12 @@ export class AuthService {
 
   registroEmpresa(req: RegistroEmpresaRequest): Observable<UsuarioSesion> {
     return this.http.post<UsuarioSesion>(`${this.baseUrl}/registro-empresa`, req).pipe(
+      tap(user => this.persistSession(user))
+    );
+  }
+
+  registroCliente(req: RegistroClienteRequest): Observable<UsuarioSesion> {
+    return this.http.post<UsuarioSesion>(`${this.baseUrl}/registro-cliente`, req).pipe(
       tap(user => this.persistSession(user))
     );
   }

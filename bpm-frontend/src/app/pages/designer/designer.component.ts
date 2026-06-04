@@ -2,6 +2,8 @@ import { Component, OnInit, OnDestroy, HostListener, ChangeDetectorRef } from '@
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
+import { throttleTime } from 'rxjs/operators';
 import { PoliticaService } from '../../services/politica.service';
 import { PoliticaDTO, Actividad, Calle, Transicion, TipoActividad, TipoRuta } from '../../models/bpm.models';
 import { AuthService } from '../../services/auth.service';
@@ -11,7 +13,7 @@ import { FormBuilderComponent } from '../admin/form-builder.component';
 import { ColaboracionService, SocketMessageDTO } from '../../services/colaboracion.service';
 import { MlAnalysisService, AnalysisResult } from '../../services/ml-analysis.service';
 import { AiAssistantService, AiAction, AiResponse } from '../../services/ai-assistant.service';
-import { effect, signal } from '@angular/core';
+import { effect, signal, untracked } from '@angular/core';
 
 export interface FormField { 
   key: string; 
@@ -114,6 +116,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   
   showMlPanel = false;
   mlResult: AnalysisResult | null = null;
+  mlFindingsMap = signal<Record<string, AnalysisResult['findings'][0]>>({});
   
   // ── History (Undo/Redo) ──
   historial: PoliticaDTO[] = [];
@@ -143,8 +146,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   private nodeToLaneMap = new Map<string, number>(); // ActId -> LaneIndex
   private actividadesMap = new Map<string, Actividad>(); // ActId -> Actividad
   private cachedConnPaths: any[] = [];
-  private needsConnRefresh = true;
-  private lastConnRefresh = 0;
+  private highFreqSub!: Subscription;
   nuevaPolitica = { nombre: '', descripcion: '' };
   mostrarModalAddCalle = false;
   nuevaCalleNombre = '';
@@ -193,18 +195,20 @@ export class DesignerComponent implements OnInit, OnDestroy {
     // Escuchar eventos WebSocket remotos (señales reactivas)
     effect(() => {
       const msg = this.colabSvc.nodeUpdates();
-      if (msg) this.procesarEventoRemoto(msg);
-    });
+      if (msg) untracked(() => this.procesarEventoRemoto(msg));
+    }, { allowSignalWrites: true });
 
     // Escuchar movimientos de alta frecuencia fuera de NgZone
-    this.colabSvc.highFreqUpdates$.pipe(
-      throttleTime(25) // Máximo 40fps para actualizaciones remotas de posición
-    ).subscribe(msg => {
+    this.highFreqSub = this.colabSvc.highFreqUpdates$.pipe(
+      throttleTime(32) // ~30fps es suficiente para fluidez visual y ahorra CPU
+    ).subscribe((msg: any) => {
       if (msg.type === 'NODE_MOVED' && msg.payload) {
         const data = msg.payload as { id: string; x: number; y: number };
         if (this.nodePositions[data.id]) {
           this.nodePositions[data.id] = { x: data.x, y: data.y };
-          this.needsConnRefresh = true;
+          // OPTIMIZACIÓN: Solo actualizar las conexiones afectadas por este nodo
+          this.actualizarCaminosConexion(data.id);
+          // Forzar renderizado para ver el movimiento en tiempo real
           this.cdr.detectChanges();
         }
       }
@@ -231,23 +235,18 @@ export class DesignerComponent implements OnInit, OnDestroy {
     }, { allowSignalWrites: true });
   }
 
-  private isRemoteUpdate = false;
+  private remoteUpdateDepth = 0;
+  private get isRemoteUpdate(): boolean {
+    return this.remoteUpdateDepth > 0;
+  }
 
   procesarEventoRemoto(msg: SocketMessageDTO) {
     // Ignorar mis propios mensajes retransmitidos
     if (msg.colaborador.id === this.auth.usuario()?.id) return;
 
-    this.isRemoteUpdate = true;
+    this.remoteUpdateDepth++;
     try {
-
-    if (msg.type === 'NODE_MOVED' && msg.payload) {
-      // Actualizar posición visual instantáneamente sin disparar guardado
-      const data = msg.payload as { id: string; x: number; y: number };
-      if (this.nodePositions[data.id]) {
-        this.nodePositions[data.id] = { x: data.x, y: data.y };
-      }
-
-    } else if (msg.type === 'NODE_EDITING') {
+      if (msg.type === 'NODE_EDITING') {
       // msg.payload es el ID del nodo
       const nodeId = msg.payload as string | null;
 
@@ -303,8 +302,8 @@ export class DesignerComponent implements OnInit, OnDestroy {
     } finally {
       // Retrasar el flag para absorber eventos ngModelChange disparados por la reconstrucción del DOM
       setTimeout(() => {
-        this.isRemoteUpdate = false;
-      }, 300);
+        this.remoteUpdateDepth--;
+      }, 50);
     }
   }
 
@@ -320,12 +319,12 @@ export class DesignerComponent implements OnInit, OnDestroy {
       this.fs.listarPorTenant(tid).subscribe(data => this.templates.set(data));
     }
   }
-
-  templates = signal<FormularioTemplate[]>([]);
+templates = signal<FormularioTemplate[]>([]);
   departamentos = signal<Departamento[]>([]);
   
   ngOnDestroy(): void { 
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer); 
+    if (this.highFreqSub) this.highFreqSub.unsubscribe();
     this.colabSvc.desconectar();
   }
 
@@ -421,7 +420,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
         }
       }
     }
-    this.needsConnRefresh = true;
+    this.actualizarCaminosConexion();
   }
 
   getNodoPos(actId: string): { x: number; y: number } {
@@ -632,6 +631,8 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
     if (this.isDraggingConn && this.dragConnId && this.dragConnEnd) {
       this.hoveredLaneIdx = Math.floor(this.mouseX / this.LW);
+      this.actualizarCaminosConexion();
+      this.cdr.detectChanges();
       return;
     }
 
@@ -643,6 +644,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
     const snappedY = Math.round(newY / 12) * 12;
 
     this.nodePositions[this.dragNodeId] = { x: snappedX, y: snappedY };
+    this.actualizarCaminosConexion();
     this.cdr.detectChanges(); // IMPORTANTE: Forzar actualización de líneas de conexión durante el arrastre
 
     const now = Date.now();
@@ -840,105 +842,112 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
   // ── SVG Connections ──
   getConnectionPaths(): any[] {
-    if (!this.sel) return [];
+    return this.cachedConnPaths;
+  }
 
-    // --- Optimizador de Rendimiento: Caché de Caminos de Conexión ---
-    const now = Date.now();
-    const isInteracting = this.isDragging || this.isDraggingConn || this.isResizingLane;
-    
-    // Si no hay cambios, no estamos interactuando y pasó poco tiempo, devolver caché
-    if (!this.needsConnRefresh && !isInteracting && (now - this.lastConnRefresh < 50)) {
-      return this.cachedConnPaths;
+  actualizarCaminosConexion(movedNodeId?: string): void {
+    if (!this.sel) {
+      this.cachedConnPaths = [];
+      return;
     }
 
-    this.cachedConnPaths = this.sel.transiciones.map(t => {
-      // Force 'auto' behavior visually if dragging the related nodes
-      const isSourceDragging = this.isDragging && this.dragNodeId === t.origenId;
-      const isTargetDragging = this.isDragging && this.dragNodeId === t.destinoId;
-
-      const fromAnchor = (!t.origenAnchor || t.origenAnchor === 'auto' || isSourceDragging || isTargetDragging) 
-                         ? this.calculateBestAnchor(t.origenId, t.destinoId, false) 
-                         : t.origenAnchor;
-      const toAnchor = (!t.destinoAnchor || t.destinoAnchor === 'auto' || isSourceDragging || isTargetDragging) 
-                       ? this.calculateBestAnchor(t.origenId, t.destinoId, true) 
-                       : t.destinoAnchor;
-
-      const from = this.findNodeAnchor(t.origenId, fromAnchor, false);
-      const to = this.findNodeAnchor(t.destinoId, toAnchor, true);
-      if (!from || !to) return null;
-
-      const x1 = from.x, y1 = from.y;
-      const x2 = to.x, y2 = to.y;
-
-      // Handle dragging visually
-      const dx1 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'origen') ? this.mouseX : x1;
-      const dy1 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'origen') ? this.mouseY : y1;
-      const dx2 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'destino') ? this.mouseX : x2;
-      const dy2 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'destino') ? this.mouseY : y2;
-
-      const midY = (dy1 + dy2) / 2;
-      const midX = (dx1 + dx2) / 2;
-      
-      let path: string;
-      const anchor1 = fromAnchor;
-      const anchor2 = toAnchor;
-      
-      const isOrthogonal = t.enrutamiento === 'ortogonal';
-
-      if (isOrthogonal) {
-        // Enrutamiento Ortogonal (estilo Draw.io)
-        if (anchor1 === 'bottom' && anchor2 === 'top' && dy2 > dy1) {
-          path = `M ${dx1} ${dy1} L ${dx1} ${midY} L ${dx2} ${midY} L ${dx2} ${dy2}`;
-        } else if (anchor1 === 'right' && anchor2 === 'left' && dx2 > dx1) {
-          path = `M ${dx1} ${dy1} L ${midX} ${dy1} L ${midX} ${dy2} L ${dx2} ${dy2}`;
-        } else if (anchor1 === 'top' && anchor2 === 'bottom' && dy1 > dy2) {
-          path = `M ${dx1} ${dy1} L ${dx1} ${midY} L ${dx2} ${midY} L ${dx2} ${dy2}`;
-        } else if (anchor1 === 'left' && anchor2 === 'right' && dx1 > dx2) {
-          path = `M ${dx1} ${dy1} L ${midX} ${dy1} L ${midX} ${dy2} L ${dx2} ${dy2}`;
-        } else {
-          // Complex routing: move out from source, then along perpendicular, then into target
-          const offset = Math.min(Math.abs(dx1 - dx2), Math.abs(dy1 - dy2), 40) + 10;
-          const p1x = anchor1 === 'right' ? dx1 + offset : anchor1 === 'left' ? dx1 - offset : dx1;
-          const p1y = anchor1 === 'bottom' ? dy1 + offset : anchor1 === 'top' ? dy1 - offset : dy1;
-          const p2x = anchor2 === 'right' ? dx2 + offset : anchor2 === 'left' ? dx2 - offset : dx2;
-          const p2y = anchor2 === 'bottom' ? dy2 + offset : anchor2 === 'top' ? dy2 - offset : dy2;
-          
-          if (Math.abs(p1x - p2x) < Math.abs(p1y - p2y)) {
-             path = `M ${dx1} ${dy1} L ${p1x} ${p1y} L ${p1x} ${p2y} L ${p2x} ${p2y} L ${dx2} ${dy2}`;
-          } else {
-             path = `M ${dx1} ${dy1} L ${p1x} ${p1y} L ${p2x} ${p1y} L ${p2x} ${p2y} L ${dx2} ${dy2}`;
-          }
+    // Si se mueve un nodo específico, optimizamos calculando solo las rutas afectadas
+    if (movedNodeId) {
+      this.cachedConnPaths = this.cachedConnPaths.map(conn => {
+        if (conn.origenId === movedNodeId || conn.destinoId === movedNodeId) {
+          return this.calcularRutaParaTransicion(conn.trans);
         }
+        return conn;
+      }).filter(Boolean);
+      return;
+    }
+
+    this.cachedConnPaths = this.sel.transiciones.map(t => this.calcularRutaParaTransicion(t)).filter(Boolean);
+  }
+
+  private calcularRutaParaTransicion(t: Transicion): any {
+    // Force 'auto' behavior visually if dragging the related nodes
+    const isSourceDragging = this.isDragging && this.dragNodeId === t.origenId;
+    const isTargetDragging = this.isDragging && this.dragNodeId === t.destinoId;
+
+    const fromAnchor = (!t.origenAnchor || t.origenAnchor === 'auto' || isSourceDragging || isTargetDragging) 
+                       ? this.calculateBestAnchor(t.origenId, t.destinoId, false) 
+                       : t.origenAnchor;
+    const toAnchor = (!t.destinoAnchor || t.destinoAnchor === 'auto' || isSourceDragging || isTargetDragging) 
+                     ? this.calculateBestAnchor(t.origenId, t.destinoId, true) 
+                     : t.destinoAnchor;
+
+    const from = this.findNodeAnchor(t.origenId, fromAnchor, false);
+    const to = this.findNodeAnchor(t.destinoId, toAnchor, true);
+    if (!from || !to) return null;
+
+    const x1 = from.x, y1 = from.y;
+    const x2 = to.x, y2 = to.y;
+
+    // Handle dragging visually
+    const dx1 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'origen') ? this.mouseX : x1;
+    const dy1 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'origen') ? this.mouseY : y1;
+    const dx2 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'destino') ? this.mouseX : x2;
+    const dy2 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'destino') ? this.mouseY : y2;
+
+    const midY = (dy1 + dy2) / 2;
+    const midX = (dx1 + dx2) / 2;
+    
+    let path: string;
+    const anchor1 = fromAnchor;
+    const anchor2 = toAnchor;
+    
+    const isOrthogonal = t.enrutamiento === 'ortogonal';
+
+    if (isOrthogonal) {
+      // Enrutamiento Ortogonal (estilo Draw.io)
+      if (anchor1 === 'bottom' && anchor2 === 'top' && dy2 > dy1) {
+        path = `M ${dx1} ${dy1} L ${dx1} ${midY} L ${dx2} ${midY} L ${dx2} ${dy2}`;
+      } else if (anchor1 === 'right' && anchor2 === 'left' && dx2 > dx1) {
+        path = `M ${dx1} ${dy1} L ${midX} ${dy1} L ${midX} ${dy2} L ${dx2} ${dy2}`;
+      } else if (anchor1 === 'top' && anchor2 === 'bottom' && dy1 > dy2) {
+        path = `M ${dx1} ${dy1} L ${dx1} ${midY} L ${dx2} ${midY} L ${dx2} ${dy2}`;
+      } else if (anchor1 === 'left' && anchor2 === 'right' && dx1 > dx2) {
+        path = `M ${dx1} ${dy1} L ${midX} ${dy1} L ${midX} ${dy2} L ${dx2} ${dy2}`;
       } else {
-        // Enrutamiento Bezier (Curvas)
-        if (anchor1 === 'bottom' && anchor2 === 'top' && dy2 > dy1) {
-          path = `M ${dx1} ${dy1} C ${dx1} ${midY}, ${dx2} ${midY}, ${dx2} ${dy2}`;
-        } else if (anchor1 === 'right' && anchor2 === 'left' && dx2 > dx1) {
-          path = `M ${dx1} ${dy1} C ${midX} ${dy1}, ${midX} ${dy2}, ${dx2} ${dy2}`;
-        } else if (anchor1 === 'top' && anchor2 === 'bottom' && dy1 > dy2) {
-           path = `M ${dx1} ${dy1} C ${dx1} ${midY}, ${dx2} ${midY}, ${dx2} ${dy2}`;
-        } else if (anchor1 === 'left' && anchor2 === 'right' && dx1 > dx2) {
-           path = `M ${dx1} ${dy1} C ${midX} ${dy1}, ${midX} ${dy2}, ${dx2} ${dy2}`;
+        // Complex routing: move out from source, then along perpendicular, then into target
+        const offset = Math.min(Math.abs(dx1 - dx2), Math.abs(dy1 - dy2), 40) + 10;
+        const p1x = anchor1 === 'right' ? dx1 + offset : anchor1 === 'left' ? dx1 - offset : dx1;
+        const p1y = anchor1 === 'bottom' ? dy1 + offset : anchor1 === 'top' ? dy1 - offset : dy1;
+        const p2x = anchor2 === 'right' ? dx2 + offset : anchor2 === 'left' ? dx2 - offset : dx2;
+        const p2y = anchor2 === 'bottom' ? dy2 + offset : anchor2 === 'top' ? dy2 - offset : dy2;
+        
+        if (Math.abs(p1x - p2x) < Math.abs(p1y - p2y)) {
+           path = `M ${dx1} ${dy1} L ${p1x} ${p1y} L ${p1x} ${p2y} L ${p2x} ${p2y} L ${dx2} ${dy2}`;
         } else {
-          const offset = Math.min(Math.abs(dx1 - dx2), Math.abs(dy1 - dy2), 50);
-          path = `M ${dx1} ${dy1} C ${anchor1==='right'?dx1+offset:anchor1==='left'?dx1-offset:dx1} ${anchor1==='bottom'?dy1+offset:anchor1==='top'?dy1-offset:dy1},
-                                   ${anchor2==='right'?dx2+offset:anchor2==='left'?dx2-offset:dx2} ${anchor2==='bottom'?dy2+offset:anchor2==='top'?dy2-offset:dy2},
-                                   ${dx2} ${dy2}`;
+           path = `M ${dx1} ${dy1} L ${p1x} ${p1y} L ${p2x} ${p1y} L ${p2x} ${p2y} L ${dx2} ${dy2}`;
         }
       }
+    } else {
+      // Enrutamiento Bezier (Curvas)
+      if (anchor1 === 'bottom' && anchor2 === 'top' && dy2 > dy1) {
+        path = `M ${dx1} ${dy1} C ${dx1} ${midY}, ${dx2} ${midY}, ${dx2} ${dy2}`;
+      } else if (anchor1 === 'right' && anchor2 === 'left' && dx2 > dx1) {
+        path = `M ${dx1} ${dy1} C ${midX} ${dy1}, ${midX} ${dy2}, ${dx2} ${dy2}`;
+      } else if (anchor1 === 'top' && anchor2 === 'bottom' && dy1 > dy2) {
+         path = `M ${dx1} ${dy1} C ${dx1} ${midY}, ${dx2} ${midY}, ${dx2} ${dy2}`;
+      } else if (anchor1 === 'left' && anchor2 === 'right' && dx1 > dx2) {
+         path = `M ${dx1} ${dy1} C ${midX} ${dy1}, ${midX} ${dy2}, ${dx2} ${dy2}`;
+      } else {
+        const offset = Math.min(Math.abs(dx1 - dx2), Math.abs(dy1 - dy2), 50);
+        path = `M ${dx1} ${dy1} C ${anchor1==='right'?dx1+offset:anchor1==='left'?dx1-offset:dx1} ${anchor1==='bottom'?dy1+offset:anchor1==='top'?dy1-offset:dy1},
+                                 ${anchor2==='right'?dx2+offset:anchor2==='left'?dx2-offset:dx2} ${anchor2==='bottom'?dy2+offset:anchor2==='top'?dy2-offset:dy2},
+                                 ${dx2} ${dy2}`;
+      }
+    }
 
-      const dash = t.tipoLinea === 'punteada' ? '4 4' : t.tipoLinea === 'discontinua' ? '10 5' : '';
-      return {
-        id: t.id, path, origenId: t.origenId, destinoId: t.destinoId,
-        x1: dx1, y1: dy1, x2: dx2, y2: dy2,
-        label: t.etiqueta || '', labelX: midX, labelY: midY - 8,
-        color: t.color || '#475569', dash, width: t.grosor || 2, trans: t,
-      };
-    }).filter(Boolean);
-
-    this.needsConnRefresh = false;
-    this.lastConnRefresh = now;
-    return this.cachedConnPaths;
+    const dash = t.tipoLinea === 'punteada' ? '4 4' : t.tipoLinea === 'discontinua' ? '10 5' : '';
+    return {
+      id: t.id, path, origenId: t.origenId, destinoId: t.destinoId,
+      x1: dx1, y1: dy1, x2: dx2, y2: dy2,
+      label: t.etiqueta || '', labelX: midX, labelY: midY - 8,
+      color: t.color || '#475569', dash, width: t.grosor || 2, trans: t,
+    };
   }
 
   private calculateBestAnchor(sourceId: string, targetId: string, isDest: boolean): 'top' | 'bottom' | 'left' | 'right' {
@@ -993,7 +1002,6 @@ export class DesignerComponent implements OnInit, OnDestroy {
           case 'left':   return { x: pos.x - pad, y: pos.y + h/2 };
           case 'right':  return { x: pos.x + w + pad, y: pos.y + h/2 };
         }
-      }
     }
     return null;
   }
@@ -1111,8 +1119,6 @@ export class DesignerComponent implements OnInit, OnDestroy {
         }
         this.saveStatus.set('saved');
         setTimeout(() => { if (this.saveStatus() === 'saved') this.saveStatus.set('idle'); }, 2000);
-        // ── Sincronización colaborativa: notificar a todos el estado actualizado ──
-        this.colabSvc.notificarCambioCompleto(this.sel);
       },
       error: (e: any) => { 
         this.saveStatus.set('error');
@@ -1474,6 +1480,11 @@ export class DesignerComponent implements OnInit, OnDestroy {
     this.mlSvc.analyze(politica).subscribe({
       next: (res) => {
         this.mlResult = res;
+        // Cachear hallazgos en un mapa para acceso O(1) en el template
+        const map: Record<string, AnalysisResult['findings'][0]> = {};
+        res.findings.forEach(f => map[f.nodeId] = f);
+        this.mlFindingsMap.set(map);
+        
         this.isAnalyzingMl = false;
         
         const hasCritical = res.findings.some(f => f.severity === 'CRITICAL');
@@ -1967,8 +1978,7 @@ export class DesignerComponent implements OnInit, OnDestroy {
   }
 
   getFindingForNode(nodeId: string) {
-    if (!this.mlResult) return null;
-    return this.mlResult.findings.find(f => f.nodeId === nodeId);
+    return this.mlFindingsMap()[nodeId] || null;
   }
 
   getDeptos() { return this.adminSvc.departamentos(); }

@@ -30,8 +30,7 @@ public class RegistroController {
             @PathVariable String id,
             @RequestParam String userId) {
         RegistroActividad registro = registroService.tomarTarea(id, userId);
-        String actNombre = resolverNombreActividad(registro);
-        return DomainMapper.toDTO(registro, actNombre);
+        return toDTO(registro);
     }
 
     @PatchMapping("/completar")
@@ -42,62 +41,75 @@ public class RegistroController {
                 request.getDatosFormulario(),
                 request.getArchivos(),
                 request.getNotas());
-        String actNombre = resolverNombreActividad(registro);
-        return DomainMapper.toDTO(registro, actNombre);
+        return toDTO(registro);
     }
 
     @GetMapping("/tramite/{tramiteId}")
     public List<RegistroActividadDTO> listarPorTramite(@PathVariable String tramiteId) {
         return registroService.listarPorTramite(tramiteId).stream()
-                .map(r -> DomainMapper.toDTO(r, resolverNombreActividad(r)))
+                .map(this::toDTO)
                 .toList();
     }
 
     @GetMapping("/pendientes/{userId}")
     public List<RegistroActividadDTO> bandejaPendientes(@PathVariable String userId) {
         return registroService.bandejaPendientes(userId).stream()
-                .map(r -> DomainMapper.toDTO(r, resolverNombreActividad(r)))
+                .map(this::toDTO)
                 .toList();
     }
 
     @GetMapping("/sin-asignar")
     public List<RegistroActividadDTO> tareasNoAsignadas() {
         return registroService.tareasNoAsignadas().stream()
-                .map(r -> DomainMapper.toDTO(r, resolverNombreActividad(r)))
+                .map(this::toDTO)
                 .toList();
     }
 
     @GetMapping("/bandeja-departamento/{deptoId}")
     public List<RegistroActividadDTO> bandejaPorDepartamento(@PathVariable String deptoId) {
         return registroService.bandejaPorDepartamento(deptoId).stream()
-                .map(r -> DomainMapper.toDTO(r, resolverNombreActividad(r)))
+                .map(this::toDTO)
                 .toList();
     }
 
     @GetMapping("/sin-asignar-departamento/{deptoId}")
     public List<RegistroActividadDTO> tareasNoAsignadasPorDepartamento(@PathVariable String deptoId) {
         return registroService.tareasNoAsignadasPorDepartamento(deptoId).stream()
-                .map(r -> DomainMapper.toDTO(r, resolverNombreActividad(r)))
+                .map(this::toDTO)
                 .toList();
     }
 
     @GetMapping("/historial/{userId}")
     public List<RegistroActividadDTO> historialPorUsuario(@PathVariable String userId) {
         return registroService.historialPorUsuario(userId).stream()
-                .map(r -> DomainMapper.toDTO(r, resolverNombreActividad(r)))
+                .map(this::toDTO)
                 .toList();
     }
 
     // ── Helper ──────────────────────────────────────────────────
 
-    private String resolverNombreActividad(RegistroActividad registro) {
-        Tramite tramite = tramiteService.buscarPorId(registro.getTramiteId());
-        PoliticaNegocio politica = politicaService.buscarPorId(tramite.getPoliticaId());
-        return politica.getCalles().stream()
-                .flatMap(c -> c.getActividades().stream())
-                .filter(a -> a.getId().equals(registro.getActividadId()))
-                .findFirst()
-                .map(Actividad::getNombre)
-                .orElse("Actividad desconocida");
+    private RegistroActividadDTO toDTO(RegistroActividad registro) {
+        String actNombre = "Actividad desconocida";
+        String clienteNombre = null;
+        String politicaId = null;
+        try {
+            Tramite tramite = tramiteService.buscarPorId(registro.getTramiteId());
+            if (tramite != null) {
+                clienteNombre = tramite.getClienteNombre();
+                politicaId = tramite.getPoliticaId();
+                PoliticaNegocio politica = politicaService.buscarPorId(tramite.getPoliticaId());
+                if (politica != null && politica.getCalles() != null) {
+                    actNombre = politica.getCalles().stream()
+                            .flatMap(c -> c.getActividades().stream())
+                            .filter(a -> a.getId().equals(registro.getActividadId()))
+                            .findFirst()
+                            .map(Actividad::getNombre)
+                            .orElse("Actividad desconocida");
+                }
+            }
+        } catch (Exception e) {
+            // Silently fall back to defaults
+        }
+        return DomainMapper.toDTO(registro, actNombre, clienteNombre, politicaId);
     }
 }

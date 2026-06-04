@@ -62,8 +62,11 @@ import { AuthService } from '../../services/auth.service';
               {{ cargando ? 'Verificando...' : 'Entrar al Sistema' }}
             </button>
           </form>
-          <div class="mt-8 pt-6 border-t border-slate-800/50 text-center">
-            <p class="text-sm text-slate-500 font-medium">¿Tu empresa no está registrada?
+          <div class="mt-8 pt-6 border-t border-slate-800/50 text-center space-y-3">
+            <p class="text-sm text-slate-500 font-medium">¿Eres cliente?
+              <a routerLink="/registro-cliente" class="text-sky-400 hover:text-sky-300 font-bold ml-1 transition-colors">Crea tu cuenta aquí</a>
+            </p>
+            <p class="text-xs text-slate-600 font-medium">¿Tu empresa no está registrada?
               <a routerLink="/registro" class="text-indigo-400 hover:text-indigo-300 font-bold ml-1 transition-colors">Empieza aquí</a>
             </p>
           </div>
@@ -120,7 +123,7 @@ export class LoginComponent implements OnInit {
       ADMINISTRADOR: '/admin', 
       DISENADOR: '/designer',
       FUNCIONARIO: '/funcionario', 
-      CLIENTE: '/funcionario',
+      CLIENTE: '/portal-cliente',
     };
     this.router.navigate([rutas[user.rol] || '/funcionario']);
   }

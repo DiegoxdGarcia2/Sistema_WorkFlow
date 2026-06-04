@@ -87,4 +87,23 @@ export class MlAnalysisService {
     const params = politicaId ? `?politicaId=${politicaId}` : '';
     return this.http.get<InsightsResult>(`${this.apiUrl}/insights${params}`);
   }
+
+  nlToAggregation(query: string, tenantId?: string, politicaId?: string): Observable<any> {
+    const payload = { query, tenantId, politicaId };
+    return this.http.post<any>(`${environment.aiServiceUrl}/ml/nl-to-aggregation`, payload);
+  }
+
+  exportReport(payload: {
+    query?: string;
+    collection?: string;
+    pipeline?: any[];
+    tenantId?: string;
+    politicaId?: string;
+    format: string;
+  }): Observable<Blob> {
+    return this.http.post(`${environment.aiServiceUrl}/ml/export-report`, payload, {
+      responseType: 'blob'
+    });
+  }
 }
+

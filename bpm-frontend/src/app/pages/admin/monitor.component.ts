@@ -1,14 +1,16 @@
-import { Component, OnInit, signal, effect, inject } from '@angular/core';
+import { Component, OnInit, signal, computed, effect, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { AdminService } from '../../services/admin.service';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../services/auth.service';
 import { finalize } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-monitor',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="space-y-8 animate-in fade-in duration-500">
       <!-- TABS -->
@@ -44,8 +46,33 @@ import { finalize } from 'rxjs';
       </div>
 
       <!-- LISTS -->
+      <div class="mb-4 flex items-center justify-between gap-4">
+        <div class="relative flex-1 max-w-md group">
+          <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-indigo-400 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </div>
+          <input type="text" [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event); currentPage.set(1)"
+                 placeholder="Buscar por proceso, ID o colaborador..." 
+                 class="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-900/40 border border-slate-800/60 text-sm text-slate-200 focus:border-indigo-500 outline-none transition-all ring-1 ring-white/5 shadow-xl">
+        </div>
+        
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mr-2">Página {{ currentPage() }} de {{ totalPages() }}</span>
+          <button (click)="cambiarPagina(currentPage() - 1)" 
+                  [disabled]="currentPage() === 1"
+                  class="p-2 rounded-xl bg-slate-900/60 border border-slate-800/60 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <button (click)="cambiarPagina(currentPage() + 1)" 
+                  [disabled]="currentPage() === totalPages()"
+                  class="p-2 rounded-xl bg-slate-900/60 border border-slate-800/60 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        @let listado = tab() === 'live' ? tramites() : historial();
+        @let listado = paginatedTramites();
         @for (t of listado; track t.tramiteId) {
           <div (click)="verMonitor(t)" class="p-8 rounded-[2.5rem] border border-slate-800 bg-slate-900/60 backdrop-blur-xl shadow-2xl ring-1 ring-white/5 group transition-all hover:ring-indigo-500/30 overflow-hidden relative cursor-pointer">
             <!-- Badge Estado -->
@@ -189,8 +216,8 @@ import { finalize } from 'rxjs';
                                     <span class="text-[9px] font-bold text-slate-500 uppercase">{{ getFieldLabel(item.key, p) }}</span>
                                     <span *ngIf="isExtraField(item.key.toString())" class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 text-[8px] font-black uppercase tracking-tighter">Extra</span>
                                   </div>
-                                  @if (item.value && item.value.id && item.value.path) {
-                                    <a [href]="item.value.path" target="_blank" class="text-xs text-indigo-400 hover:underline font-bold mt-1 flex items-center gap-2">
+                                  @if (item.value && item.value.id && (item.value.path || item.value.url)) {
+                                    <a [href]="getFileUrl(item.value)" target="_blank" class="text-xs text-indigo-400 hover:underline font-bold mt-1 flex items-center gap-2">
                                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                                       {{ item.value.nombre }}
                                     </a>
@@ -208,7 +235,7 @@ import { finalize } from 'rxjs';
                             <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Documentación Adjunta</p>
                             <div class="grid grid-cols-2 gap-3">
                               @for (file of p.archivos; track file.id) {
-                                <a [href]="file.path || file.url || '/api/archivos/download/' + file.id" target="_blank"
+                                <a [href]="getFileUrl(file)" target="_blank"
                                    class="p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/20 flex items-center gap-3 hover:bg-indigo-500/10 transition-all group/file">
                                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-400"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                                   <div class="min-w-0">
@@ -252,14 +279,47 @@ export class MonitorComponent implements OnInit {
   tab = signal<'live' | 'history'>('live');
   tramites = signal<any[]>([]);
   historial = signal<any[]>([]);
-  
   detalleTramite: any = null;
   timeline = signal<any[]>([]);
   loadingAudit = signal<boolean>(false);
 
+
+
+  // --- Pagination & Filtering ---
+  searchTerm = signal('');
+  currentPage = signal(1);
+  itemsPerPage = 10;
+
+  filteredTramites = computed(() => {
+    const term = this.searchTerm().toLowerCase();
+    const list = this.tab() === 'live' ? this.tramites() : this.historial();
+    return list.filter(t => 
+      (t.politicaNombre || '').toLowerCase().includes(term) || 
+      (t.tramiteId || '').toLowerCase().includes(term) ||
+      (t.pasosActuales || []).some((p: any) => 
+        (p.actividadNombre || '').toLowerCase().includes(term) ||
+        (p.asignadoA || '').toLowerCase().includes(term)
+      )
+    );
+  });
+
+  paginatedTramites = computed(() => {
+    const start = (this.currentPage() - 1) * this.itemsPerPage;
+    return this.filteredTramites().slice(start, start + this.itemsPerPage);
+  });
+
+  totalPages = computed(() => Math.ceil(this.filteredTramites().length / this.itemsPerPage) || 1);
+
   constructor(
     private auth: AuthService
   ) {}
+
+  cambiarPagina(p: number) {
+    if (p > 0 && p <= this.totalPages()) {
+      this.currentPage.set(p);
+    }
+  }
+
 
   ngOnInit() {
     this.cargarDatos();
@@ -329,6 +389,14 @@ export class MonitorComponent implements OnInit {
 
   isExtraField(key: string): boolean {
     return key.startsWith('extra_');
+  }
+
+  getFileUrl(file: any): string {
+    const rawUrl = file.path || file.url || `/api/archivos/download/${file.id}`;
+    if (rawUrl && rawUrl.startsWith('/api')) {
+      return environment.apiUrl.replace('/api', '') + rawUrl;
+    }
+    return rawUrl;
   }
 
   cancelingId = signal<string | null>(null);

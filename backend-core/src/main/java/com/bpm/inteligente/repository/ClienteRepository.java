@@ -13,6 +13,8 @@ public interface ClienteRepository extends MongoRepository<Cliente, String> {
 
     Optional<Cliente> findByTenantIdAndCi(String tenantId, String ci);
 
+    Optional<Cliente> findByCorreo(String correo);
+
     /**
      * Búsqueda flexible por nombre, apellido, CI o correo (case-insensitive).
      */

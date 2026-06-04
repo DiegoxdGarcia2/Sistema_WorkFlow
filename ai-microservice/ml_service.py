@@ -42,18 +42,20 @@ IMPORTANTE:
 - Si la 'confianza' de la predicción es 0.0, aclara que faltan datos históricos para hacer una estimación precisa y sugiere ejecutar más trámites.
 """
 
-def cargar_datos(politica_id: Optional[str] = None) -> pd.DataFrame:
+def cargar_datos(politica_id: Optional[str] = None, tenant_id: Optional[str] = None) -> pd.DataFrame:
     """
     Carga los registros de actividades desde MongoDB y los convierte en un DataFrame de Pandas.
     Filtra por registros completados y calcula la duración en minutos.
     """
-    coll = get_collection("registro_actividades")
+    coll = get_collection("registros_actividad")
     if coll is None:
         return pd.DataFrame()
         
     query = {"estado": "HECHO", "asignadoEn": {"$ne": None}, "completadoEn": {"$ne": None}}
     if politica_id:
         query["politicaId"] = politica_id
+    if tenant_id:
+        query["tenantId"] = tenant_id
         
     # Usar projection para traer solo lo necesario
     cursor = coll.find(
@@ -67,6 +69,14 @@ def cargar_datos(politica_id: Optional[str] = None) -> pd.DataFrame:
         
     df = pd.DataFrame(data)
     
+    # Asegurar que las columnas esperadas existan para evitar KeyErrors en pandas
+    if 'actividadNombre' not in df.columns:
+        df['actividadNombre'] = df['actividadId'] if 'actividadId' in df.columns else None
+    if 'departamentoId' not in df.columns:
+        df['departamentoId'] = 'UNKNOWN'
+    if 'tramiteId' not in df.columns:
+        df['tramiteId'] = None
+        
     # Asegurar tipos datetime
     df['asignadoEn'] = pd.to_datetime(df['asignadoEn'])
     df['completadoEn'] = pd.to_datetime(df['completadoEn'])
@@ -89,7 +99,16 @@ def detectar_cuellos_botella(df: pd.DataFrame) -> tuple[Dict[str, Any], List[Dic
         
     total_registros = len(df)
     promedio_global = df['duracion_minutos'].mean()
+    if pd.isna(promedio_global):
+        promedio_global = 0.0
+    else:
+        promedio_global = float(promedio_global)
+
     std_global = df['duracion_minutos'].std() if total_registros > 1 else 0.0
+    if pd.isna(std_global):
+        std_global = 0.0
+    else:
+        std_global = float(std_global)
     
     metricas = {
         "totalRegistros": total_registros,
@@ -121,11 +140,16 @@ def detectar_cuellos_botella(df: pd.DataFrame) -> tuple[Dict[str, Any], List[Dic
             if desviacion_sobre > 2.0:
                 severity = "CRITICAL"
                 
+            promedio_minutos = float(row['promedio'])
+            desviacion_sobre_val = float(desviacion_sobre)
+            if pd.isna(promedio_minutos): promedio_minutos = 0.0
+            if pd.isna(desviacion_sobre_val): desviacion_sobre_val = 1.0
+
             cuellos_botella.append({
                 "actividadId": str(row['actividadId']),
                 "actividadNombre": str(row['nombre']),
-                "promedioMinutos": round(row['promedio'], 2),
-                "desviacionSobre": round(desviacion_sobre, 1),
+                "promedioMinutos": round(promedio_minutos, 2),
+                "desviacionSobre": round(desviacion_sobre_val, 1),
                 "severity": severity,
                 "numEjecuciones": int(row['count'])
             })
@@ -178,7 +202,8 @@ def entrenar_predictor(df: pd.DataFrame) -> Dict[str, Any]:
     # Necesitamos suficientes datos para entrenar (ej. 5 trámites)
     if len(tramites_stats) < 5:
         # Fallback analítico si no hay datos para ML
-        dias_promedio = tramites_stats['duracion_total_min'].mean() / (60.0 * 24.0) if len(tramites_stats) > 0 else 0.0
+        mean_dur = tramites_stats['duracion_total_min'].mean()
+        dias_promedio = float(mean_dur / (60.0 * 24.0)) if (len(tramites_stats) > 0 and not pd.isna(mean_dur)) else 0.0
         return {
             "duracionEstimadaDias": round(dias_promedio, 2),
             "confianza": 0.0,
@@ -207,7 +232,8 @@ def entrenar_predictor(df: pd.DataFrame) -> Dict[str, Any]:
         r2 = r2_score(y, y_pred)
         
         # Evitar confianzas negativas (R2 puede ser negativo si el modelo es peor que predecir la media)
-        confianza = max(0.0, r2)
+        confianza = float(max(0.0, r2))
+        if pd.isna(confianza): confianza = 0.0
         
         # Extraer importancia de features
         importancias = model.feature_importances_
@@ -216,11 +242,12 @@ def entrenar_predictor(df: pd.DataFrame) -> Dict[str, Any]:
         factores = []
         for i, imp in enumerate(importancias):
             if imp > 0.1: # Solo factores relevantes (>10% importancia)
-                factores.append(f"{nombres_features[i]} ({round(imp * 100)}%)")
+                factores.append(f"{nombres_features[i]} ({round(float(imp) * 100)}%)")
                 
         # Estimar duración para un "trámite promedio"
         X_mean = pd.DataFrame([X.mean().to_dict()])
-        duracion_estimada_min = model.predict(X_mean)[0]
+        duracion_estimada_min = float(model.predict(X_mean)[0])
+        if pd.isna(duracion_estimada_min): duracion_estimada_min = 0.0
         duracion_estimada_dias = duracion_estimada_min / (60.0 * 24.0)
         
         return {
@@ -253,11 +280,11 @@ async def generar_insights_groq(groq_client, data_json: str) -> str:
         log.error("Error generando insights con Groq: %s", str(e))
         return f"No se pudieron generar los insights automáticos debido a un error: {str(e)}"
 
-async def ejecutar_pipeline_completo(groq_client, politica_id: Optional[str] = None) -> Dict[str, Any]:
+async def ejecutar_pipeline_completo(groq_client, politica_id: Optional[str] = None, tenant_id: Optional[str] = None) -> Dict[str, Any]:
     """Orquesta todo el pipeline: Pandas -> Scikit-learn -> Groq."""
     
     # 1. Extraer datos directamente de MongoDB
-    df = cargar_datos(politica_id)
+    df = cargar_datos(politica_id, tenant_id)
     
     # Inicializar respuesta por defecto
     respuesta = {

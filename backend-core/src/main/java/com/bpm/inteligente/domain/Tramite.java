@@ -35,6 +35,7 @@ public class Tramite {
     @Indexed(unique = true, sparse = true)
     private String codigoSeguimiento;
 
+    @Indexed
     private String clienteId;
 
     private String documentoCliente;

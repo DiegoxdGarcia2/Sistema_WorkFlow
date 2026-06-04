@@ -35,15 +35,25 @@ export interface SocketMessageDTO {
 export class ColaboracionService {
   private client: Client | null = null;
   private currentRoom: string | null = null;
+  private cachedUserId: string | null = null;
+
+  private clientDoc: Client | null = null;
+  private currentDocRoom: string | null = null;
   
   // Estado reactivo para la UI
   public colaboradores = signal<ColaboradorDTO[]>([]);
+  public colaboradoresDoc = signal<ColaboradorDTO[]>([]);
   public nodeUpdates = signal<SocketMessageDTO | null>(null);
   public highFreqUpdates$ = new Subject<SocketMessageDTO>();
+  public docEdits$ = new Subject<SocketMessageDTO>();
+  public docCursors$ = new Subject<SocketMessageDTO>();
+  public docLogs$ = new Subject<SocketMessageDTO>();
 
   // ── Throttling para eventos de arrastre (docs/WEBSOCKET_RULES.md) ──
   private dragSubject = new Subject<{ nodoId: string; posX: number; posY: number }>();
   private cursorSubject = new Subject<{ x: number; y: number }>();
+  private docEditSubject = new Subject<string>();
+  private docCursorSubject = new Subject<number>();
 
   // Colores para usuarios
   private colors = ['#ef4444', '#f97316', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef'];
@@ -53,15 +63,21 @@ export class ColaboracionService {
     private ngZone: NgZone
   ) {
     // ── throttleTime(80ms) para drag → emisión consistente cada 80ms ──
-    // throttleTime es superior a debounceTime para movimientos porque:
-    // - throttle emite a intervalos regulares (fluidez constante)
-    // - debounce espera a que el usuario deje de mover (jitter percibido)
     this.dragSubject.pipe(throttleTime(80)).subscribe(({ nodoId, posX, posY }) => {
       this.emitNodeMoved(nodoId, posX, posY);
     });
 
     this.cursorSubject.pipe(throttleTime(150)).subscribe(({ x, y }) => {
       this.emitCursorMoved(x, y);
+    });
+
+    // ── Throttling para edición colaborativa de documentos ──
+    this.docEditSubject.pipe(throttleTime(150, undefined, { leading: true, trailing: true })).subscribe((content) => {
+      this.emitDocEdit(content);
+    });
+
+    this.docCursorSubject.pipe(throttleTime(200)).subscribe((pos) => {
+      this.emitDocCursor(pos);
     });
   }
 
@@ -95,6 +111,8 @@ export class ColaboracionService {
     this.client = new Client({
       brokerURL: environment.wsUrl,
       reconnectDelay: 5000,
+      heartbeatIncoming: 10000, // Esperar ping del server cada 10s
+      heartbeatOutgoing: 10000, // Enviar ping al server cada 10s
       // ── JWT en headers STOMP para autenticación ──
       connectHeaders: token ? { 'Authorization': `Bearer ${token}` } as StompHeaders : {},
       debug: (str) => {
@@ -102,6 +120,12 @@ export class ColaboracionService {
         // console.log('[STOMP]', str);
       }
     });
+
+    this.cachedUserId = this.getMe().id;
+
+    this.client.onWebSocketClose = (evt) => {
+      console.warn('⚠️ [WebSocket] Conexión cerrada. Code:', evt.code, 'Reason:', evt.reason);
+    };
 
     this.client.onConnect = () => {
       console.log('🔗 [Colaboración] Conectado a sala:', politicaId);
@@ -113,8 +137,7 @@ export class ColaboracionService {
           
           // ── ECHO LOOP PREVENTION (docs/WEBSOCKET_RULES.md) ──
           // Ignorar TODO mensaje que provenga de mí mismo para evitar bucles de retroalimentación.
-          // Usamos this.getMe().id dinámicamente porque el ID puede cambiar si la autenticación es asíncrona.
-          if (msg.colaborador?.id === this.getMe().id) {
+          if (msg.colaborador?.id === this.cachedUserId) {
             return;
           }
           
@@ -253,6 +276,142 @@ export class ColaboracionService {
 
     this.client.publish({
       destination: `/app/politica/${this.currentRoom}/cursor-moved`,
+      body: JSON.stringify(msg)
+    });
+  }
+
+  // ── Métodos para Colaboración de Documentos Colaborativos ──
+
+  conectarDocRoom(docId: string) {
+    if (this.currentDocRoom === docId) return;
+    this.desconectarDocRoom();
+    this.currentDocRoom = docId;
+
+    const me = this.getMe();
+    const token = this.authSvc.getToken();
+
+    this.clientDoc = new Client({
+      brokerURL: environment.wsUrl,
+      reconnectDelay: 5000,
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000,
+      connectHeaders: token ? { 'Authorization': `Bearer ${token}` } as StompHeaders : {},
+      debug: (str) => {}
+    });
+
+    this.clientDoc.onWebSocketClose = (evt) => {
+      console.warn('⚠️ [WebSocket-Doc] Conexión cerrada. Code:', evt.code);
+    };
+
+    this.clientDoc.onConnect = () => {
+      console.log('🔗 [Colaboración-Doc] Conectado a sala:', docId);
+      
+      this.clientDoc?.subscribe('/topic/documento/' + docId, (message: Message) => {
+        if (message.body) {
+          const msg: SocketMessageDTO = JSON.parse(message.body);
+          
+          // Echo loop prevention
+          if (msg.colaborador?.id === me.id) {
+            return;
+          }
+          
+          this.handleDocMessage(msg);
+        }
+      });
+
+      this.clientDoc?.publish({
+        destination: `/app/documento/${docId}/join`,
+        body: JSON.stringify(me)
+      });
+    };
+
+    this.ngZone.runOutsideAngular(() => {
+      this.clientDoc?.activate();
+    });
+  }
+
+  desconectarDocRoom() {
+    if (this.clientDoc && this.clientDoc.connected && this.currentDocRoom) {
+      const me = this.getMe();
+      this.clientDoc.publish({
+        destination: `/app/documento/${this.currentDocRoom}/leave`,
+        body: JSON.stringify(me)
+      });
+      this.clientDoc.deactivate();
+    }
+    this.currentDocRoom = null;
+    this.colaboradoresDoc.set([]);
+  }
+
+  private handleDocMessage(msg: SocketMessageDTO) {
+    switch (msg.type) {
+      case 'ROOM_STATE':
+        this.ngZone.run(() => {
+          const lista = msg.payload as ColaboradorDTO[];
+          this.colaboradoresDoc.set(lista);
+        });
+        break;
+      case 'DOC_EDIT':
+        this.docEdits$.next(msg);
+        break;
+      case 'DOC_CURSOR':
+        this.docCursors$.next(msg);
+        break;
+      case 'DOC_LOG':
+        this.docLogs$.next(msg);
+        break;
+    }
+  }
+
+  notificarEdicionDoc(contenido: string) {
+    this.docEditSubject.next(contenido);
+  }
+
+  notificarAccionDoc(actionText: string) {
+    if (!this.clientDoc || !this.clientDoc.connected || !this.currentDocRoom) return;
+
+    const msg: SocketMessageDTO = {
+      type: 'DOC_LOG',
+      colaborador: this.getMe(),
+      payload: actionText
+    };
+
+    this.clientDoc.publish({
+      destination: `/app/documento/${this.currentDocRoom}/log`,
+      body: JSON.stringify(msg)
+    });
+  }
+
+  private emitDocEdit(contenido: string) {
+    if (!this.clientDoc || !this.clientDoc.connected || !this.currentDocRoom) return;
+
+    const msg: SocketMessageDTO = {
+      type: 'DOC_EDIT',
+      colaborador: this.getMe(),
+      payload: contenido
+    };
+
+    this.clientDoc.publish({
+      destination: `/app/documento/${this.currentDocRoom}/edit`,
+      body: JSON.stringify(msg)
+    });
+  }
+
+  notificarCursorDoc(posicion: number) {
+    this.docCursorSubject.next(posicion);
+  }
+
+  private emitDocCursor(posicion: number) {
+    if (!this.clientDoc || !this.clientDoc.connected || !this.currentDocRoom) return;
+
+    const msg: SocketMessageDTO = {
+      type: 'DOC_CURSOR',
+      colaborador: this.getMe(),
+      payload: posicion
+    };
+
+    this.clientDoc.publish({
+      destination: `/app/documento/${this.currentDocRoom}/cursor`,
       body: JSON.stringify(msg)
     });
   }

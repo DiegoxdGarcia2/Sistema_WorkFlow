@@ -2,13 +2,24 @@
 # BPM Inteligente — .gitignore
 # ══════════════════════════════════════════════════════════════════
 
-# ── Contexto del agente IA (NUNCA versionar) ──
-.skills/
-AGENT.md
+# ── Área de trabajo del Agente IA (local, NO versionar) ──
+.agents/
+MEMORY.md
+Mis Cosas/
 mis cosas/
+test/
+.skills/
+skills-lock.json
 brain/
 .gemini/
+AGENT.md
+agent_workspace_blueprint.md
 
+# ── Seguridad ──
+.env
+*.env.local
+*.env.development.local
+*.pem
 
 # ── IDEs ──
 .idea/
@@ -36,11 +47,6 @@ dist_ready/
 .venv/
 __pycache__/
 *.pyc
-
-# ── Entornos ──
-.env
-*.env.local
-*.env.development.local
 
 # ── OS ──
 .DS_Store

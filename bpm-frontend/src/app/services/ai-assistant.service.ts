@@ -118,8 +118,21 @@ export class AiAssistantService {
     this.isListening = true; 
 
     return new Promise((resolve, reject) => {
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-        this.mediaRecorder = new MediaRecorder(stream);
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      };
+      navigator.mediaDevices.getUserMedia(constraints).then(stream => {
+        let options = {};
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          options = { mimeType: 'audio/webm;codecs=opus' };
+        } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
+          options = { mimeType: 'audio/ogg;codecs=opus' };
+        }
+        this.mediaRecorder = new MediaRecorder(stream, options);
         this.audioChunks = [];
         
         this.mediaRecorder.ondataavailable = e => {
@@ -250,6 +263,17 @@ export class AiAssistantService {
         }
       }
     });
+  }
+
+  // ── 4. Voice Form Fill ──
+  voiceFillForm(audioBlob: Blob, fieldsMetadata: any[]): Observable<{ transcription: string, values: any }> {
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'form_voice.webm');
+    formData.append('fields', JSON.stringify(fieldsMetadata));
+    return this.http.post<{ transcription: string, values: any }>(
+      `${environment.aiServiceUrl}/forms/voice-fill`,
+      formData
+    );
   }
 }
 

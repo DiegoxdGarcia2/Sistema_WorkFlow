@@ -274,22 +274,26 @@
           <div *ngIf="activeSimNodes.includes(act.id)" class="sim-badge">ACTIVO</div>
           
           <!-- ML Finding Badge -->
-          <div *ngIf="getFindingForNode(act.id)" class="absolute -top-3 left-4 px-2 py-0.5 rounded-full text-[9px] font-bold text-white shadow-lg z-20 flex items-center gap-1 border border-white/20"
-               [ngClass]="{
-                 'bg-red-500': getFindingForNode(act.id)?.severity === 'CRITICAL',
-                 'bg-amber-500': getFindingForNode(act.id)?.severity === 'WARNING',
-                 'bg-blue-500': getFindingForNode(act.id)?.severity === 'INFO'
-               }"
-               [title]="getFindingForNode(act.id)?.message">
-             <span>{{ getFindingForNode(act.id)?.severity === 'CRITICAL' ? '⚠️ CRÍTICO' : '⚡ LENTO' }}</span>
-          </div>
+          <ng-container *ngIf="getFindingForNode(act.id) as finding">
+            <div class="absolute -top-3 left-4 px-2 py-0.5 rounded-full text-[9px] font-bold text-white shadow-lg z-20 flex items-center gap-1 border border-white/20"
+                 [ngClass]="{
+                   'bg-red-500': finding.severity === 'CRITICAL',
+                   'bg-amber-500': finding.severity === 'WARNING',
+                   'bg-blue-500': finding.severity === 'INFO'
+                 }"
+                 [title]="finding.message">
+               <span>{{ finding.severity === 'CRITICAL' ? '⚠️ CRÍTICO' : '⚡ LENTO' }}</span>
+            </div>
+          </ng-container>
           
           <!-- Locked Badge -->
-          <div *ngIf="nodosBloqueados()[act.id]" class="absolute -top-3 -right-3 px-2 py-0.5 rounded-full text-[9px] font-bold text-white shadow-lg z-20 flex items-center gap-1"
-               [style.background]="nodosBloqueados()[act.id].color">
-             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-             {{ nodosBloqueados()[act.id].nombre }}
-          </div>
+          <ng-container *ngIf="nodosBloqueados()[act.id] as lock">
+            <div class="absolute -top-3 -right-3 px-2 py-0.5 rounded-full text-[9px] font-bold text-white shadow-lg z-20 flex items-center gap-1"
+                 [style.background]="lock.color">
+               <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+               {{ lock.nombre }}
+            </div>
+          </ng-container>
 
           <!-- Handles -->
           <div class="node-handle node-handle-top" (mousedown)="onHandleMouseDown($event, act, 'top')"></div>

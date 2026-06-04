@@ -1,0 +1,54 @@
+<div class="relative w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl p-6 border border-white/10"
+     style="background-color: rgba(19, 19, 20, 0.85); backdrop-filter: blur(12px);">
+  
+  <!-- Banner de Anomalía -->
+  <div *ngIf="isAnomalo" 
+       class="absolute top-0 left-0 right-0 py-1.5 px-4 bg-[#ff3366]/20 border-b border-[#ff3366]/50 text-center animate-pulse">
+    <span class="text-[10px] uppercase tracking-widest font-bold text-[#ff3366]">⚠️ CRITICAL ANOMALY DETECTED</span>
+  </div>
+
+  <div class="mt-4 flex justify-between items-start">
+    <div>
+      <h3 class="text-white/60 text-xs font-semibold uppercase tracking-wider mb-1">Estimated Time</h3>
+      <div class="flex items-baseline gap-2">
+        <span class="text-4xl font-bold font-mono tracking-tighter"
+              [ngClass]="tiempoEstimadoMinutos > 60 ? 'text-[#ff3366]' : 'text-[#00ff88]'">
+          {{ tiempoEstimadoMinutos }}
+        </span>
+        <span class="text-white/40 text-sm font-medium">min</span>
+      </div>
+    </div>
+
+    <!-- Priority Badge -->
+    <div class="px-3 py-1 rounded-full border border-white/10 text-[10px] font-bold tracking-widest uppercase shadow-inner"
+         [ngClass]="{
+           'bg-red-500/10 text-red-400 border-red-500/20': prioridadRecomendada === 'ALTA',
+           'bg-yellow-500/10 text-yellow-400 border-yellow-500/20': prioridadRecomendada === 'MEDIA',
+           'bg-blue-500/10 text-blue-400 border-blue-500/20': prioridadRecomendada === 'BAJA'
+         }">
+      {{ prioridadRecomendada }}
+    </div>
+  </div>
+
+  <div class="mt-8 border-t border-white/5 pt-4">
+    <h3 class="text-white/60 text-xs font-semibold uppercase tracking-wider mb-2">Suggested Route</h3>
+    <div class="flex items-center gap-3 bg-white/5 rounded-lg p-3 border border-white/5">
+      <div class="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+        <svg class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+        </svg>
+      </div>
+      <span class="text-white font-medium text-sm">{{ rutaSugerida }}</span>
+    </div>
+  </div>
+
+  <div class="mt-6 flex items-center justify-between">
+    <span class="text-white/40 text-xs font-medium uppercase">AI Confidence</span>
+    <div class="text-right">
+      <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 text-xl font-bold">
+        {{ (scoreEficiencia * 100) | number:'1.0-0' }}%
+      </span>
+    </div>
+  </div>
+</div>
+

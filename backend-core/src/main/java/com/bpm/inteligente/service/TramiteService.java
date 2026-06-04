@@ -25,6 +25,7 @@ public class TramiteService {
     private final com.bpm.inteligente.repository.DepartamentoRepository deptoRepo;
     private final com.bpm.inteligente.repository.UsuarioRepository usuarioRepo;
     private final com.bpm.inteligente.repository.ClienteRepository clienteRepo;
+    private final NotificationService notificationService;
 
     /**
      * Instancia un nuevo Trámite a partir de una PoliticaNegocio activa.
@@ -42,7 +43,78 @@ public class TramiteService {
                     "No se puede iniciar un trámite de una política inactiva.");
         }
 
-        // 1. Crear el trámite con datos del cliente si vienen
+        // 1. Validar que el usuario que inicia coincide con el usuario autenticado (prevención de spoofing de usuario)
+        String authenticatedUserId = com.bpm.inteligente.config.TenantContext.getCurrentUserId();
+        if (authenticatedUserId != null && !authenticatedUserId.equals(usuarioId)) {
+            // Permitir solo a ADMINISTRADOR iniciar en nombre de otros
+            Usuario authUser = usuarioRepo.findById(authenticatedUserId).orElse(null);
+            if (authUser == null || (authUser.getRol() != com.bpm.inteligente.domain.enums.RolUsuario.ADMINISTRADOR)) {
+                throw new BusinessRuleException("No tiene permisos para iniciar un trámite en nombre de otro usuario.");
+            }
+        }
+
+        boolean isCliente = usuario.getRol() == com.bpm.inteligente.domain.enums.RolUsuario.CLIENTE;
+
+        // 2. Localizar la actividad inicial y su departamento
+        Actividad actividadInicial = buscarActividadInicial(politica);
+        Calle calleInicial = buscarCalleDeActividad(politica, actividadInicial.getId());
+        String deptoId = calleInicial != null ? calleInicial.getDepartamentoId() : null;
+
+        if (isCliente) {
+            // Prevenir spoofing de cliente
+            if (usuario.getClienteId() == null) {
+                throw new BusinessRuleException("El usuario cliente no tiene un cliente asociado.");
+            }
+            if (!usuario.getClienteId().equals(clienteId)) {
+                throw new BusinessRuleException("No tiene permisos para iniciar un trámite en nombre de otro cliente.");
+            }
+
+            // Enmascarar/recuperar datos correctos del cliente del repositorio para evitar spoofing
+            Cliente clienteObj = clienteRepo.findById(usuario.getClienteId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Cliente", "id", usuario.getClienteId()));
+            
+            clienteNombre = clienteObj.getNombre() + " " + (clienteObj.getApellido() != null ? clienteObj.getApellido() : "");
+            documentoCliente = clienteObj.getCi() != null ? clienteObj.getCi() : "";
+
+            // Validar que la calle/departamento inicial sea de cara al cliente (evitar iniciar flujos internos)
+            boolean esClienteFacing = false;
+            if (calleInicial != null) {
+                String laneName = calleInicial.getNombre().toLowerCase();
+                String deptoName = "";
+                if (deptoId != null) {
+                    Departamento depto = deptoRepo.findById(deptoId).orElse(null);
+                    if (depto != null) {
+                        deptoName = depto.getNombre().toLowerCase();
+                    }
+                }
+                
+                java.util.List<String> keywords = java.util.Arrays.asList(
+                    "atencion", "atención", "cliente", "ventanilla", "partes", "comercial", "venta", "plataforma", "public", "públic"
+                );
+                
+                for (String kw : keywords) {
+                    if (laneName.contains(kw) || deptoName.contains(kw)) {
+                        esClienteFacing = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (!esClienteFacing) {
+                throw new BusinessRuleException("No tiene permisos para iniciar este proceso. Este trámite es de carácter interno.");
+            }
+        } else {
+            // Validar que el usuario pertenezca al departamento inicial (solo para personal interno)
+            if (deptoId == null) {
+                throw new BusinessRuleException("No se puede iniciar el trámite porque la calle inicial no tiene un departamento asignado en el Diseñador.");
+            }
+            if (!deptoId.equals(usuario.getDepartamentoId()) && usuario.getRol() != com.bpm.inteligente.domain.enums.RolUsuario.ADMINISTRADOR) {
+                throw new BusinessRuleException("No tiene permisos para iniciar este proceso. " +
+                        "Este trámite debe ser iniciado por personal de: " + (calleInicial != null ? calleInicial.getNombre() : "Desconocido"));
+            }
+        }
+
+        // 3. Crear el trámite con datos del cliente si vienen (o datos seguros recuperados del cliente)
         Tramite tramite = Tramite.builder()
                 .politicaId(politicaId)
                 .tenantId(politica.getTenantId())
@@ -53,32 +125,27 @@ public class TramiteService {
                 .build();
         tramite = tramiteRepo.save(tramite);
 
-        // 2. Localizar la actividad inicial y su departamento
-        Actividad actividadInicial = buscarActividadInicial(politica);
-        Calle calleInicial = buscarCalleDeActividad(politica, actividadInicial.getId());
-        String deptoId = calleInicial != null ? calleInicial.getDepartamentoId() : null;
-
-        // Validar que el usuario pertenezca al departamento inicial
-        if (deptoId == null) {
-            throw new BusinessRuleException("No se puede iniciar el trámite porque la calle inicial no tiene un departamento asignado en el Diseñador.");
-        }
-        
-        if (!deptoId.equals(usuario.getDepartamentoId()) && !"ADMIN".equals(usuario.getRol())) {
-            throw new BusinessRuleException("No tiene permisos para iniciar este proceso. " +
-                    "Este trámite debe ser iniciado por personal de: " + calleInicial.getNombre());
-        }
-
-        // 3. Crear el primer registro de actividad
+        // 4. Crear el primer registro de actividad
         RegistroActividad primerRegistro = RegistroActividad.builder()
                 .id(UUID.randomUUID().toString())
                 .tramiteId(tramite.getId())
                 .tenantId(tramite.getTenantId())
                 .actividadId(actividadInicial.getId())
+                .actividadNombre(actividadInicial.getNombre())
                 .departamentoId(deptoId)
-                .estado(EstadoRegistro.PENDIENTE)
+                .estado(isCliente ? EstadoRegistro.PENDIENTE : EstadoRegistro.EN_PROGRESO)
                 .asignadoEn(java.time.Instant.now())
+                .ejecutadoPorId(isCliente ? null : usuario.getId())
+                .ejecutadoPor(isCliente ? null : (usuario.getNombre() + " " + (usuario.getApellido() != null ? usuario.getApellido() : "")))
                 .build();
         registroRepo.save(primerRegistro);
+
+        // Notificar inicio del trámite
+        notificationService.enviarNotificacionTramite(
+                tramite,
+                "TRAMITE_INICIADO",
+                "Tu trámite de '" + politica.getNombre() + "' ha sido iniciado con éxito."
+        );
 
         return tramite;
     }
@@ -112,7 +179,20 @@ public class TramiteService {
         // 2. Cancelar el trámite
         tramite.setEstado(EstadoTramite.CANCELADO);
         tramite.setFinalizadoEn(java.time.Instant.now());
-        return tramiteRepo.save(tramite);
+        Tramite saved = tramiteRepo.save(tramite);
+
+        try {
+            PoliticaNegocio politica = politicaService.buscarPorId(saved.getPoliticaId());
+            notificationService.enviarNotificacionTramite(
+                saved,
+                "TRAMITE_CANCELADO",
+                "Tu trámite '" + (politica != null ? politica.getNombre() : "Desconocido") + "' ha sido CANCELADO."
+            );
+        } catch (Exception e) {
+            System.err.println("Error al enviar notificación de cancelación: " + e.getMessage());
+        }
+
+        return saved;
     }
 
     public Tramite buscarPorId(String id) {
@@ -164,6 +244,10 @@ public class TramiteService {
 
     public List<Tramite> listarPorTenantYEstado(String tenantId, EstadoTramite estado) {
         return tramiteRepo.findByTenantIdAndEstado(tenantId, estado);
+    }
+
+    public List<Tramite> buscarPorClienteId(String clienteId) {
+        return tramiteRepo.findByClienteId(clienteId);
     }
 
     /**
@@ -244,15 +328,15 @@ public class TramiteService {
     private Calle buscarCalleDeActividad(PoliticaNegocio p, String actId) {
         if (p.getCalles() == null) return null;
         return p.getCalles().stream()
-                .filter(c -> c.getActividades() != null && c.getActividades().stream().anyMatch(a -> a.getId().equals(actId)))
+                .filter(c -> c.getActividades() != null && c.getActividades().stream().anyMatch(a -> actId != null && actId.equals(a.getId())))
                 .findFirst()
                 .orElse(null);
     }
 
     private Actividad buscarActividadEnCalle(Calle calle, String actId) {
-        if (calle == null) return null;
+        if (calle == null || calle.getActividades() == null) return null;
         return calle.getActividades().stream()
-                .filter(a -> a.getId().equals(actId))
+                .filter(a -> actId != null && actId.equals(a.getId()))
                 .findFirst()
                 .orElse(null);
     }
