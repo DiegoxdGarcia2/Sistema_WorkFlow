@@ -88,9 +88,9 @@ export class MlAnalysisService {
     return this.http.get<InsightsResult>(`${this.apiUrl}/insights${params}`);
   }
 
-  nlToAggregation(query: string, tenantId?: string, politicaId?: string): Observable<any> {
-    const payload = { query, tenantId, politicaId };
-    return this.http.post<any>(`${environment.aiServiceUrl}/ml/nl-to-aggregation`, payload);
+  nlToAggregation(query: string, tenantId?: string, politicaId?: string, history?: any[]): Observable<any> {
+    const payload = { query, tenantId, politicaId, history };
+    return this.http.post<any>(`${environment.aiServiceUrl}/nl-to-aggregation`, payload);
   }
 
   exportReport(payload: {
@@ -101,9 +101,14 @@ export class MlAnalysisService {
     politicaId?: string;
     format: string;
   }): Observable<Blob> {
-    return this.http.post(`${environment.aiServiceUrl}/ml/export-report`, payload, {
+    return this.http.post(`${environment.aiServiceUrl}/export-report`, payload, {
       responseType: 'blob'
     });
+  }
+
+  checkAiHealth(): Observable<any> {
+    const url = environment.aiServiceUrl.replace('/api/ai', '');
+    return this.http.get<any>(`${url}/`);
   }
 }
 

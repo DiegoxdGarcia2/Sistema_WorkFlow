@@ -441,7 +441,7 @@ public class MegaDatabaseSeeder {
                                 actividad(ACT_S_REN_EVAL_FIN_ID, "Evaluación Crediticia y Tarifario", TipoActividad.TAREA, false, false, 0)
                         )),
                         calle("Dirección General", dsDireccion.getId(), 2, "#e2e8f0", List.of(
-                                actividad(ACT_S_REN_FIRMA_ID, "Firma de Addenda de Contrato", TipoActividad.TAREA, false, false, 0)
+                                actividad(ACT_S_REN_FIRMA_ID, "Revisión y Firma de Documento", TipoActividad.TAREA, false, false, 0)
                         )),
                         calle("Ingeniería de Redes", dsIngenieria.getId(), 3, "#22c55e", List.of(
                                 actividad(ACT_S_REN_APROB_TEC_ID, "Aprobación de Capacidad de Red", TipoActividad.TAREA, false, false, 0),
@@ -705,7 +705,7 @@ public class MegaDatabaseSeeder {
                 
                 registroRepo.save(RegistroActividad.builder()
                         .id("reg-sin-ren4-" + k).tramiteId(tramite.getId()).tenantId(sinergia.getId()).actividadId(ACT_S_REN_FIRMA_ID)
-                        .actividadNombre("Firma de Addenda de Contrato").departamentoId(dsDireccion.getId())
+                        .actividadNombre("Revisión y Firma de Documento").departamentoId(dsDireccion.getId())
                         .estado(renCompletado ? EstadoRegistro.HECHO : EstadoRegistro.EN_PROGRESO)
                         .ejecutadoPor(sAdmin.getNombre() + " " + sAdmin.getApellido()).ejecutadoPorId(sAdmin.getId())
                         .asignadoEn(r4Inicio).completadoEn(renCompletado ? r4Fin : null).build());

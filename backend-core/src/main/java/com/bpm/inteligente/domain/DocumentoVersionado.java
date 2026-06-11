@@ -56,5 +56,6 @@ public class DocumentoVersionado {
         private String usuarioNombre;
         private RolUsuario rolUsuario;
         private Instant timestamp;
+        private String sha256Hash;
     }
 }

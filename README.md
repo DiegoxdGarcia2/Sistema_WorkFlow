@@ -9,8 +9,12 @@ Software para la Gestión y Optimización Inteligente de Procesos de Negocio med
 | Capa | Tecnología |
 |------|------------|
 | **Backend** | Spring Boot 3.4 + Java 17 |
+| **Microservicio IA** | Python (FastAPI) + OpenAI Whisper + Groq NLP |
 | **Base de Datos** | MongoDB Atlas (cloud) |
-| **Frontend** | Angular 19 + Tailwind CSS v4 |
+| **Caché / Broker** | Redis |
+| **Almacenamiento**| AWS S3 (S3Client, presigners, offline queue) |
+| **Frontend** | Angular 19 + Tailwind CSS v4 + Dexie.js (Offline PWA) + ECharts |
+| **App Móvil** | Flutter + Riverpod + Hive (Offline-First) |
 | **Metodología** | PUDS (Jacobson, Booch, Rumbaugh) |
 | **Modelado** | UML 2.5+ |
 
@@ -70,6 +74,34 @@ Espera a ver:
 
 El frontend estará disponible en: **http://localhost:4200**
 
+El frontend estará disponible en: **http://localhost:4200**
+
+### 3️⃣ Levantar el Microservicio IA (Python)
+
+Abrir **otra terminal** en la carpeta `ai-microservice`:
+
+```powershell
+cd "d:\Software 1er Parcial\ai-microservice"
+
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Iniciar el servidor (Uvicorn)
+python main.py
+```
+Estará disponible en **http://localhost:8000**.
+
+### 4️⃣ Levantar la App Móvil (Flutter)
+
+Abrir **otra terminal** en la carpeta `bpm_mobile_client`:
+
+```powershell
+cd "d:\Software 1er Parcial\bpm_mobile_client"
+
+# Correr en simulador Android o iOS
+flutter run
+```
+
 ---
 
 ## 🔑 Credenciales de Pruebas
@@ -117,6 +149,16 @@ Software 1er Parcial/
 │       │   └── register-tenant/  # Registro de empresa
 │       └── services/             # Servicios HTTP (Angular Signals)
 │
+├── ai-microservice/              # Microservicio IA (Python/FastAPI)
+│   ├── main.py                   # Endpoints NLP y Voice Router
+│   ├── ml_service.py             # Predicciones ML y Analítica
+│   └── requirements.txt          # Dependencias (Groq, Whisper)
+│
+├── bpm_mobile_client/            # Cliente Móvil Offline-First (Flutter)
+│   └── lib/
+│       ├── core/                 # Modelos Hive y Capa de red (Dio)
+│       └── features/             # Auth, Tramites (Timeline), Assistant (Micrófono)
+│
 └── mis cosas/                    # Documentación del proyecto
 ```
 
@@ -140,6 +182,7 @@ Gestión CRUD de usuarios con control de roles (RBAC) por tenant.
 
 ## 📡 API Endpoints Principales
 
+### Core Backend (Spring Boot - 8080)
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | `POST` | `/api/auth/login` | Autenticación |
@@ -153,6 +196,15 @@ Gestión CRUD de usuarios con control de roles (RBAC) por tenant.
 | `PATCH` | `/api/registros/{id}/tomar` | Tomar tarea |
 | `PATCH` | `/api/registros/completar` | Completar tarea |
 | `GET` | `/api/usuarios/tenant/{id}` | Listar usuarios |
+
+### Microservicio de IA/ML (FastAPI - 8000)
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `POST` | `/api/ai/forms/voice-fill` | Recibe audio y transcribe (Whisper) + estructura formulario (Groq) |
+| `POST` | `/api/ai/ml/nl-to-aggregation` | Traduce lenguaje natural a consulta agregada MongoDB en sandbox seguro |
+| `POST` | `/api/ai/mobile/voice-router` | Recibe audio móvil, detecta intención y devuelve la política inferida |
+| `POST` | `/api/ai/ml/analyze-bottlenecks` | Análisis de cuellos de botella en base a registros de actividad |
+| `GET` | `/api/ai/ml/insights` | Estadísticas descriptivas, alertas e insights semánticos en lenguaje natural |
 
 ---
 

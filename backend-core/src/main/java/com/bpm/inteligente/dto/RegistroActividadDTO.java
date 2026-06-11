@@ -29,4 +29,7 @@ public class RegistroActividadDTO {
     private Instant completadoEn;
     private String clienteNombre;
     private String politicaId;
+
+    @Builder.Default
+    private java.util.List<String> documentosRequeridos = new java.util.ArrayList<>();
 }

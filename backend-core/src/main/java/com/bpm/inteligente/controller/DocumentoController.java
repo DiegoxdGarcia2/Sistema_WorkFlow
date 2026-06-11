@@ -98,4 +98,14 @@ public class DocumentoController {
         DocumentoVersionado doc = documentoService.eliminarDocumento(documentoId, usuario);
         return ResponseEntity.ok(doc);
     }
+
+    @PostMapping("/tramites/{tramiteId}/documentos/compilar-borrador")
+    public ResponseEntity<DocumentoVersionado> compilarYArchivarBorrador(
+            @PathVariable String tramiteId,
+            @AuthenticationPrincipal Usuario usuario) {
+        
+        log.info("REST request to compile draft to S3 for tramite: {}", tramiteId);
+        DocumentoVersionado doc = documentoService.compilarYArchivarDocumentoBorrador(tramiteId, usuario);
+        return ResponseEntity.ok(doc);
+    }
 }

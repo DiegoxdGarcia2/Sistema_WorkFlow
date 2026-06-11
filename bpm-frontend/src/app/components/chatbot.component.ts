@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ChatbotService, ActionButton, ChatMessageDto } from '../services/chatbot.service';
 import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
+import { AiAssistantService } from '../services/ai-assistant.service';
 
 interface ChatMessage {
   text: string;
@@ -36,7 +37,8 @@ export class ChatbotComponent implements AfterViewChecked {
     private chatbotService: ChatbotService,
     private router: Router,
     private cdr: ChangeDetectorRef,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private aiSvc: AiAssistantService
   ) {
     this.router.events.pipe(
       filter(event => event instanceof NavigationEnd)
@@ -51,6 +53,9 @@ export class ChatbotComponent implements AfterViewChecked {
 
   toggleChat() {
     this.isOpen = !this.isOpen;
+    if (!this.isOpen) {
+      this.aiSvc.detenerHablar();
+    }
     if (this.isOpen && this.messages.length === 1) {
       setTimeout(() => this.scrollToBottom(), 100);
     }

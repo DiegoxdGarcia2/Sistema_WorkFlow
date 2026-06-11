@@ -35,7 +35,7 @@ public class PoliticaNegocioService {
      * La validación de grafo se aplica solo al ACTIVAR, no al crear.
      */
     @Transactional
-    @CachePut(value = "politicas", key = "#result.id")
+    @CacheEvict(value = {"politicas", "politicas_por_tenant", "politicas_activas_por_tenant"}, allEntries = true)
     public PoliticaNegocio crear(PoliticaNegocio politica) {
         // 1. Validar que el Tenant exista
         if (!tenantRepo.existsById(politica.getTenantId())) {
@@ -71,7 +71,7 @@ public class PoliticaNegocioService {
      * que NO esté activa. Las políticas activas son inmutables.
      */
     @Transactional
-    @CachePut(value = "politicas", key = "#politicaId")
+    @CacheEvict(value = {"politicas", "politicas_por_tenant", "politicas_activas_por_tenant"}, allEntries = true)
     public PoliticaNegocio actualizar(String politicaId, PoliticaNegocio datosActualizados) {
         PoliticaNegocio existente = buscarPorId(politicaId);
 
@@ -84,6 +84,7 @@ public class PoliticaNegocioService {
         existente.setDescripcion(datosActualizados.getDescripcion());
         existente.setCalles(datosActualizados.getCalles());
         existente.setTransiciones(datosActualizados.getTransiciones());
+        existente.setRequisitosIniciales(datosActualizados.getRequisitosIniciales());
         existente.setActualizadoEn(Instant.now());
         return politicaRepo.save(existente);
     }
@@ -91,26 +92,45 @@ public class PoliticaNegocioService {
     /**
      * Activa una política para que pueda generar trámites.
      * Valida la estructura del grafo antes de activar.
+     * Despublica automáticamente cualquier otra versión activa del mismo nombre en el tenant.
      */
     @Transactional
-    @CachePut(value = "politicas", key = "#politicaId")
+    @CacheEvict(value = {"politicas", "politicas_por_tenant", "politicas_activas_por_tenant"}, allEntries = true)
     public PoliticaNegocio activar(String politicaId) {
         PoliticaNegocio politica = buscarPorId(politicaId);
         validarEstructuraGrafo(politica);
+
+        // Despublicar todas las otras versiones activas con el mismo nombre en el mismo tenant
+        List<PoliticaNegocio> otrasActivas = politicaRepo.findByTenantIdAndEstaActiva(politica.getTenantId(), true);
+        for (PoliticaNegocio otra : otrasActivas) {
+            if (!otra.getId().equals(politicaId) && otra.getNombre().equalsIgnoreCase(politica.getNombre())) {
+                otra.setEstaActiva(false);
+                otra.setActualizadoEn(Instant.now());
+                politicaRepo.save(otra);
+            }
+        }
+
         politica.setEstaActiva(true);
         politica.setActualizadoEn(Instant.now());
         return politicaRepo.save(politica);
     }
 
     /**
-     * Elimina una política que NO esté activa.
+     * Elimina una política (DRAFT o LIVE).
+     * Si está activa, se puede eliminar solo si se pasa force=true.
      */
     @Transactional
-    @CacheEvict(value = "politicas", key = "#politicaId")
+    @CacheEvict(value = {"politicas", "politicas_por_tenant", "politicas_activas_por_tenant"}, allEntries = true)
     public void eliminar(String politicaId) {
+        eliminar(politicaId, false);
+    }
+
+    @Transactional
+    @CacheEvict(value = {"politicas", "politicas_por_tenant", "politicas_activas_por_tenant"}, allEntries = true)
+    public void eliminar(String politicaId, boolean force) {
         PoliticaNegocio politica = buscarPorId(politicaId);
-        if (politica.isEstaActiva()) {
-            throw new BusinessRuleException("No se puede eliminar una política activa.");
+        if (politica.isEstaActiva() && !force) {
+            throw new BusinessRuleException("No se puede eliminar una política activa. Use la opción de forzar eliminación.");
         }
         politicaRepo.deleteById(politicaId);
     }
@@ -121,10 +141,12 @@ public class PoliticaNegocioService {
                 .orElseThrow(() -> new ResourceNotFoundException("PoliticaNegocio", "id", id));
     }
 
+    @Cacheable(value = "politicas_por_tenant", key = "#tenantId")
     public List<PoliticaNegocio> listarPorTenant(String tenantId) {
         return politicaRepo.findByTenantId(tenantId);
     }
 
+    @Cacheable(value = "politicas_activas_por_tenant", key = "#tenantId")
     public List<PoliticaNegocio> listarActivasPorTenant(String tenantId) {
         return politicaRepo.findByTenantIdAndEstaActiva(tenantId, true);
     }

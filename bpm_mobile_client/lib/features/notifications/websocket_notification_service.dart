@@ -9,6 +9,7 @@ import '../../core/network/network_provider.dart';
 import '../../core/navigation/navigation_service.dart';
 import '../sync/sync_worker.dart';
 import '../tramites/tramite_tracking_screen.dart';
+import '../tramites/prerequisitos_screen.dart';
 import 'notification_overlay_service.dart';
 
 class NotificationItem {
@@ -132,7 +133,7 @@ class WebsocketNotificationService {
     // Configurar URL según la plataforma
     final String wsUrl = kIsWeb 
         ? 'ws://localhost:8080/ws-bpm' 
-        : 'ws://10.0.2.2:8080/ws-bpm';
+        : 'ws://192.168.100.31:8080/ws-bpm';
 
     debugPrint('[WS-Notification] Conectando a $wsUrl para cliente $clienteId...');
 
@@ -202,6 +203,12 @@ class WebsocketNotificationService {
         case 'TRAMITE_CANCELADO':
           title = 'Trámite Cancelado';
           break;
+        case 'PREREQUISITOS_REQUERIDOS':
+          title = 'Documentos Requeridos';
+          break;
+        case 'DOCUMENTO_REQUERIDO_PASO':
+          title = 'Se Requiere un Documento';
+          break;
         default:
           title = 'Actualización de Trámite';
       }
@@ -244,11 +251,23 @@ class WebsocketNotificationService {
                 syncStatus: 'SYNCED',
               ),
             );
-            navigatorKey.currentState?.push(
-              MaterialPageRoute(
-                builder: (context) => TramiteTrackingScreen(tramite: tramite),
-              ),
-            );
+
+            if (type.toUpperCase() == 'PREREQUISITOS_REQUERIDOS' || type.toUpperCase() == 'DOCUMENTO_REQUERIDO_PASO') {
+              navigatorKey.currentState?.push(
+                MaterialPageRoute(
+                  builder: (context) => PrerequisitosScreen(
+                    tramiteId: targetTramiteId ?? tramite.id ?? '',
+                    tramiteCodigo: tramite.codigoSeguimiento,
+                  ),
+                ),
+              );
+            } else {
+              navigatorKey.currentState?.push(
+                MaterialPageRoute(
+                  builder: (context) => TramiteTrackingScreen(tramite: tramite),
+                ),
+              );
+            }
           } catch (e) {
             debugPrint('[WS-Notification] Error al navegar al tramite desde notificacion: $e');
           }

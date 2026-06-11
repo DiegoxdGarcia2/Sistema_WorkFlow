@@ -9,14 +9,21 @@ import com.bpm.inteligente.exception.ResourceNotFoundException;
 import com.bpm.inteligente.repository.DocumentoVersionadoRepository;
 import com.bpm.inteligente.repository.RegistroActividadRepository;
 import com.bpm.inteligente.repository.TramiteRepository;
+import com.bpm.inteligente.repository.DocumentoBorradorRepository;
+import com.bpm.inteligente.dto.SocketMessageDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -30,6 +37,12 @@ public class DocumentoService {
     private final RegistroActividadRepository registroRepo;
     private final PoliticaNegocioService politicaService;
     private final S3StorageService s3StorageService;
+    private final DocumentoBorradorRepository borradorRepo;
+    private final ColaboracionService colaboracionService;
+    private final RestTemplate restTemplate = new RestTemplate();
+
+    @Value("${ai.microservice.url:http://localhost:8000}")
+    private String aiMicroserviceUrl;
 
     /**
      * Sube un nuevo documento a S3 y lo registra en MongoDB.
@@ -324,6 +337,143 @@ public class DocumentoService {
 
         if (!tienePermiso) {
             throw new BusinessRuleException("No autorizado: Tu departamento no pertenece a la calle activa de este trámite.");
+        }
+    }
+
+    /**
+     * Compila de forma síncrona el documento borrador, lo sube a S3 y lo registra en MongoDB con hash SHA-256.
+     */
+    @Transactional
+    public DocumentoVersionado compilarYArchivarDocumentoBorrador(String tramiteId, Usuario usuario) {
+        log.info("Iniciando compilación y archivado del borrador para tramite ID: {}", tramiteId);
+        
+        Tramite tramite = tramiteRepo.findById(tramiteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tramite", "id", tramiteId));
+
+        java.util.Optional<DocumentoBorrador> borradorOpt = borradorRepo.findByTramiteId(tramiteId);
+        if (borradorOpt.isEmpty()) {
+            log.info("No se encontró borrador para el trámite {}, omitiendo compilación.", tramiteId);
+            return null;
+        }
+        DocumentoBorrador borrador = borradorOpt.get();
+
+        if (borrador.isArchivado()) {
+            log.info("El borrador para tramite ID: {} ya estaba archivado. Retornando documento existente.", tramiteId);
+            return documentoRepo.findByTramiteIdAndEstado(tramiteId, "ACTIVO").stream()
+                    .filter(d -> d.getNombreOriginal().endsWith(".pdf"))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        // 1. Bloquear borrador de forma persistente
+        borrador.setArchivado(true);
+        borrador.setActualizadoEn(Instant.now());
+        if (usuario != null) {
+            borrador.setModificadoPor(usuario.getNombre() + " " + usuario.getApellido());
+        }
+        borradorRepo.save(borrador);
+
+        // 2. Notificar vía WebSocket bloqueo inmediato del editor colaborativo
+        try {
+            SocketMessageDTO lockMessage = SocketMessageDTO.builder()
+                    .type("DOCUMENTO_ARCHIVADO")
+                    .payload(Map.of(
+                            "tramiteId", tramiteId,
+                            "archivado", true,
+                            "mensaje", "El borrador ha sido aprobado y congelado permanentemente."
+                    ))
+                    .build();
+            colaboracionService.publishToDocRoom(tramiteId, lockMessage);
+            log.info("Enviada señal WebSocket de bloqueo para trámite ID: {}", tramiteId);
+        } catch (Exception e) {
+            log.error("Error al enviar notificación WebSocket de bloqueo: {}", e.getMessage());
+        }
+
+        // 3. Invocar al microservicio WeasyPrint de FastAPI para compilar el HTML a PDF
+        byte[] pdfBytes;
+        try {
+            String url = aiMicroserviceUrl + "/api/ai/documentos/compilar-pdf";
+            Map<String, String> request = Map.of("contenido_html", borrador.getContenidoHtml());
+            log.info("Llamando a microservicio WeasyPrint en: {}", url);
+            pdfBytes = restTemplate.postForObject(url, request, byte[].class);
+            if (pdfBytes == null || pdfBytes.length == 0) {
+                throw new BusinessRuleException("El microservicio WeasyPrint retornó un PDF vacío.");
+            }
+            log.info("PDF compilado con éxito. Tamaño: {} bytes", pdfBytes.length);
+        } catch (Exception e) {
+            log.error("Error al compilar HTML a PDF vía WeasyPrint: {}", e.getMessage());
+            throw new BusinessRuleException("Error de comunicación con el motor de compilación PDF: " + e.getMessage());
+        }
+
+        // 4. Calcular el hash SHA-256 criptográfico para auditoría
+        String sha256Hash = calcularSha256(pdfBytes);
+        log.info("Calculado hash SHA-256 del PDF: {}", sha256Hash);
+
+        // 5. Subir el PDF resultante a AWS S3
+        String clienteId = tramite.getClienteId() != null ? tramite.getClienteId() : "sin-cliente";
+        
+        String draftName = borrador.getNombre();
+        if (draftName == null || draftName.trim().isEmpty()) {
+            draftName = "Documento_Final_" + tramiteId;
+        }
+        // Limpiar caracteres no permitidos en nombres de archivos
+        draftName = draftName.replaceAll("[\\\\/:*?\"<>|]", "_");
+        String nombreOriginal = draftName.toLowerCase().endsWith(".pdf") ? draftName : draftName + ".pdf";
+
+        String s3Key = String.format("tenants/%s/clientes/%s/politicas/%s/tramites/%s/v1_%s",
+                tramite.getTenantId(), clienteId, tramite.getPoliticaId(), tramite.getId(), nombreOriginal);
+
+        try {
+            s3StorageService.uploadFile(s3Key, pdfBytes, "application/pdf");
+            log.info("PDF subido a S3 con key: {}", s3Key);
+        } catch (Exception e) {
+            log.error("Error al subir PDF a AWS S3: {}", e.getMessage());
+            throw new BusinessRuleException("Error al almacenar el PDF en S3: " + e.getMessage());
+        }
+
+        // 6. Registrar el documento inmutable en MongoDB (colección documentos_versionado)
+        DocumentoVersionado.Revision revision = DocumentoVersionado.Revision.builder()
+                .version(1)
+                .s3Key(s3Key)
+                .s3Url(s3StorageService.generatePresignedUrl(s3Key))
+                .accion(AccionDocumento.CREACION)
+                .usuarioId(usuario != null ? usuario.getId() : "sistema")
+                .usuarioNombre(usuario != null ? (usuario.getNombre() + " " + usuario.getApellido()) : "Sistema")
+                .rolUsuario(usuario != null ? usuario.getRol() : null)
+                .timestamp(Instant.now())
+                .sha256Hash(sha256Hash)
+                .build();
+
+        DocumentoVersionado documento = DocumentoVersionado.builder()
+                .id(UUID.randomUUID().toString())
+                .tramiteId(tramiteId)
+                .tenantId(tramite.getTenantId())
+                .nombreOriginal(nombreOriginal)
+                .versionActual(1)
+                .historial(new ArrayList<>(List.of(revision)))
+                .creadoEn(Instant.now())
+                .actualizadoEn(Instant.now())
+                .estado("ACTIVO")
+                .build();
+
+        DocumentoVersionado savedDoc = documentoRepo.save(documento);
+        log.info("Documento final registrado en MongoDB con ID: {}", savedDoc.getId());
+        return savedDoc;
+    }
+
+    private String calcularSha256(byte[] data) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(data);
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception ex) {
+            throw new RuntimeException("Error al calcular hash SHA-256", ex);
         }
     }
 }

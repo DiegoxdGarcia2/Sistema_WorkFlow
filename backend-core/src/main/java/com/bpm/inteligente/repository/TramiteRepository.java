@@ -19,4 +19,7 @@ public interface TramiteRepository extends MongoRepository<Tramite, String> {
     long countByEstado(EstadoTramite estado);
     
     List<Tramite> findByClienteId(String clienteId);
+
+    boolean existsByCodigoSeguimiento(String codigoSeguimiento);
 }
+

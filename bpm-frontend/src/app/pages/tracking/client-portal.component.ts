@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { WorkflowService } from '../../services/workflow.service';
@@ -7,6 +7,9 @@ import { HttpClient } from '@angular/common/http';
 import { ChangeDetectorRef } from '@angular/core';
 import { TrackingDTO } from '../../models/bpm.models';
 import { environment } from '../../../environments/environment';
+import { ArchivoService } from '../../services/archivo.service';
+import { AiAssistantService } from '../../services/ai-assistant.service';
+import { TensorflowService } from '../../services/tensorflow.service';
 
 @Component({
   selector: 'app-client-portal',
@@ -185,7 +188,40 @@ import { environment } from '../../../environments/environment';
                                [style.width.%]="calcularProgreso(selectedTracking)"></div>
                         </div>
                       </div>
-                   </div>
+
+                      <!-- Real-time Prediction Panel -->
+                      @if (selectedTracking.tramite.estado !== 'COMPLETADO' && selectedTracking.tramite.estado !== 'CANCELADO') {
+                        <div class="mt-6 p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-between gap-4">
+                          <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-xl text-indigo-400 border border-indigo-500/20">
+                              @if (prediccionCargando) {
+                                <div class="w-4 h-4 border-2 border-indigo-400/20 border-t-indigo-400 rounded-full animate-spin"></div>
+                              } @else {
+                                🔮
+                              }
+                            </div>
+                            <div>
+                              <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Predicción de Finalización (TensorFlow AI)</p>
+                              @if (prediccionCargando) {
+                                <p class="text-xs text-slate-400">Calculando estimación con variables de entorno...</p>
+                              } @else if (prediccionError || !prediccionActual) {
+                                <p class="text-xs text-red-400">Error al calcular la predicción</p>
+                              } @else {
+                                <p class="text-xs font-semibold text-slate-200">
+                                  Finalización estimada: <span class="text-indigo-300">{{ fechaEstimada | date:'medium' }}</span>
+                                </p>
+                              }
+                            </div>
+                          </div>
+                          @if (!prediccionCargando && !prediccionError && prediccionActual) {
+                            <div class="text-right">
+                              <p class="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Confianza IA</p>
+                              <p class="text-sm font-black text-indigo-400">{{ (prediccionActual.scoreEficiencia * 100) | number:'1.0-0' }}%</p>
+                            </div>
+                          }
+                        </div>
+                      }
+                    </div>
 
                    <!-- Timeline -->
                    <div class="space-y-6">
@@ -237,6 +273,78 @@ import { environment } from '../../../environments/environment';
             </div>
           </div>
         }
+
+        <!-- AI PRE-REQUISITES UPLOAD MODAL -->
+        @if (aiSuggestedPolicy) {
+          <div class="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
+            <div class="w-full max-w-lg bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl flex flex-col relative animate-fade-in overflow-hidden p-8 space-y-6">
+              <div class="flex items-center justify-between pb-4 border-b border-white/5">
+                <div class="flex items-center gap-3">
+                  <span class="text-2xl">🔒</span>
+                  <div>
+                    <h3 class="text-lg font-bold text-white">Documentos Requeridos</h3>
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{{ aiSuggestedPolicy.politicaNombre }}</p>
+                  </div>
+                </div>
+                <button (click)="aiSuggestedPolicy = null" class="text-slate-400 hover:text-white">&#10005;</button>
+              </div>
+
+              <p class="text-xs text-slate-400 leading-relaxed">
+                Para completar la solicitud inteligente del trámite, por favor adjunta los siguientes documentos obligatorios:
+              </p>
+
+              <div class="space-y-4">
+                @for (req of aiSuggestedPolicy.requisitosIniciales; track req) {
+                  <div class="p-4 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between bg-slate-950 gap-4"
+                       [class.border-emerald-500/30]="tienePrerequisito(req)"
+                       [class.bg-emerald-500/5]="tienePrerequisito(req)"
+                       [class.border-indigo-500/30]="!tienePrerequisito(req)"
+                       [class.bg-indigo-500/5]="!tienePrerequisito(req)">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-2 mb-1">
+                        <span class="px-2 py-0.5 rounded text-[8px] font-extrabold uppercase bg-slate-800 text-slate-300">
+                          {{ getReqType(req) }}
+                        </span>
+                        <p class="text-xs font-bold text-white truncate">{{ getCleanReqName(req) }}</p>
+                      </div>
+                      <p class="text-[9px] font-medium" [class.text-emerald-400]="tienePrerequisito(req)" [class.text-indigo-400]="!tienePrerequisito(req)">
+                        {{ tienePrerequisito(req) ? 'Listo' : 'Pendiente' }}
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      @if (getReqType(req) === 'archivo') {
+                        <input type="file" (change)="onPrereqFileSelected($event, req)" class="hidden" [id]="'client-prereq-' + $index" [disabled]="subiendoPrerequisito[req]">
+                        <label [for]="'client-prereq-' + $index" *ngIf="!tienePrerequisito(req)"
+                               class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer flex items-center gap-1 transition-all">
+                          <span>{{ subiendoPrerequisito[req] ? '⏳' : '📤' }}</span>
+                          <span>Subir</span>
+                        </label>
+                        <button *ngIf="tienePrerequisito(req)" (click)="eliminarPrerequisito(req)" class="text-red-500 hover:text-red-400 text-sm p-2">🗑️</button>
+                      } @else {
+                        <input [type]="getReqType(req) === 'número' ? 'number' : (getReqType(req) === 'fecha' ? 'date' : 'text')"
+                               [value]="prereqInputs[req] || ''"
+                               (input)="onPrereqInputChanged(req, $event)"
+                               placeholder="Completar campo..."
+                               class="w-full md:w-48 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white outline-none focus:border-indigo-500 transition-all">
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+
+              <div class="pt-4 flex gap-4">
+                <button (click)="aiSuggestedPolicy = null" class="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-2xl text-xs font-bold text-white transition-all">Cancelar</button>
+                <button (click)="iniciarTramiteSugeridoConArchivos()" [disabled]="!todosLosPrerequisitosListos() || aiLoading"
+                        class="flex-2 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-2xl text-xs font-bold text-white transition-all disabled:opacity-30 flex items-center justify-center gap-2">
+                  @if (aiLoading) {
+                    <div class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin animate-spin"></div>
+                  }
+                  <span>Enviar y Empezar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        }
       </main>
     </div>
   `,
@@ -254,6 +362,53 @@ export class ClientPortalComponent implements OnInit {
   error = '';
   user: any;
 
+  // TensorFlow Predictions
+  prediccionCargando = false;
+  prediccionError = false;
+  prediccionActual: any = null;
+  private tfService = inject(TensorflowService);
+
+  get fechaEstimada(): Date | null {
+    if (!this.selectedTracking || !this.prediccionActual) return null;
+    const minutos = this.prediccionActual.tiempoEstimadoMinutos || 30;
+    const baseDate = new Date(this.selectedTracking.tramite.iniciadoEn);
+    return new Date(baseDate.getTime() + minutos * 60000);
+  }
+
+  obtenerPrediccion(t: TrackingDTO) {
+    if (!t || !t.tramite || t.tramite.estado === 'COMPLETADO' || t.tramite.estado === 'CANCELADO') {
+      this.prediccionActual = null;
+      return;
+    }
+
+    this.prediccionCargando = true;
+    this.prediccionError = false;
+    this.prediccionActual = null;
+
+    const req = {
+      hora_del_dia: new Date().getHours(),
+      dia_de_semana: Math.max(0, new Date().getDay() - 1),
+      departamento_id: 'default',
+      politica_id: t.tramite.politicaId || 'default',
+      carga_actual: this.getCountByEstado('EN_PROGRESO') + this.getCountByEstado('INICIADO') || 1,
+      historial_cliente: 0.85
+    };
+
+    this.tfService.predict(req).subscribe({
+      next: (res) => {
+        this.prediccionActual = res;
+        this.prediccionCargando = false;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('Error al obtener predicción de finalización:', err);
+        this.prediccionError = true;
+        this.prediccionCargando = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
   aiPrompt = '';
   aiLoading = false;
   aiMessage = '';
@@ -262,7 +417,20 @@ export class ClientPortalComponent implements OnInit {
   recognition: any;
   initialPrompt = '';
 
-  constructor(private http: HttpClient, private auth: AuthService, private cdr: ChangeDetectorRef) {
+  // AI Suggestion & Prerequisites
+  aiSuggestedPolicy: any = null;
+  prereqFilesList: any[] = [];
+  subiendoPrerequisito: Record<string, boolean> = {};
+  prereqInputs: Record<string, string> = {};
+
+  constructor(
+    private http: HttpClient,
+    private auth: AuthService,
+    private cdr: ChangeDetectorRef,
+    public aiSvc: AiAssistantService,
+    public archivoService: ArchivoService,
+    public workflowService: WorkflowService
+  ) {
     this.user = this.auth.usuario();
   }
 
@@ -324,19 +492,153 @@ export class ClientPortalComponent implements OnInit {
         this.aiLoading = false;
         this.aiSuccess = res.success;
         this.aiMessage = res.message;
+        
+        // Voz Neuronal: Narrar la respuesta
+        if (res.message) {
+          this.aiSvc.hablar(res.message);
+        }
+
         this.cdr.detectChanges();
         if (res.success) {
           this.aiPrompt = '';
-          this.cargarMisTramites(); // Recargar tramites
+          if (res.tienePrerrequisitos) {
+            this.aiSuggestedPolicy = res;
+            this.prereqFilesList = [];
+          } else {
+            this.cargarMisTramites(); // Recargar tramites
+          }
         }
       },
       error: (err) => {
         this.aiLoading = false;
         this.aiSuccess = false;
         this.aiMessage = err.error?.message || 'Error de conexión con el servicio de Inteligencia Artificial.';
+        
+        if (this.aiMessage) {
+          this.aiSvc.hablar(this.aiMessage);
+        }
         this.cdr.detectChanges();
       }
     });
+  }
+
+  iniciarTramiteSugeridoConArchivos() {
+    if (!this.aiSuggestedPolicy) return;
+    this.aiLoading = true;
+    this.cdr.detectChanges();
+
+    const clientUserId = this.auth.usuario()?.id || '';
+    const clienteId = clientUserId.endsWith('-usr') ? clientUserId.replace('-usr', '') : clientUserId;
+
+    const request = {
+      politicaId: this.aiSuggestedPolicy.politicaId,
+      usuarioId: clientUserId,
+      clienteId: clienteId || clientUserId,
+      documentoCliente: clienteId || clientUserId,
+      clienteNombre: this.auth.usuario()?.nombre,
+      archivosIniciales: this.prereqFilesList
+    };
+
+    this.http.post<any>(`${environment.apiUrl}/tramites`, request).subscribe({
+      next: (res) => {
+        this.aiLoading = false;
+        this.aiSuggestedPolicy = null;
+        this.prereqFilesList = [];
+        this.aiMessage = 'Trámite con prerrequisitos iniciado con éxito.';
+        this.aiSuccess = true;
+        this.cargarMisTramites();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.aiLoading = false;
+        this.aiMessage = err.error?.message || 'Error al iniciar el trámite con prerrequisitos.';
+        this.aiSuccess = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  getCleanReqName(req: string): string {
+    if (!req) return '';
+    return req.replace(/^\[(Texto|Número|Fecha|Archivo|Selección)\]\s*/i, '');
+  }
+
+  getReqType(req: string): string {
+    if (!req) return 'archivo';
+    const match = req.match(/^\[(Texto|Número|Fecha|Archivo|Selección)\]/i);
+    return match ? match[1].toLowerCase() : 'archivo';
+  }
+
+  onPrereqInputChanged(req: string, event: any): void {
+    const val = (event.target as HTMLInputElement).value;
+    this.prereqInputs[req] = val;
+
+    // Remover anterior
+    this.prereqFilesList = this.prereqFilesList.filter(p => p.nombreRequisito !== req);
+
+    if (val.trim()) {
+      this.prereqFilesList.push({
+        id: 'text-' + Math.random().toString(36).substring(2, 9),
+        nombre: this.getCleanReqName(req),
+        path: val.trim(),
+        tipo: 'text/plain',
+        size: val.trim().length,
+        subidoEn: new Date().toISOString(),
+        nombreRequisito: req
+      });
+    }
+    this.cdr.detectChanges();
+  }
+
+  tienePrerequisito(req: string): boolean {
+    return this.prereqFilesList.some(p => p.nombreRequisito === req);
+  }
+
+  getPrerequisitoNombre(req: string): string {
+    const found = this.prereqFilesList.find(p => p.nombreRequisito === req);
+    return found ? found.nombre : '';
+  }
+
+  eliminarPrerequisito(req: string): void {
+    this.prereqFilesList = this.prereqFilesList.filter(p => p.nombreRequisito !== req);
+    if (this.prereqInputs[req]) {
+      this.prereqInputs[req] = '';
+    }
+    this.cdr.detectChanges();
+  }
+
+  onPrereqFileSelected(event: any, req: string) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      const file = input.files[0];
+      this.subiendoPrerequisito[req] = true;
+
+      this.archivoService.subir(file).subscribe({
+        next: (res) => {
+          this.prereqFilesList.push({
+            id: res.id,
+            nombre: file.name,
+            size: file.size,
+            path: res.url || this.archivoService.getDownloadUrl(res.id),
+            tipo: file.type,
+            subidoEn: new Date().toISOString(),
+            nombreRequisito: req
+          });
+          this.subiendoPrerequisito[req] = false;
+          this.cdr.detectChanges();
+        },
+        error: (err) => {
+          console.error('Prereq upload error:', err);
+          this.subiendoPrerequisito[req] = false;
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  todosLosPrerequisitosListos(): boolean {
+    if (!this.aiSuggestedPolicy || !this.aiSuggestedPolicy.requisitosIniciales) return true;
+    return this.aiSuggestedPolicy.requisitosIniciales.every((req: string) => this.tienePrerequisito(req));
   }
 
   cargarMisTramites() {
@@ -348,6 +650,7 @@ export class ClientPortalComponent implements OnInit {
         this.misTramites = data;
         if (data.length > 0) {
           this.selectedTracking = data[0];
+          this.obtenerPrediccion(data[0]);
         }
         this.loading = false;
         this.cdr.detectChanges();
@@ -362,6 +665,7 @@ export class ClientPortalComponent implements OnInit {
 
   seleccionarTramite(t: TrackingDTO) {
     this.selectedTracking = t;
+    this.obtenerPrediccion(t);
   }
 
   logout() {

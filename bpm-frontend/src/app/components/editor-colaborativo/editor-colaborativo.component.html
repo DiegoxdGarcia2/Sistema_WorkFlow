@@ -1,0 +1,472 @@
+<!-- TOAST NOTIFICATIONS -->
+@if (toastMsg()) {
+  <div class="fixed top-10 left-1/2 -translate-x-1/2 z-[210] px-6 py-3 rounded-2xl border shadow-2xl animate-fade flex items-center gap-3"
+       [ngClass]="{
+         'bg-emerald-500/10 border-emerald-500/30 text-emerald-400': toastType() === 'success',
+         'bg-red-500/10 border-red-500/30 text-red-400': toastType() === 'error',
+         'bg-blue-500/10 border-blue-500/30 text-blue-400': toastType() === 'info'
+       }">
+    <span class="text-lg">
+      @if (toastType() === 'success') { ✅ }
+      @else if (toastType() === 'error') { ❌ }
+      @else { ℹ️ }
+    </span>
+    <span class="text-xs font-bold">{{ toastMsg() }}</span>
+  </div>
+}
+
+<div class="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
+  <div [ngClass]="esPantallaCompleta() ? 'w-screen h-screen max-w-none rounded-none border-0' : 'w-full max-w-6xl h-[90vh] rounded-[2.5rem] border border-white/10'"
+       class="bg-slate-900/95 shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 relative">
+    @if (mostrarColorTexto() || mostrarColorResaltado()) {
+      <div class="absolute inset-0 z-[190] bg-transparent" (click)="cerrarMenusColor()"></div>
+    }
+    
+    <!-- HEADER -->
+    <div class="p-6 border-b border-white/5 bg-slate-950/40 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 border border-indigo-500/20 shadow-md">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <input [(ngModel)]="nombreBorrador" 
+                   (blur)="cambiarNombreBorrador()" 
+                   [disabled]="readOnly()"
+                   class="bg-transparent border-0 border-b border-transparent hover:border-white/20 focus:border-indigo-500 focus:ring-0 text-lg font-black text-white tracking-tight px-0 py-0.5 outline-none w-80 transition-all"
+                   placeholder="Nombre del Borrador" />
+            @if (!readOnly()) {
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-400 opacity-60"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            }
+          </div>
+          <div class="flex items-center gap-2 mt-1">
+            @if (onlineSvc.isOnline()) {
+              <span class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                En Línea
+              </span>
+            } @else {
+              <span class="flex items-center gap-1.5 text-[10px] text-amber-400 font-bold uppercase tracking-wider bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                Modo Offline
+              </span>
+            }
+            <span class="w-1 h-1 rounded-full bg-slate-700"></span>
+            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">ID Trámite: {{ tramiteId().slice(0, 8) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PRESENCIA Y ACCIONES -->
+      <div class="flex items-center gap-6">
+        <!-- AVATARS DE TODOS LOS COLABORADORES CONECTADOS -->
+        <div class="flex items-center -space-x-2">
+          @for (c of colaboradoresActivos(); track c.id) {
+            <div class="w-8 h-8 rounded-full border-2 border-slate-900 flex items-center justify-center text-[10px] font-black text-white shadow-md transition-transform hover:scale-110 relative group"
+                 [style.background-color]="c.color"
+                 [title]="c.nombre">
+              {{ c.avatar }}
+              <!-- Tooltip flotante al pasar el mouse -->
+              <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-slate-950 text-white text-[9px] font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[210]">
+                {{ c.nombre }}
+              </span>
+            </div>
+          }
+        </div>
+
+        <div class="flex items-center gap-3">
+          @if (guardando()) {
+            <span class="text-[10px] text-slate-400 font-bold flex items-center gap-1.5 uppercase tracking-wider animate-pulse">
+              <svg class="animate-spin h-3.5 w-3.5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              Guardando...
+            </span>
+          } @else {
+            <span class="text-[10px] text-emerald-400 font-bold flex items-center gap-1.5 uppercase tracking-wider">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Sincronizado
+            </span>
+          }
+
+          @if (!readOnly()) {
+            <button (click)="publicarAS3()" 
+                    class="px-5 py-2.5 rounded-xl text-xs font-black text-white bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all cursor-pointer flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Subir a S3
+            </button>
+          }
+
+          <button (click)="guardarYSalir()" 
+                  class="px-5 py-2.5 rounded-xl text-xs font-black text-white bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all cursor-pointer">
+            Guardar y Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN BODY -->
+    <div class="flex-1 flex flex-col p-6 bg-slate-950/20 overflow-hidden relative">
+      
+      <!-- LOADING OVERLAY -->
+      @if (cargando()) {
+        <div class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
+          <div class="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-6"></div>
+          <h4 class="text-xs font-black text-indigo-400 uppercase tracking-[0.2em] animate-pulse">Sincronizando borrador colaborativo...</h4>
+        </div>
+      }
+
+      <!-- FORMAT TOOLBAR -->
+      <div class="flex flex-wrap items-center justify-between mb-4 p-2 gap-2 rounded-xl bg-slate-900/60 border border-white/5 shadow-md editor-toolbar">
+        <div class="flex flex-wrap items-center gap-1">
+          <!-- Deshacer (Undo) -->
+          <button (click)="undo()" 
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Deshacer (Ctrl+Z)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+          </button>
+          
+          <!-- Rehacer (Redo) -->
+          <button (click)="redo()" 
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Rehacer (Ctrl+Y)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+          </button>
+
+          <div class="w-px h-5 bg-white/10 mx-1"></div>
+
+          <!-- Fuente (Dropdown) -->
+          <select (change)="changeFontFamily($event)" 
+                  class="bg-slate-950 text-slate-300 text-xs px-2 py-1.5 rounded-lg border border-white/10 outline-none max-w-[120px] transition-all focus:border-indigo-500">
+            <option value="">Fuente</option>
+            <option value="Arial">Arial</option>
+            <option value="Times New Roman">Times New Roman</option>
+            <option value="Courier New">Courier New</option>
+            <option value="Georgia">Georgia</option>
+            <option value="Verdana">Verdana</option>
+          </select>
+
+          <!-- Tamaño de Letra (Dropdown) -->
+          <select (change)="changeFontSize($event)" 
+                  class="bg-slate-950 text-slate-300 text-xs px-2 py-1.5 rounded-lg border border-white/10 outline-none transition-all focus:border-indigo-500">
+            <option value="">Tamaño</option>
+            <option value="12px">12px</option>
+            <option value="14px">14px</option>
+            <option value="16px">16px</option>
+            <option value="18px">18px</option>
+            <option value="20px">20px</option>
+            <option value="24px">24px</option>
+            <option value="32px">32px</option>
+          </select>
+
+          <div class="w-px h-5 bg-white/10 mx-1"></div>
+
+          <!-- Negrita -->
+          <button (click)="formatBold()" 
+                  [class.bg-white/10]="isFormatActive('bold')"
+                  [class.text-white]="isFormatActive('bold')"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Negrita">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 12a4 4 0 0 0 0-8H6v8h8Z"/><path d="M15 20a4 4 0 0 0 0-8H6v8h9Z"/></svg>
+          </button>
+          
+          <!-- Cursiva -->
+          <button (click)="formatItalic()" 
+                  [class.bg-white/10]="isFormatActive('italic')"
+                  [class.text-white]="isFormatActive('italic')"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Cursiva">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/><line x1="15" x2="9" y1="4" y2="20"/></svg>
+          </button>
+
+          <!-- Subrayado -->
+          <button (click)="formatUnderline()" 
+                  [class.bg-white/10]="isFormatActive('underline')"
+                  [class.text-white]="isFormatActive('underline')"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Subrayado">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"/><line x1="4" x2="20" y1="21" y2="21"/></svg>
+          </button>
+
+          <div class="w-px h-5 bg-white/10 mx-1"></div>
+
+          <!-- Color de Texto -->
+          <div class="relative">
+            <button (click)="toggleColorTexto()" 
+                    class="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:text-white transition-all text-xs" 
+                    title="Color del Texto">
+              <span class="font-bold border-b-2 border-indigo-500 px-0.5">A</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            
+            @if (mostrarColorTexto()) {
+              <div class="absolute left-0 mt-2 p-3 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl z-[200] w-[260px] animate-in fade-in slide-in-from-top-2 duration-150">
+                <!-- Automático -->
+                <button (click)="resetColor()" 
+                        class="w-full text-left px-2 py-1.5 rounded-lg text-[11px] font-bold text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-2 mb-2">
+                  <span class="w-4 h-4 rounded-sm border border-white/20 bg-slate-100 block"></span>
+                  Automático
+                </button>
+
+                <!-- Colores del Tema -->
+                <div class="text-[9px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Colores del tema</div>
+                <div class="grid grid-cols-10 gap-1 mb-3">
+                  @for (color of coloresTema; track color) {
+                    <button (click)="setColor(color)" 
+                            [style.background-color]="color"
+                            [title]="color"
+                            class="w-4.5 h-4.5 rounded-sm border border-white/10 hover:scale-115 transition-transform cursor-pointer"></button>
+                  }
+                </div>
+
+                <!-- Colores Estándar -->
+                <div class="text-[9px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Colores estándar</div>
+                <div class="grid grid-cols-10 gap-1 mb-2">
+                  @for (color of coloresEstandar; track color) {
+                    <button (click)="setColor(color)" 
+                            [style.background-color]="color"
+                            [title]="color"
+                            class="w-4.5 h-4.5 rounded-sm border border-white/10 hover:scale-115 transition-transform cursor-pointer"></button>
+                  }
+                </div>
+
+                <!-- Más Colores / Custom Picker -->
+                <label class="flex items-center justify-between text-[11px] font-bold text-slate-400 mt-2 pt-2 border-t border-white/10 hover:text-white cursor-pointer">
+                  <span>Más colores...</span>
+                  <input type="color" (input)="changeColor($event)" 
+                         class="w-5 h-5 rounded-md border border-white/20 bg-transparent p-0 cursor-pointer">
+                </label>
+              </div>
+            }
+          </div>
+
+          <!-- Color de Resaltado -->
+          <div class="relative">
+            <button (click)="toggleColorResaltado()" 
+                    class="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:text-white transition-all text-xs" 
+                    title="Resaltar Texto">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-400"><path d="m14 12-8.5 8.5a2.12 2.12 0 1 1-3-3L11 9"/><path d="M15 4 8 11h7z"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            
+            @if (mostrarColorResaltado()) {
+              <div class="absolute left-0 mt-2 p-3 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl z-[200] w-[190px] animate-in fade-in slide-in-from-top-2 duration-150">
+                <!-- Sin Color -->
+                <button (click)="clearHighlight(); cerrarMenusColor()" 
+                        class="w-full text-left px-2 py-1.5 rounded-lg text-[11px] font-bold text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-2 mb-2">
+                  <span class="w-4 h-4 rounded-sm border border-dashed border-white/40 bg-transparent block relative flex items-center justify-center">
+                    <span class="w-full h-0.5 bg-red-500 rotate-45 absolute"></span>
+                  </span>
+                  Sin color
+                </button>
+
+                <!-- Grid de Resaltado -->
+                <div class="text-[9px] font-bold text-slate-500 uppercase mb-1.5 tracking-wider">Colores de resaltado</div>
+                <div class="grid grid-cols-5 gap-1.5 mb-2">
+                  @for (color of coloresResaltado; track color) {
+                    <button (click)="setHighlight(color)" 
+                            [style.background-color]="color"
+                            [title]="color"
+                            class="w-5 h-5 rounded border border-white/10 hover:scale-115 transition-transform cursor-pointer"></button>
+                  }
+                </div>
+
+                <!-- Más Colores / Custom Highlight Picker -->
+                <label class="flex items-center justify-between text-[11px] font-bold text-slate-400 mt-2 pt-2 border-t border-white/10 hover:text-white cursor-pointer">
+                  <span>Personalizar...</span>
+                  <input type="color" (input)="changeHighlight($event)" 
+                         class="w-5 h-5 rounded-md border border-white/20 bg-transparent p-0 cursor-pointer">
+                </label>
+              </div>
+            }
+          </div>
+
+          <div class="w-px h-5 bg-white/10 mx-1"></div>
+
+          <!-- Alineación Izquierda -->
+          <button (click)="alignText('left')" 
+                  [class.bg-white/10]="isFormatActive({ textAlign: 'left' })"
+                  [class.text-white]="isFormatActive({ textAlign: 'left' })"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Alinear a la izquierda">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="21" x2="3" y1="6" y2="6"/><line x1="15" x2="3" y1="12" y2="12"/><line x1="17" x2="3" y1="18" y2="18"/></svg>
+          </button>
+
+          <!-- Alineación Centro -->
+          <button (click)="alignText('center')" 
+                  [class.bg-white/10]="isFormatActive({ textAlign: 'center' })"
+                  [class.text-white]="isFormatActive({ textAlign: 'center' })"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Alinear al centro">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="21" x2="3" y1="6" y2="6"/><line x1="18" x2="6" y1="12" y2="12"/><line x1="17" x2="7" y1="18" y2="18"/></svg>
+          </button>
+
+          <!-- Alineación Derecha -->
+          <button (click)="alignText('right')" 
+                  [class.bg-white/10]="isFormatActive({ textAlign: 'right' })"
+                  [class.text-white]="isFormatActive({ textAlign: 'right' })"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Alinear a la derecha">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="21" x2="3" y1="6" y2="6"/><line x1="21" x2="9" y1="12" y2="12"/><line x1="21" x2="7" y1="18" y2="18"/></svg>
+          </button>
+
+          <!-- Alineación Justificado -->
+          <button (click)="alignText('justify')" 
+                  [class.bg-white/10]="isFormatActive({ textAlign: 'justify' })"
+                  [class.text-white]="isFormatActive({ textAlign: 'justify' })"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Justificar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="21" x2="3" y1="6" y2="6"/><line x1="21" x2="3" y1="12" y2="12"/><line x1="21" x2="3" y1="18" y2="18"/></svg>
+          </button>
+
+          <div class="w-px h-5 bg-white/10 mx-1"></div>
+
+          <!-- Encabezado H1 -->
+          <button (click)="formatHeading(1)" 
+                  [class.bg-white/10]="isFormatActive('heading', { level: 1 })"
+                  [class.text-white]="isFormatActive('heading', { level: 1 })"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 text-xs font-mono font-bold transition-colors" title="Título Principal">
+            H1
+          </button>
+
+          <!-- Encabezado H2 -->
+          <button (click)="formatHeading(2)" 
+                  [class.bg-white/10]="isFormatActive('heading', { level: 2 })"
+                  [class.text-white]="isFormatActive('heading', { level: 2 })"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 text-xs font-mono font-bold transition-colors" title="Subtítulo">
+            H2
+          </button>
+
+          <!-- Cita (Blockquote) -->
+          <button (click)="formatBlockquote()" 
+                  [class.bg-white/10]="isFormatActive('blockquote')"
+                  [class.text-white]="isFormatActive('blockquote')"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Cita">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </button>
+
+          <div class="w-px h-5 bg-white/10 mx-1"></div>
+
+          <!-- Lista de Viñetas -->
+          <button (click)="formatList('bullet')" 
+                  [class.bg-white/10]="isFormatActive('bulletList')"
+                  [class.text-white]="isFormatActive('bulletList')"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Lista de Viñetas">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><path d="M3 6H3.01M3 12H3.01M3 18H3.01" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+
+          <!-- Lista Numerada -->
+          <button (click)="formatList('ordered')" 
+                  [class.bg-white/10]="isFormatActive('orderedList')"
+                  [class.text-white]="isFormatActive('orderedList')"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Lista Numerada">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="10" x2="21" y1="6" y2="6"/><line x1="10" x2="21" y1="12" y2="12"/><line x1="10" x2="21" y1="18" y2="18"/><path d="M4 6H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h1v4Z"/><path d="M4 10H2v1a1 1 0 0 0 1 1h1V10Z"/><path d="M4 18H2v1a1 1 0 0 0 1 1h1v-2Z"/></svg>
+          </button>
+
+          <!-- Bloque de Código -->
+          <button (click)="formatCodeBlock()" 
+                  [class.bg-white/10]="isFormatActive('codeBlock')"
+                  [class.text-white]="isFormatActive('codeBlock')"
+                  class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Bloque de Código">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          </button>
+        </div>
+
+        <!-- Botón Pantalla Completa -->
+        <button (click)="toggleFullscreen()" 
+                class="p-2 rounded-lg text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 border border-transparent hover:border-indigo-500/20 transition-all flex items-center gap-1.5 font-bold text-xs cursor-pointer" 
+                [title]="esPantallaCompleta() ? 'Salir de Pantalla Completa' : 'Pantalla Completa'">
+          @if (esPantallaCompleta()) {
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6m10-6h-6v6M4 10h6V4m10 6h-6V4"/></svg>
+            <span>Ventana</span>
+          } @else {
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 3H5a2 2 0 0 0-2 2v3m18-5h-3a2 2 0 0 0-2 2v3m0 10h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            <span>Pantalla Completa</span>
+          }
+        </button>
+
+        <!-- Botón Ver Actividades -->
+        <button (click)="toggleAuditLog()" 
+                [class.text-indigo-400]="mostrarAuditLog()"
+                [class.bg-indigo-500/10]="mostrarAuditLog()"
+                class="p-2 rounded-lg text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 border border-transparent hover:border-indigo-500/20 transition-all flex items-center gap-1.5 font-bold text-xs cursor-pointer" 
+                title="Historial de Actividades">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Ver Actividades</span>
+        </button>
+
+        <!-- Botón Imprimir / PDF -->
+        <button (click)="printDocument()" 
+                class="p-2 rounded-lg text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 border border-transparent hover:border-indigo-500/20 transition-all flex items-center gap-1.5 font-bold text-xs cursor-pointer" title="Exportar a PDF / Imprimir">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          <span>PDF / Imprimir</span>
+        </button>
+      </div>
+
+      <!-- EDITOR CANVAS WRAPPER Y PANEL DE AUDITORÍA -->
+      <div class="flex-1 w-full flex gap-4 overflow-hidden min-h-0 relative">
+        <!-- TIPTAP EDITOR CANVAS -->
+        <div class="flex-1 bg-slate-950 border border-white/5 rounded-3xl p-8 overflow-y-auto custom-scrollbar shadow-inner editor-container">
+          <div #editorContainer></div>
+        </div>
+
+        <!-- PANEL LATERAL DE AUDITORÍA (ACTIVIDADES) -->
+        @if (mostrarAuditLog()) {
+          <div class="w-80 bg-slate-900 border border-white/10 rounded-3xl p-5 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 relative z-[100]">
+            <div class="flex items-center justify-between mb-4 pb-2 border-b border-white/5">
+              <h3 class="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <span>⏱️</span> Historial de Actividades
+              </h3>
+              <button (click)="toggleAuditLog()" class="text-slate-400 hover:text-white text-xs font-bold cursor-pointer">✕</button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+              @if (cargandoAuditoria()) {
+                <div class="py-12 flex flex-col items-center justify-center">
+                  <div class="w-8 h-8 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-3"></div>
+                  <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Cargando historial...</p>
+                </div>
+              } @else if (historialAuditoria().length === 0) {
+                <div class="py-12 text-center text-slate-500 text-[11px] leading-relaxed">
+                  <p>No se encontraron actividades registradas para este documento.</p>
+                </div>
+              } @else {
+                @for (log of historialAuditoria(); track log.id) {
+                  <div class="p-3.5 rounded-2xl bg-slate-950/40 border border-white/5 hover:border-white/10 transition-colors">
+                    <div class="flex justify-between items-start gap-2 mb-1.5 flex-wrap">
+                      <span class="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider"
+                            [ngClass]="{
+                              'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20': log.accion === 'CREACION_BORRADOR',
+                              'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20': log.accion === 'EDICION_BORRADOR'
+                            }">
+                        {{ log.accion === 'CREACION_BORRADOR' ? 'Creado' : 'Editado' }}
+                      </span>
+                      <span class="text-[9px] text-slate-500 font-semibold">
+                        {{ log.timestamp | date:'mediumTime' }}
+                      </span>
+                    </div>
+                    <p class="text-[11px] text-slate-200 font-bold mb-1 truncate" [title]="log.usuarioNombre">{{ log.usuarioNombre }}</p>
+                    <p class="text-[10px] text-slate-400 leading-normal">{{ log.detalle }}</p>
+                  </div>
+                }
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- FOOTER / ESTADO -->
+      <div class="mt-4 pt-4 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-400"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            <span>Último Editor: <strong class="text-slate-300">{{ ultimoEditor() }}</strong></span>
+          </div>
+          @if (ultimoCambio()) {
+            <div class="flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-400"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span>Último Cambio: <strong class="text-slate-300">{{ ultimoCambio() | date:'mediumTime' }}</strong></span>
+            </div>
+          }
+        </div>
+        
+        <!-- ESTADÍSTICAS DEL DOCUMENTO -->
+        <div class="flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400">
+          <span>Palabras: <strong class="text-white">{{ palabrasCount() }}</strong></span>
+          <span class="w-1 h-1 rounded-full bg-slate-700"></span>
+          <span>Caracteres: <strong class="text-white">{{ caracteresCount() }}</strong></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

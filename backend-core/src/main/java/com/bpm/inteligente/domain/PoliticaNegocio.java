@@ -44,6 +44,9 @@ public class PoliticaNegocio {
     @Builder.Default
     private List<Transicion> transiciones = new ArrayList<>();
 
+    @Builder.Default
+    private List<String> requisitosIniciales = new ArrayList<>();
+
     // ── Auditoría Enterprise ──────────────────────────────────
 
     /** ID del usuario que creó este registro (poblado automáticamente por MongoAuditorAware) */

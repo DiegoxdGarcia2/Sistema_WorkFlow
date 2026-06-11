@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:dio/dio.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../../core/network/network_provider.dart';
 import '../../core/navigation/navigation_service.dart';
 
@@ -14,14 +15,32 @@ class AssistantBottomSheet extends ConsumerStatefulWidget {
 
 class _AssistantBottomSheetState extends ConsumerState<AssistantBottomSheet> {
   final stt.SpeechToText _speech = stt.SpeechToText();
+  final FlutterTts _flutterTts = FlutterTts();
   bool _isListening = false;
   bool _isProcessing = false;
   final TextEditingController _promptController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _initTts();
+  }
+
+  Future<void> _initTts() async {
+    try {
+      await _flutterTts.setLanguage("es-ES");
+      await _flutterTts.setSpeechRate(0.45);
+      await _flutterTts.setPitch(1.0);
+    } catch (e) {
+      debugPrint('Error initializing TTS: $e');
+    }
+  }
   
   @override
   void dispose() {
     _promptController.dispose();
     _speech.stop();
+    // No detenemos TTS aquí para permitir que la narración continúe tras cerrar el BottomSheet
     super.dispose();
   }
 
@@ -76,6 +95,9 @@ class _AssistantBottomSheetState extends ConsumerState<AssistantBottomSheet> {
 
       final data = response.data;
       if (mounted) {
+        if (data['message'] != null) {
+          _flutterTts.speak(data['message'].toString());
+        }
         Navigator.pop(context, data['success'] == true); 
         scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
@@ -100,11 +122,13 @@ class _AssistantBottomSheetState extends ConsumerState<AssistantBottomSheet> {
     } on DioException catch (e) {
       debugPrint('Error en la inferencia AI: ${e.response?.data}');
       if (mounted) {
+        final errMsg = e.response?.data?['message'] ?? 'Error de conexión con IA.';
+        _flutterTts.speak(errMsg.toString());
         Navigator.pop(context, false);
         scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text(
-              e.response?.data?['message'] ?? 'Error de conexión con IA.',
+              errMsg,
               style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white),
             ), 
             backgroundColor: const Color(0xFFEF4444),

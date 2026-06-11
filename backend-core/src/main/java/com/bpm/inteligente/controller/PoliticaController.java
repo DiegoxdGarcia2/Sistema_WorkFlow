@@ -38,8 +38,9 @@ public class PoliticaController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void eliminar(@PathVariable String id) {
-        politicaService.eliminar(id);
+    public void eliminar(@PathVariable String id,
+                         @RequestParam(defaultValue = "false") boolean force) {
+        politicaService.eliminar(id, force);
     }
 
     @GetMapping("/{id}")

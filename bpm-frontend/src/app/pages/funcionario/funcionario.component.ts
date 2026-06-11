@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal, effect, untracked } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, effect, untracked, computed } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -27,11 +27,13 @@ import { TensorflowService } from '../../services/tensorflow.service';
 import { TensorflowPredictionsCard } from '../../components/tensorflow-predictions-card/tensorflow-predictions-card';
 
 import { RepositorioComponent } from './repositorio.component';
+import { EditorColaborativoComponent } from '../../components/editor-colaborativo/editor-colaborativo.component';
+import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion.service';
 
 @Component({
   selector: 'app-funcionario',
   standalone: true,
-  imports: [CommonModule, FormsModule, VoiceFillerModalComponent, RepositorioComponent, TensorflowPredictionsCard],
+  imports: [CommonModule, FormsModule, VoiceFillerModalComponent, RepositorioComponent, TensorflowPredictionsCard, EditorColaborativoComponent],
   styles: [`
     :host { display: block; height: calc(100vh - 4rem); }
     .scrollbar-hide::-webkit-scrollbar { display: none; }
@@ -229,6 +231,80 @@ import { RepositorioComponent } from './repositorio.component';
               </div>
             }
 
+            <!-- CO-EDICIÓN EN VIVO -->
+             @if (vista === 'colaborativo') {
+               <div class="grid grid-cols-1 gap-6">
+                 @if (tareasDepartamento().length === 0) {
+                   <div class="py-20 text-center glass-card rounded-3xl">
+                      <div class="text-5xl mb-4 opacity-20">👥</div>
+                      <p class="text-slate-400 font-medium">No hay trámites activos en tu departamento</p>
+                      <p class="text-slate-600 text-xs mt-1">Los documentos aparecerán aquí cuando se inicien trámites.</p>
+                   </div>
+                 }
+                 @for (t of tareasCoEdicionDeduplicadas(); track t.tramiteId || t.id) {
+                   <div class="glass-card p-6 rounded-[2rem] flex flex-col md:flex-row md:items-center justify-between gap-6 group hover:border-indigo-500/50 transition-all duration-300">
+                      <div class="flex items-center gap-6 min-w-0 flex-1">
+                         <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-3xl border border-indigo-500/20 group-hover:scale-110 transition-all flex-shrink-0">
+                            📄
+                         </div>
+                         <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-3 mb-1.5 flex-wrap">
+                               <h3 class="text-lg font-black text-white truncate">{{ t.clienteNombre || 'Trámite sin Solicitante' }}</h3>
+                               <span class="px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-400 text-[9px] font-black uppercase tracking-wider border border-indigo-500/25">
+                                 {{ t.actividadNombre }}
+                               </span>
+                               @if (editoresPorTramite()[t.tramiteId] && editoresPorTramite()[t.tramiteId].length > 0) {
+                                 <span class="px-2.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-[9px] font-black uppercase tracking-wider border border-emerald-500/25 flex items-center gap-1.5 animate-pulse">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                    {{ editoresPorTramite()[t.tramiteId].length }} En Vivo
+                                 </span>
+                               }
+                            </div>
+                            <div class="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                                <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-slate-700"></span> Trámite: <span class="font-mono text-[11px]">{{ t.tramiteId.slice(0,8) }}</span></span>
+                                <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-slate-700"></span> Tarea: <span class="font-mono text-[11px]">{{ t.id.slice(0,8) }}</span></span>
+                                <span class="flex items-center gap-1.5 font-medium">
+                                  <span class="w-1.5 h-1.5 rounded-full bg-slate-700"></span>
+                                  Responsable: 
+                                  @if (t.ejecutadoPor) {
+                                    <span class="text-indigo-300 font-semibold">{{ t.ejecutadoPor }}</span>
+                                  } @else {
+                                    <span class="text-amber-500 font-semibold uppercase tracking-widest text-[9px] bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">Disponible</span>
+                                  }
+                                </span>
+                             </div>
+                         </div>
+                      </div>
+                      
+                      <div class="flex items-center gap-4 flex-shrink-0">
+                         <!-- Avatares de editores en vivo -->
+                         @if (editoresPorTramite()[t.tramiteId] && editoresPorTramite()[t.tramiteId].length > 0) {
+                           <div class="flex -space-x-2.5 overflow-hidden">
+                             @for (editor of editoresPorTramite()[t.tramiteId]; track editor.id) {
+                               <div [style.background-color]="editor.color" 
+                                    [title]="editor.nombre"
+                                    class="inline-flex items-center justify-center w-8 h-8 rounded-full text-[10px] font-black text-white border-2 border-slate-950 shadow-md">
+                                 {{ editor.avatar }}
+                               </div>
+                             }
+                           </div>
+                         }
+                      
+                         @if (t.estado === 'PENDIENTE') {
+                           <button (click)="tomarYUnirse(t)" class="px-6 py-3 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-black uppercase tracking-widest transition-all hover:scale-[1.02] shadow-lg shadow-amber-500/10">
+                             Tomar e Iniciar Co-Edición
+                           </button>
+                         } @else {
+                           <button (click)="unirseAlBorrador(t)" class="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black uppercase tracking-widest transition-all hover:scale-[1.02] shadow-lg shadow-indigo-500/20 flex items-center gap-2">
+                              <span>👥</span> Unirse al Borrador
+                           </button>
+                         }
+                      </div>
+                   </div>
+                 }
+               </div>
+             }
+
             <!-- INICIAR TRAMITE -->
             @if (vista === 'iniciar') {
               <div class="grid grid-cols-2 gap-6">
@@ -310,7 +386,7 @@ import { RepositorioComponent } from './repositorio.component';
         }
 
         <!-- MODAL FORMULARIO -->
-        @if (tareaActiva) {
+        @if (tareaActiva && !esCoEdicionActivaDirecta) {
           <div class="fixed inset-0 z-[100] flex items-center justify-center p-6">
              <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" (click)="cerrarModal()"></div>
              <div class="w-full max-w-3xl glass-card rounded-[40px] flex flex-col max-h-[90vh] overflow-hidden relative animate-fade">
@@ -360,7 +436,37 @@ import { RepositorioComponent } from './repositorio.component';
                          </app-tensorflow-predictions-card>
                       </div>
                     }
+
+                    <!-- Alerta de Anomalía Crítica Detectada por TensorFlow -->
+                    @if (prediccionActual()?.isAnomalo) {
+                      <div class="p-6 rounded-3xl bg-red-500/10 border border-red-500/25 flex gap-4 items-start animate-pulse">
+                         <div class="text-2xl mt-0.5">⚠️</div>
+                         <div>
+                            <h4 class="text-xs font-black uppercase text-red-400 tracking-wider">
+                              Alerta de Anomalía Operativa Detectada por TensorFlow
+                            </h4>
+                            <p class="text-xs text-slate-300 leading-relaxed mt-1">
+                              El motor de Inteligencia Artificial (Autoencoder) ha identificado que las condiciones actuales de asignación (carga de trabajo inusual, horario irregular o desviación histórica) están fuera de distribución. Se sugiere procesar el caso con precaución.
+                            </p>
+                         </div>
+                      </div>
+                    }
                    
+                    <!-- Documento Borrador / Contract-Drafting -->
+                    <div class="p-6 rounded-3xl bg-indigo-500/5 border border-indigo-500/10 mb-8 flex items-center justify-between gap-4">
+                       <div>
+                          <h4 class="text-xs font-black uppercase text-indigo-400 mb-1.5 tracking-widest flex items-center gap-2">
+                             <span>📄</span> Borrador Colaborativo del Documento
+                          </h4>
+                          <p class="text-[11px] text-slate-400 leading-relaxed">
+                             Este trámite permite la redacción y firma colaborativa del borrador en tiempo real antes de su emisión final.
+                          </p>
+                       </div>
+                       <button (click)="abrirEditorBorrador()" class="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black uppercase transition-all shadow-lg shadow-indigo-500/20 whitespace-nowrap">
+                          EDITAR BORRADOR
+                       </button>
+                    </div>
+
                     <!-- Template Loader -->
                     <div class="p-6 rounded-3xl bg-indigo-500/5 border border-indigo-500/10 mb-8">
                        <label class="block text-[10px] font-black uppercase text-indigo-400 mb-3 tracking-[0.2em]">Cargar Formulario Base</label>
@@ -502,6 +608,38 @@ import { RepositorioComponent } from './repositorio.component';
                         </div>
                       }
                    </div>
+
+                    <!-- Documentos Requeridos de la Actividad -->
+                    @if (tareaActiva.documentosRequeridos && tareaActiva.documentosRequeridos.length > 0) {
+                      <div class="p-6 rounded-3xl bg-amber-500/5 border border-amber-500/10 mb-8 space-y-4">
+                         <label class="block text-[10px] font-black uppercase text-amber-500 tracking-widest">Documentos Obligatorios Requeridos</label>
+                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            @for (doc of tareaActiva.documentosRequeridos; track doc) {
+                              <div class="p-4 rounded-2xl border flex items-center justify-between"
+                                   [class.border-emerald-500/30]="tieneDocumentoRequerido(doc)"
+                                   [class.bg-emerald-500/5]="tieneDocumentoRequerido(doc)"
+                                   [class.border-amber-500/30]="!tieneDocumentoRequerido(doc)"
+                                   [class.bg-amber-500/5]="!tieneDocumentoRequerido(doc)">
+                                 <div class="min-w-0 flex-1 mr-2">
+                                    <p class="text-xs font-bold text-white truncate">{{ doc }}</p>
+                                    <p class="text-[9px] font-medium" [class.text-emerald-400]="tieneDocumentoRequerido(doc)" [class.text-amber-500]="!tieneDocumentoRequerido(doc)">
+                                      {{ tieneDocumentoRequerido(doc) ? 'Cargado: ' + getDocumentoRequeridoNombre(doc) : 'Pendiente de subir' }}
+                                    </p>
+                                 </div>
+                                 <div class="flex items-center gap-2">
+                                    <input type="file" (change)="onRequiredFileSelected($event, doc)" class="hidden" [id]="'req-doc-' + $index" [disabled]="subiendoDocRequerido[doc]">
+                                    <label [for]="'req-doc-' + $index" *ngIf="!tieneDocumentoRequerido(doc)"
+                                           class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer flex items-center gap-1 transition-all">
+                                       <span>{{ subiendoDocRequerido[doc] ? '⏳' : '📤' }}</span>
+                                       <span>Subir</span>
+                                    </label>
+                                    <button *ngIf="tieneDocumentoRequerido(doc)" (click)="eliminarDocumentoRequerido(doc)" class="text-red-500 hover:text-red-400 text-sm p-2">🗑️</button>
+                                 </div>
+                              </div>
+                            }
+                         </div>
+                      </div>
+                    }
 
                    <!-- File Upload -->
                    <div>
@@ -709,6 +847,56 @@ import { RepositorioComponent } from './repositorio.component';
                     }
                   </div>
 
+                  <!-- Prerrequisitos de Política si existen y hay cliente seleccionado -->
+                  @if (clienteSeleccionado && politicaParaIniciar && politicaParaIniciar.requisitosIniciales && politicaParaIniciar.requisitosIniciales.length > 0) {
+                     <div class="p-6 rounded-3xl bg-indigo-950/20 border border-indigo-500/20 mb-4 space-y-4">
+                        <h4 class="text-xs font-black uppercase text-indigo-400 tracking-widest flex items-center gap-1.5">
+                           <span>🔒</span> Documentos Prerrequisitos Obligatorios
+                        </h4>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">
+                           Se requiere adjuntar los siguientes documentos iniciales para abrir el caso de {{ politicaParaIniciar.nombre }}.
+                        </p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           @for (req of politicaParaIniciar.requisitosIniciales; track req) {
+                               <div class="p-4 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between gap-4"
+                                    [class.border-emerald-500/30]="tienePrerequisito(req)"
+                                    [class.bg-emerald-500/5]="tienePrerequisito(req)"
+                                    [class.border-indigo-500/30]="!tienePrerequisito(req)"
+                                    [class.bg-indigo-500/5]="!tienePrerequisito(req)">
+                                  <div class="min-w-0 flex-1">
+                                     <div class="flex items-center gap-2 mb-1">
+                                        <span class="px-2 py-0.5 rounded text-[8px] font-extrabold uppercase bg-slate-800 text-slate-300">
+                                           {{ getReqType(req) }}
+                                        </span>
+                                        <p class="text-xs font-bold text-white truncate">{{ getCleanReqName(req) }}</p>
+                                     </div>
+                                     <p class="text-[9px] font-medium" [class.text-emerald-400]="tienePrerequisito(req)" [class.text-indigo-400]="!tienePrerequisito(req)">
+                                        {{ tienePrerequisito(req) ? 'Cargado: ' + getPrerequisitoNombre(req) : 'Falta completar' }}
+                                     </p>
+                                  </div>
+                                  <div class="flex items-center gap-2">
+                                     @if (getReqType(req) === 'archivo') {
+                                        <input type="file" (change)="onPrereqFileSelected($event, req)" class="hidden" [id]="'prereq-file-' + $index" [disabled]="subiendoPrerequisito[req]">
+                                        <label [for]="'prereq-file-' + $index" *ngIf="!tienePrerequisito(req)"
+                                               class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer flex items-center gap-1 transition-all">
+                                           <span>{{ subiendoPrerequisito[req] ? '⏳' : '📤' }}</span>
+                                           <span>Subir</span>
+                                        </label>
+                                        <button *ngIf="tienePrerequisito(req)" (click)="eliminarPrerequisito(req)" class="text-red-500 hover:text-red-400 text-sm p-2">🗑️</button>
+                                     } @else {
+                                        <input [type]="getReqType(req) === 'número' ? 'number' : (getReqType(req) === 'fecha' ? 'date' : 'text')"
+                                               [value]="prereqInputs[req] || ''"
+                                               (input)="onPrereqInputChanged(req, $event)"
+                                               placeholder="Completar campo..."
+                                               class="w-full md:w-48 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white outline-none focus:border-indigo-500 transition-all">
+                                     }
+                                  </div>
+                               </div>
+                            }
+                        </div>
+                     </div>
+                  }
+
                   <div class="pt-4 flex items-center justify-between border-t border-white/5">
                      <button (click)="mostrandoRegistroCliente = true" class="text-[10px] font-black text-slate-500 hover:text-indigo-400 uppercase tracking-widest transition-all">Registro Manual</button>
                      <button (click)="confirmarInicioTramite()" [disabled]="!clienteSeleccionado" 
@@ -774,6 +962,15 @@ import { RepositorioComponent } from './repositorio.component';
         (onApplied)="aplicarDatosVoz($event)">
       </app-voice-filler-modal>
 
+      @if (mostrarEditorBorrador()) {
+        <app-editor-colaborativo 
+          [tramiteId]="tareaActiva!.tramiteId"
+          [readOnly]="esSoloLectura()"
+          (onClose)="cerrarEditorBorrador()"
+          (onSave)="onBorradorGuardado($event)">
+        </app-editor-colaborativo>
+      }
+
       <style>
         .nav-item {
           display: flex;
@@ -803,17 +1000,32 @@ import { RepositorioComponent } from './repositorio.component';
     </div>
   `,
 })
-export class FuncionarioComponent implements OnInit {
-  vista: 'bandeja' | 'disponible' | 'historial' | 'iniciar' | 'repositorio' = 'bandeja';
+export class FuncionarioComponent implements OnInit, OnDestroy {
+  vista: 'bandeja' | 'disponible' | 'historial' | 'iniciar' | 'repositorio' | 'colaborativo' = 'bandeja';
   
   // TensorFlow Live Prediction
   prediccionCargando = signal<boolean>(false);
   prediccionError = signal<boolean>(false);
   prediccionActual = signal<any | null>(null);
   private tfService = inject(TensorflowService);
+  private colSvc = inject(ColaboracionService);
 
   // Data
   politicasActivas: PoliticaDTO[] = [];
+  tareasDepartamento = signal<RegistroActividadDTO[]>([]);
+  tareasCoEdicionDeduplicadas = computed(() => {
+    const tareas = this.tareasDepartamento();
+    const seen = new Set<string>();
+    return tareas.filter(t => {
+      if (!t.tramiteId) return true;
+      if (seen.has(t.tramiteId)) return false;
+      seen.add(t.tramiteId);
+      return true;
+    });
+  });
+  editoresPorTramite = signal<Record<string, ColaboradorDTO[]>>({});
+  private pollerEditores: any = null;
+  esCoEdicionActivaDirecta = false;
   
   // Modal Form
   tareaActiva: RegistroActividadDTO | null = null;
@@ -825,13 +1037,15 @@ export class FuncionarioComponent implements OnInit {
   formularioNotas = '';
   mostrandoAddExtra = false;
   mostrarModalVoz = false;
+  mostrarEditorBorrador = signal(false);
 
   // UI Icons
   private sanitizer = inject(DomSanitizer);
   
-  menu: { view: 'bandeja' | 'disponible' | 'historial' | 'iniciar' | 'repositorio', label: string, svg: string, safeSvg?: SafeHtml }[] = [
+  menu: { view: 'bandeja' | 'disponible' | 'historial' | 'iniciar' | 'repositorio' | 'colaborativo', label: string, svg: string, safeSvg?: SafeHtml }[] = [
     { view: 'bandeja', label: 'Mis Tareas', svg: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>` },
     { view: 'disponible', label: 'Disponibles', svg: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 4 4"/><path d="M13 7 8.5 2.5a2.12 2.12 0 0 0-3 0L2.5 5.5a2.12 2.12 0 0 0 0 3L7 13"/><path d="m9 15 4 4"/><path d="M11 17l4.5 4.5a2.12 2.12 0 0 0 3 0l3-3a2.12 2.12 0 0 0 0-3L17 11"/><path d="m12 12 4-4"/><path d="m8 16 4-4"/></svg>` },
+    { view: 'colaborativo', label: 'Co-Edición en Vivo', svg: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>` },
     { view: 'historial', label: 'Historial', svg: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>` },
     { view: 'repositorio', label: 'Repositorio', svg: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>` },
     { view: 'iniciar', label: 'Iniciar Trámite', svg: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 2.6-2 3.5 0 1 2 1 2 1s1-1 1-2c0-.9-.74-2.24-1-3.5Z"/><path d="M15 8.5c1.5-1.26 2-2.6 2-3.5 0-1-2-1-2-1s-1 1-1 2c0 .9.74 2.24 1 3.5Z"/><path d="M12 12c2.14 0 4.22 1.2 5.8 3.03 1.51 1.74 2.27 3.58 2.2 4.97-.03.53-.28 1-.7 1.3a1.55 1.55 0 0 1-1.3.3c-1.39-.27-3.23-1.42-4.97-3.41A13.9 13.9 0 0 1 12 12Z"/><path d="M12 12c-2.14 0-4.22-1.2-5.8-3.03-1.51-1.74-2.27-3.58-2.2-4.97.03-.53.28-1 .7-1.3a1.55 1.55 0 0 1 1.3-.3c1.39.27 3.23 1.42 4.97 3.41A13.9 13.9 0 0 1 12 12Z"/><path d="M9 15c-1.8 1.8-3.9 3.1-6 3.1-.3 0-.6 0-.8-.1-.4-.1-.7-.3-.9-.6-.2-.3-.3-.7-.2-1.1.2-2.1 1.5-4.2 3.3-6 1.8-1.8 3.9-3.1 6-3.1.3 0 .6 0 .8.1.4.1.7.3.9.6.2.3.3.7.2 1.1-.2 2.1-1.5 4.2-3.3 6Z"/></svg>` }
@@ -858,6 +1072,12 @@ export class FuncionarioComponent implements OnInit {
   politicaParaIniciar: PoliticaDTO | null = null;
   mostrandoRegistroCliente = false;
   formNuevoCliente: Partial<ClienteDTO> = { nombre: '', apellido: '', ci: '', correo: '', telefono: '', direccion: '' };
+
+  // --- REQUIRED DOCUMENTS / PREREQUISITES ---
+  prereqFilesList: any[] = [];
+  subiendoPrerequisito: Record<string, boolean> = {};
+  subiendoDocRequerido: Record<string, boolean> = {};
+  prereqInputs: Record<string, string> = {};
 
   private cs = inject(ClienteService);
   private offlineStorage = inject(OfflineStorageService);
@@ -1000,9 +1220,81 @@ export class FuncionarioComponent implements OnInit {
 
   setVista(v: any) {
     this.vista = v;
+    if (this.pollerEditores) {
+      clearInterval(this.pollerEditores);
+      this.pollerEditores = null;
+    }
+    
     if (v === 'bandeja' || v === 'disponible' || v === 'historial') {
       this.cargarDatos(false);
+    } else if (v === 'colaborativo') {
+      this.cargarTareasDepartamento();
+      this.pollerEditores = setInterval(() => {
+        this.actualizarEditoresParaTareas(this.tareasCoEdicionDeduplicadas());
+      }, 5000);
     }
+  }
+
+  ngOnDestroy(): void {
+    if (this.pollerEditores) {
+      clearInterval(this.pollerEditores);
+    }
+  }
+
+  cargarTareasDepartamento() {
+    const user = this.auth.usuario();
+    if (!user || !user.departamentoId) return;
+    this.cargando.set(true);
+    this.workflowService.obtenerBandejaDepartamento(user.departamentoId).subscribe({
+      next: (data) => {
+        this.tareasDepartamento.set(data);
+        this.actualizarEditoresParaTareas(this.tareasCoEdicionDeduplicadas());
+        this.cargando.set(false);
+      },
+      error: (e) => {
+        console.error(e);
+        this.cargando.set(false);
+        this.showToast('Error al cargar la bandeja del departamento', 'error');
+      }
+    });
+  }
+
+  actualizarEditoresParaTareas(tareas: RegistroActividadDTO[]) {
+    if (!tareas || tareas.length === 0) return;
+    const currentMap = { ...this.editoresPorTramite() };
+    tareas.forEach(t => {
+      this.colSvc.obtenerEditoresActivos(t.tramiteId).subscribe({
+        next: (colabs) => {
+          currentMap[t.tramiteId] = colabs;
+          this.editoresPorTramite.set({ ...currentMap });
+        },
+        error: () => {}
+      });
+    });
+  }
+
+  unirseAlBorrador(t: RegistroActividadDTO) {
+    this.tareaActiva = t;
+    this.esCoEdicionActivaDirecta = true;
+    this.mostrarEditorBorrador.set(true);
+  }
+
+  tomarYUnirse(t: RegistroActividadDTO) {
+    if (this.procesandoId()) return;
+    this.procesandoId.set(t.id);
+    this.workflowService.tomarTarea(t.id, this.auth.usuario()!.id).subscribe({
+      next: (res) => {
+        this.procesandoId.set('');
+        this.showToast('Tarea tomada con éxito', 'success');
+        res.estado = 'EN_PROGRESO';
+        this.unirseAlBorrador(res);
+        this.cargarTareasDepartamento();
+      },
+      error: (e) => {
+        this.procesandoId.set('');
+        this.showToast(e.error?.message || 'Error al tomar la tarea', 'error');
+      }
+    });
   }
 
   cargarDatos(showSpinner: boolean = false) {
@@ -1028,7 +1320,7 @@ export class FuncionarioComponent implements OnInit {
     };
 
     // 1. Cargar Bandeja
-    this.workflowService.cargarBandejaUnificada(user.id, user.departamentoId)
+    this.workflowService.cargarBandejaUnificada(user.id, user.departamentoId || '')
       .subscribe({
         next: () => checkFinalize(),
         error: (e) => {
@@ -1059,7 +1351,7 @@ export class FuncionarioComponent implements OnInit {
   }
 
   getTitulo() {
-    return { bandeja: 'Tareas Pendientes', disponible: 'Mercado de Tareas', historial: 'Control de Rendimiento', iniciar: 'Nuevo Trámite', repositorio: 'Repositorio Documental' }[this.vista];
+    return { bandeja: 'Tareas Pendientes', disponible: 'Mercado de Tareas', historial: 'Control de Rendimiento', iniciar: 'Nuevo Trámite', repositorio: 'Repositorio Documental', colaborativo: 'Co-Edición en Vivo' }[this.vista];
   }
 
   getSubtitulo() {
@@ -1068,7 +1360,8 @@ export class FuncionarioComponent implements OnInit {
       disponible: 'Toma tareas libres y acelera el flujo de trabajo.', 
       historial: 'Analiza tu progreso y el historial de acciones.',
       iniciar: 'Pon en marcha una nueva política de negocio.',
-      repositorio: 'Consulta y gestiona los archivos subidos.'
+      repositorio: 'Consulta y gestiona los archivos subidos.',
+      colaborativo: 'Edita borradores de documentos en tiempo real con tu equipo.'
     }[this.vista];
   }
 
@@ -1077,6 +1370,37 @@ export class FuncionarioComponent implements OnInit {
     if (this.vista === 'disponible') return this.workflowService.tareasNoAsignadas();
     if (this.vista === 'historial') return this.workflowService.historial();
     return [];
+  }
+
+  abrirEditorBorrador() {
+    this.mostrarEditorBorrador.set(true);
+  }
+
+  cerrarEditorBorrador() {
+    this.mostrarEditorBorrador.set(false);
+    if (this.esCoEdicionActivaDirecta) {
+      this.tareaActiva = null;
+      this.esCoEdicionActivaDirecta = false;
+    }
+  }
+
+  onBorradorGuardado(html: string) {
+    this.showToast('Borrador colaborativo guardado', 'success');
+  }
+
+  esSoloLectura(): boolean {
+    if (!this.tareaActiva) return true;
+    if (this.tareaActiva.estado === 'PENDIENTE') return true;
+
+    if (this.tareaActiva.actividadNombre === 'Revisión y Firma de Documento') {
+      const user = this.auth.usuario();
+      if (!user) return true;
+      const esAdmin = user.rol === 'ADMINISTRADOR';
+      const esGerencia = user.departamentoId === 'de111111-1111-1111-1111-111111111111' || user.departamentoId === 'ds111111-1111-1111-1111-111111111111';
+      return !esAdmin && !esGerencia;
+    }
+
+    return false;
   }
 
   // ACCIONES
@@ -1299,6 +1623,16 @@ export class FuncionarioComponent implements OnInit {
   completarTarea() {
     if (!this.tareaActiva) return;
     
+    // VALIDACIÓN DE DOCUMENTOS REQUERIDOS OBLIGATORIOS
+    if (this.tareaActiva.documentosRequeridos && this.tareaActiva.documentosRequeridos.length > 0) {
+      for (const doc of this.tareaActiva.documentosRequeridos) {
+        if (!this.tieneDocumentoRequerido(doc)) {
+          this.showToast(`Falta subir el documento obligatorio: "${doc}"`, 'error');
+          return;
+        }
+      }
+    }
+    
     // VALIDACIÓN DE CAMPOS
     const fields = this.getFields();
     for (const f of fields) {
@@ -1443,6 +1777,17 @@ export class FuncionarioComponent implements OnInit {
 
   confirmarInicioTramite() {
     if (!this.politicaParaIniciar || !this.clienteSeleccionado) return;
+    
+    // Validar prerrequisitos si existen
+    if (this.politicaParaIniciar.requisitosIniciales && this.politicaParaIniciar.requisitosIniciales.length > 0) {
+      for (const req of this.politicaParaIniciar.requisitosIniciales) {
+        if (!this.tienePrerequisito(req)) {
+          this.showToast(`Falta subir el documento obligatorio: "${req}"`, 'error');
+          return;
+        }
+      }
+    }
+    
     this.iniciarTramite(this.politicaParaIniciar, this.clienteSeleccionado);
   }
 
@@ -1455,7 +1800,8 @@ export class FuncionarioComponent implements OnInit {
       usuarioId: user?.id,
       clienteId: cliente?.id,
       documentoCliente: cliente?.ci,
-      clienteNombre: cliente ? `${cliente.nombre} ${cliente.apellido}` : undefined
+      clienteNombre: cliente ? `${cliente.nombre} ${cliente.apellido}` : undefined,
+      archivosIniciales: this.prereqFilesList
     };
     console.log('Enviando iniciar tramite:', request);
 
@@ -1463,6 +1809,7 @@ export class FuncionarioComponent implements OnInit {
       next: () => {
         this.procesandoId.set('');
         this.modalClienteOpen = false;
+        this.prereqFilesList = [];
         this.showToast('Nuevo trámite iniciado con éxito', 'success');
         this.setVista('bandeja');
       },
@@ -1472,6 +1819,128 @@ export class FuncionarioComponent implements OnInit {
         this.showToast(e.error?.message || e.message || 'Error al iniciar trámite', 'error'); 
       }
     });
+  }
+
+  // --- HELPERS PARA PRERREQUISITOS ---
+  getCleanReqName(req: string): string {
+    if (!req) return '';
+    return req.replace(/^\[(Texto|Número|Fecha|Archivo|Selección)\]\s*/i, '');
+  }
+
+  getReqType(req: string): string {
+    if (!req) return 'archivo';
+    const match = req.match(/^\[(Texto|Número|Fecha|Archivo|Selección)\]/i);
+    return match ? match[1].toLowerCase() : 'archivo';
+  }
+
+  onPrereqInputChanged(req: string, event: any): void {
+    const val = (event.target as HTMLInputElement).value;
+    this.prereqInputs[req] = val;
+
+    // Remover anterior
+    this.prereqFilesList = this.prereqFilesList.filter(p => p.nombreRequisito !== req);
+
+    if (val.trim()) {
+      this.prereqFilesList.push({
+        id: 'text-' + Math.random().toString(36).substring(2, 9),
+        nombre: this.getCleanReqName(req),
+        path: val.trim(),
+        tipo: 'text/plain',
+        size: val.trim().length,
+        subidoEn: new Date().toISOString(),
+        nombreRequisito: req
+      });
+    }
+  }
+
+  tienePrerequisito(req: string): boolean {
+    return this.prereqFilesList.some(p => p.nombreRequisito === req);
+  }
+
+  getPrerequisitoNombre(req: string): string {
+    const found = this.prereqFilesList.find(p => p.nombreRequisito === req);
+    return found ? found.nombre : '';
+  }
+
+  eliminarPrerequisito(req: string): void {
+    this.prereqFilesList = this.prereqFilesList.filter(p => p.nombreRequisito !== req);
+    if (this.prereqInputs[req]) {
+      this.prereqInputs[req] = '';
+    }
+  }
+
+  onPrereqFileSelected(event: any, req: string) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      const file = input.files[0];
+      this.subiendoPrerequisito[req] = true;
+
+      this.showToast(`Subiendo ${file.name}...`, 'success');
+      this.archivoService.subir(file).subscribe({
+        next: (res) => {
+          this.prereqFilesList.push({
+            id: res.id,
+            nombre: file.name,
+            size: file.size,
+            path: res.url || this.archivoService.getDownloadUrl(res.id),
+            tipo: file.type,
+            subidoEn: new Date().toISOString(),
+            nombreRequisito: req
+          });
+          this.subiendoPrerequisito[req] = false;
+          this.showToast(`Prerrequisito "${req}" subido con éxito`, 'success');
+        },
+        error: (err) => {
+          console.error('Prereq upload error:', err);
+          this.subiendoPrerequisito[req] = false;
+          this.showToast('Error al subir el prerrequisito', 'error');
+        }
+      });
+    }
+  }
+
+  // --- HELPERS PARA DOCUMENTOS REQUERIDOS EN TAREAS ---
+  tieneDocumentoRequerido(doc: string): boolean {
+    return this.archivosCargados.some(a => a.nombreRequisito === doc);
+  }
+
+  getDocumentoRequeridoNombre(doc: string): string {
+    const found = this.archivosCargados.find(a => a.nombreRequisito === doc);
+    return found ? found.nombre : '';
+  }
+
+  eliminarDocumentoRequerido(doc: string): void {
+    this.archivosCargados = this.archivosCargados.filter(a => a.nombreRequisito !== doc);
+  }
+
+  onRequiredFileSelected(event: any, doc: string) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      const file = input.files[0];
+      this.subiendoDocRequerido[doc] = true;
+
+      this.showToast(`Subiendo ${file.name}...`, 'success');
+      this.archivoService.subir(file).subscribe({
+        next: (res) => {
+          this.archivosCargados.push({
+            id: res.id,
+            nombre: file.name,
+            size: file.size,
+            path: res.url || this.archivoService.getDownloadUrl(res.id),
+            tipo: file.type,
+            subidoEn: new Date().toISOString(),
+            nombreRequisito: doc
+          });
+          this.subiendoDocRequerido[doc] = false;
+          this.showToast(`Documento "${doc}" subido con éxito`, 'success');
+        },
+        error: (err) => {
+          console.error('Required upload error:', err);
+          this.subiendoDocRequerido[doc] = false;
+          this.showToast('Error al subir el documento requerido', 'error');
+        }
+      });
+    }
   }
 
   showToast(msg: string, type: 'success' | 'error') {

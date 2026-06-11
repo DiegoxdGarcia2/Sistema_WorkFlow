@@ -12,6 +12,9 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 
 @Slf4j
@@ -35,9 +38,18 @@ public class S3StorageService {
     public String uploadFile(String key, byte[] content, String contentType) {
         log.info("Subiendo archivo a S3 con key: {}, bucket: {}", key, bucketName);
         
-        // Si estamos usando credenciales mock (desarrollo local sin AWS real), simulamos la subida exitosa.
+        // Si estamos usando credenciales mock (desarrollo local sin AWS real), guardamos el archivo en disco local.
         if (isMockMode()) {
-            log.info("[MOCK] Archivo subido exitosamente a S3 (simulado): {}", key);
+            log.info("[MOCK] Guardando archivo localmente para simular S3: {}", key);
+            try {
+                Path targetPath = Paths.get("uploads", key);
+                Files.createDirectories(targetPath.getParent());
+                Files.write(targetPath, content);
+                log.info("[MOCK] Archivo guardado de manera exitosa en: {}", targetPath.toAbsolutePath());
+            } catch (Exception e) {
+                log.error("[MOCK] Error al guardar archivo localmente: {}", e.getMessage(), e);
+                throw new RuntimeException("Error al guardar archivo en simulación local: " + e.getMessage(), e);
+            }
             return key;
         }
 
@@ -86,13 +98,52 @@ public class S3StorageService {
     }
 
     /**
+     * Descarga un archivo de S3 (o disco local si es modo simulado) como un arreglo de bytes.
+     */
+    public byte[] downloadFile(String key) {
+        log.info("Descargando archivo de S3 con key: {}", key);
+        if (isMockMode()) {
+            try {
+                Path targetPath = Paths.get("uploads", key);
+                if (Files.exists(targetPath)) {
+                    return Files.readAllBytes(targetPath);
+                } else {
+                    throw new RuntimeException("Archivo no encontrado en simulación local: " + key);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("Error al descargar archivo local: " + e.getMessage(), e);
+            }
+        }
+        try {
+            software.amazon.awssdk.services.s3.model.GetObjectRequest getObjectRequest = software.amazon.awssdk.services.s3.model.GetObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .build();
+            return s3Client.getObjectAsBytes(getObjectRequest).asByteArray();
+        } catch (Exception e) {
+            log.error("Error al descargar archivo de S3: {}", e.getMessage(), e);
+            throw new RuntimeException("Error al descargar archivo de S3: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Elimina un archivo de S3.
      */
     public void deleteFile(String key) {
         log.info("Eliminando archivo de S3 con key: {}", key);
 
         if (isMockMode()) {
-            log.info("[MOCK] Archivo eliminado de S3 (simulado): {}", key);
+            log.info("[MOCK] Eliminando archivo local en simulación S3: {}", key);
+            try {
+                Path targetPath = Paths.get("uploads", key);
+                if (Files.deleteIfExists(targetPath)) {
+                    log.info("[MOCK] Archivo local eliminado exitosamente: {}", targetPath.toAbsolutePath());
+                } else {
+                    log.warn("[MOCK] El archivo local no existía para eliminar: {}", targetPath.toAbsolutePath());
+                }
+            } catch (Exception e) {
+                log.error("[MOCK] Error al eliminar archivo local: {}", e.getMessage(), e);
+            }
             return;
         }
 
@@ -110,7 +161,7 @@ public class S3StorageService {
         }
     }
 
-    private boolean isMockMode() {
+    public boolean isMockMode() {
         return accessKey == null || accessKey.trim().isEmpty() || accessKey.equals("mock_access_key");
     }
 }

@@ -228,48 +228,114 @@ export class AiAssistantService {
     }
   }
 
-  // ── 3. Text to Speech (ElevenLabs con Fallback nativo) ──
-  hablar(texto: string): void {
-    const aiServiceTtsUrl = `${environment.aiServiceUrl}/tts?text=${encodeURIComponent(texto)}`;
-    
-    const audio = new Audio(aiServiceTtsUrl);
-    audio.play().catch(err => {
-      console.warn('[AiAssistant] ElevenLabs falló (posible restricción de cuenta gratuita en Cloud Run), usando voz nativa optimizada:', err);
-      // Fallback a voz nativa si falla ElevenLabs
-      if ('speechSynthesis' in window) {
-        const speak = () => {
-          const utterance = new SpeechSynthesisUtterance(texto);
-          const voices = window.speechSynthesis.getVoices();
-          
-          // Intentar buscar una voz más natural (Google, Helena, Monica)
-          const preferredVoice = voices.find(v => v.lang.startsWith('es') && v.name.includes('Google')) ||
-                                 voices.find(v => v.lang.startsWith('es') && v.name.includes('Helena')) ||
-                                 voices.find(v => v.lang.startsWith('es') && v.name.includes('Natural')) ||
-                                 voices.find(v => v.lang.startsWith('es') && v.lang.includes('ES'));
-          
-          if (preferredVoice) utterance.voice = preferredVoice;
-          utterance.lang = 'es-ES';
-          utterance.rate = 1.0; 
-          utterance.pitch = 1.0; 
-          
-          window.speechSynthesis.cancel(); 
-          window.speechSynthesis.speak(utterance);
-        };
+  private currentAudio: HTMLAudioElement | null = null;
+  private currentUtterance: SpeechSynthesisUtterance | null = null;
 
-        if (window.speechSynthesis.getVoices().length === 0) {
-          window.speechSynthesis.onvoiceschanged = () => { speak(); window.speechSynthesis.onvoiceschanged = null; };
-        } else {
+  // ── 3. Text to Speech (Voz nativa instantánea + upgrade opcional con TTS externo) ──
+  hablar(texto: string): void {
+    this.detenerHablar();
+
+    if (!texto || texto.trim().length === 0) return;
+
+    // Usar speechSynthesis nativo de inmediato (instantáneo, sin delay)
+    if ('speechSynthesis' in window) {
+      const speak = () => {
+        const utterance = new SpeechSynthesisUtterance(texto);
+        const voices = window.speechSynthesis.getVoices();
+
+        // Buscar la mejor voz en español disponible
+        const preferredVoice =
+          voices.find(v => v.lang.startsWith('es') && v.name.includes('Google')) ||
+          voices.find(v => v.lang.startsWith('es') && v.name.includes('Helena')) ||
+          voices.find(v => v.lang.startsWith('es') && v.name.includes('Natural')) ||
+          voices.find(v => v.lang.startsWith('es') && v.name.includes('Monica')) ||
+          voices.find(v => v.lang.startsWith('es') && v.lang.includes('ES')) ||
+          voices.find(v => v.lang.startsWith('es'));
+
+        if (preferredVoice) utterance.voice = preferredVoice;
+        utterance.lang = 'es-ES';
+        utterance.rate = 1.05;
+        utterance.pitch = 1.0;
+
+        this.currentUtterance = utterance;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utterance);
+        console.log('[AiAssistant] Voz nativa iniciada.');
+      };
+
+      if (window.speechSynthesis.getVoices().length === 0) {
+        window.speechSynthesis.onvoiceschanged = () => {
           speak();
-        }
+          window.speechSynthesis.onvoiceschanged = null;
+        };
+        // Si las voces no cargan en 300ms, hablar con la voz por defecto igualmente
+        setTimeout(() => {
+          if (this.currentUtterance === null) speak();
+        }, 300);
+      } else {
+        speak();
       }
-    });
+    }
+
+    // Intentar upgrade con TTS externo en segundo plano (solo en producción)
+    // En desarrollo local, el servicio AI suele no estar corriendo, así que no perdemos tiempo
+    if (environment.aiServiceUrl.includes('run.app')) {
+      const aiServiceTtsUrl = `${environment.aiServiceUrl}/tts?text=${encodeURIComponent(texto)}`;
+      const audio = new Audio(aiServiceTtsUrl);
+      this.currentAudio = audio;
+
+      // Dar solo 2 segundos para que cargue; si no, la voz nativa ya está hablando
+      const upgradeTimeout = setTimeout(() => {
+        console.log('[AiAssistant] TTS externo demasiado lento, continuando con voz nativa.');
+        this.currentAudio = null;
+      }, 2000);
+
+      audio.addEventListener('canplaythrough', () => {
+        clearTimeout(upgradeTimeout);
+        // Detener voz nativa y usar la de mayor calidad
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+        this.currentUtterance = null;
+        audio.play().catch(() => {
+          console.warn('[AiAssistant] No se pudo reproducir TTS externo.');
+          this.currentAudio = null;
+        });
+        console.log('[AiAssistant] Upgrade a TTS externo exitoso.');
+      }, { once: true });
+
+      audio.addEventListener('error', () => {
+        clearTimeout(upgradeTimeout);
+        this.currentAudio = null;
+        // La voz nativa ya está hablando, no hacer nada
+      }, { once: true });
+    }
+  }
+
+  detenerHablar(): void {
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.pause();
+        this.currentAudio.src = '';
+      } catch (e) {}
+      this.currentAudio = null;
+    }
+    this.currentUtterance = null;
+    if ('speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {}
+    }
   }
 
   // ── 4. Voice Form Fill ──
-  voiceFillForm(audioBlob: Blob, fieldsMetadata: any[]): Observable<{ transcription: string, values: any }> {
+  voiceFillForm(audioBlob: Blob, fieldsMetadata: any[], localTranscription?: string): Observable<{ transcription: string, values: any }> {
     const formData = new FormData();
     formData.append('file', audioBlob, 'form_voice.webm');
     formData.append('fields', JSON.stringify(fieldsMetadata));
+    if (localTranscription) {
+      formData.append('local_transcription', localTranscription);
+    }
     return this.http.post<{ transcription: string, values: any }>(
       `${environment.aiServiceUrl}/forms/voice-fill`,
       formData

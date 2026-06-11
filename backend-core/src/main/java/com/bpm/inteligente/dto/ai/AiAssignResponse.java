@@ -13,5 +13,8 @@ public class AiAssignResponse {
     private boolean success;
     private String tramiteId;
     private String politicaNombre;
+    private String politicaId;
     private String message;
+    private boolean tienePrerrequisitos;
+    private java.util.List<String> requisitosIniciales;
 }

@@ -19,4 +19,6 @@ public class IniciarTramiteRequest {
     private String clienteId;
     private String documentoCliente;
     private String clienteNombre;
+
+    private java.util.List<com.bpm.inteligente.domain.RegistroActividad.ArchivoInfo> archivosIniciales;
 }

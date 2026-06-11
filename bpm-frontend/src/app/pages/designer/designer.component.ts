@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -14,6 +14,8 @@ import { ColaboracionService, SocketMessageDTO } from '../../services/colaboraci
 import { MlAnalysisService, AnalysisResult } from '../../services/ml-analysis.service';
 import { AiAssistantService, AiAction, AiResponse } from '../../services/ai-assistant.service';
 import { effect, signal, untracked } from '@angular/core';
+import { DesignerCanvasComponent } from './components/designer-canvas.component';
+import { PropertiesSidebarComponent } from './components/properties-sidebar.component';
 
 export interface FormField { 
   key: string; 
@@ -32,11 +34,13 @@ export interface FormField {
 @Component({
   selector: 'app-designer',
   standalone: true,
-  imports: [CommonModule, FormsModule, FormBuilderComponent],
+  imports: [CommonModule, FormsModule, FormBuilderComponent, DesignerCanvasComponent, PropertiesSidebarComponent],
   templateUrl: './designer.component.html',
   styleUrls: ['./designer.component.css'],
 })
 export class DesignerComponent implements OnInit, OnDestroy {
+  @ViewChild(DesignerCanvasComponent) canvas!: DesignerCanvasComponent;
+
   // ── Constants ──
   readonly LW = 270;   // lane width
   readonly NW = 210;   // node width
@@ -72,41 +76,9 @@ export class DesignerComponent implements OnInit, OnDestroy {
   saveStatus = signal<'idle' | 'saving' | 'saved' | 'error'>('idle');
   private autoSaveTimer: any = null;
 
-  // ── Drag ──
-  isDragging = false;
-  dragNodeId = '';
-  dragOffsetX = 0;
-  dragOffsetY = 0;
-  dragOriginCi = -1;
-  dragOriginAi = -1;
-  hoveredLaneIdx = -1;
+  // ── Layout helpers kept for references ──
   nodePositions: Record<string, { x: number; y: number }> = {};
-  hoveredNodeId: string | null = null;
-  
-  // ── Drag Handle to Connect ──
-  isCreatingConn = false;
-  tempConnSource: Actividad | null = null;
-  tempConnAnchor: 'top' | 'bottom' | 'left' | 'right' = 'bottom';
   mostrarFormManager = false;
-
-  // ── Drag Connection End ──
-  isDraggingConn = false;
-  dragConnId = '';
-  dragConnEnd: 'origen' | 'destino' | null = null;
-
-  // ── Lane Drag Reorder ──
-  isDraggingLane = false;
-  dragLaneIdx = -1;
-  dragLaneOverIdx = -1;
-
-  // ── Alignment Guides ──
-  guides: { x?: number, y?: number }[] = [];
-
-  // ── Lane Resizing ──
-  isResizingLane = false;
-  resizeLaneIdx = -1;
-  resizeStartX = 0;
-  resizeStartW = 0;
 
   // ── Simulation & ML ──
   showRightPanel = true;
@@ -132,8 +104,6 @@ export class DesignerComponent implements OnInit, OnDestroy {
 
   // ── Connection Mode ──
   connMode = { active: false, tipo: 'SECUENCIAL' as TipoRuta, sourceId: null as string | null };
-  mouseX = 0;
-  mouseY = 0;
 
   // ── Form Builder ──
   formFields: FormField[] = [];
@@ -145,8 +115,6 @@ export class DesignerComponent implements OnInit, OnDestroy {
   // --- Optimizaciones de Rendimiento ---
   private nodeToLaneMap = new Map<string, number>(); // ActId -> LaneIndex
   private actividadesMap = new Map<string, Actividad>(); // ActId -> Actividad
-  private cachedConnPaths: any[] = [];
-  private highFreqSub!: Subscription;
   nuevaPolitica = { nombre: '', descripcion: '' };
   mostrarModalAddCalle = false;
   nuevaCalleNombre = '';
@@ -197,22 +165,6 @@ export class DesignerComponent implements OnInit, OnDestroy {
       const msg = this.colabSvc.nodeUpdates();
       if (msg) untracked(() => this.procesarEventoRemoto(msg));
     }, { allowSignalWrites: true });
-
-    // Escuchar movimientos de alta frecuencia fuera de NgZone
-    this.highFreqSub = this.colabSvc.highFreqUpdates$.pipe(
-      throttleTime(32) // ~30fps es suficiente para fluidez visual y ahorra CPU
-    ).subscribe((msg: any) => {
-      if (msg.type === 'NODE_MOVED' && msg.payload) {
-        const data = msg.payload as { id: string; x: number; y: number };
-        if (this.nodePositions[data.id]) {
-          this.nodePositions[data.id] = { x: data.x, y: data.y };
-          // OPTIMIZACIÓN: Solo actualizar las conexiones afectadas por este nodo
-          this.actualizarCaminosConexion(data.id);
-          // Forzar renderizado para ver el movimiento en tiempo real
-          this.cdr.detectChanges();
-        }
-      }
-    });
 
     // Escuchar cambios en la lista de colaboradores para liberar nodos bloqueados por usuarios que se desconectan
     effect(() => {
@@ -324,7 +276,6 @@ templates = signal<FormularioTemplate[]>([]);
   
   ngOnDestroy(): void { 
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer); 
-    if (this.highFreqSub) this.highFreqSub.unsubscribe();
     this.colabSvc.desconectar();
   }
 
@@ -389,639 +340,34 @@ templates = signal<FormularioTemplate[]>([]);
       }
     });
   }
+
   contarNodos(p: PoliticaDTO): number { return p.calles.reduce((s, c) => s + c.actividades.length, 0); }
 
-  // ── Layout Engine ──
+  // ── Layout Engine Delegate ──
   generateLayout(): void {
-    if (!this.sel) return;
-    this.nodePositions = {};
-    this.nodeToLaneMap.clear();
-    this.actividadesMap.clear();
-
-    for (let ci = 0; ci < this.sel.calles.length; ci++) {
-      const laneX = this.getLaneX(ci);
-      const laneW = this.sel.calles[ci].ancho || this.LW;
-      
-      for (let ai = 0; ai < this.sel.calles[ci].actividades.length; ai++) {
-        const act = this.sel.calles[ci].actividades[ai];
-        const w = act.ancho || this.NW;
-        
-        this.nodeToLaneMap.set(act.id, ci);
-        this.actividadesMap.set(act.id, act);
-
-        if (act.posX != null && act.posY != null) {
-          this.nodePositions[act.id] = { x: act.posX, y: act.posY };
-        } else {
-          const initialX = laneX + (laneW - w) / 2;
-          const initialY = this.TOP + ai * (this.NH + this.NG);
-          this.nodePositions[act.id] = { x: initialX, y: initialY };
-          act.posX = initialX;
-          act.posY = initialY;
-        }
-      }
-    }
-    this.actualizarCaminosConexion();
-  }
-
-  getNodoPos(actId: string): { x: number; y: number } {
-    return this.nodePositions[actId] || { x: 0, y: 0 };
-  }
-  getLaneX(ci: number): number { 
-    if (!this.sel) return ci * this.LW;
-    let x = 0;
-    for (let i = 0; i < ci; i++) {
-      x += (this.sel.calles[i].ancho || this.LW);
-    }
-    return x;
-  }
-
-  getCanvasW(): number { 
-    if (!this.sel) return 800;
-    let totalW = 0;
-    for (const c of this.sel.calles) totalW += (c.ancho || this.LW);
-    return Math.max(totalW + 100, 800);
-  }
-  getCanvasH(): number {
-    if (!this.sel) return 800;
-    let maxY = 0;
-    // Calculate based on actual node positions
-    for (const id in this.nodePositions) {
-      maxY = Math.max(maxY, this.nodePositions[id].y + this.NH);
-    }
-    // Also consider the default vertical layout for lanes
-    let maxN = 1;
-    for (const c of this.sel.calles) maxN = Math.max(maxN, c.actividades.length);
-    const defaultY = this.TOP + maxN * (this.NH + this.NG) + 120;
-    
-    return Math.max(maxY + 300, defaultY, 800); // Extra margin for adding more nodes
-  }
-
-  // ── Node Interaction ──
-  seleccionarNodo(ci: number, ai: number, event: MouseEvent): void {
-    event.stopPropagation();
-    if (this.isDragging) return;
-
-    const act = this.sel!.calles[ci].actividades[ai];
-
-    if (this.nodosBloqueados()[act.id]) {
-      this.showToast('Nodo bloqueado por ' + this.nodosBloqueados()[act.id].nombre, 'error');
-      return;
-    }
-
-    if (this.connMode.active) {
-      if (!this.connMode.sourceId) {
-        this.connMode.sourceId = act.id;
-      } else if (this.connMode.sourceId !== act.id) {
-        this.pushHistorial();
-        this.sel!.transiciones.push({
-          id: crypto.randomUUID(), origenId: this.connMode.sourceId, destinoId: act.id,
-          tipoRuta: this.connMode.tipo, condicion: '', etiqueta: '', prioridad: 0,
-          color: '#475569', tipoLinea: 'solida', grosor: 2,
-          origenAnchor: 'auto', destinoAnchor: 'auto',
-          enrutamiento: 'ortogonal'
-        });
-        this.cancelConnMode();
-        this.triggerAutoSave();
-        this.triggerAutoSave();
-      }
-      return;
-    }
-
-    this.transicionSeleccionada = null;
-    this.calleSeleccionada = null;
-    this.nodoSeleccionado = act;
-    this.colabSvc.notificarEdicionNodo(act.id); // Notificar a los demás
-    
-    this.editCalleIdx = ci;
-    this.editActIdx = ai;
-    if (!act.ancho) act.ancho = this.NW;
-    if (!act.alto) act.alto = this.NH;
-    if (!act.fontSize) act.fontSize = 'md';
-    this.activeTab = 'general';
-    this.loadFormFields();
-  }
-
-  // ── Lane Click ──
-  seleccionarCalle(ci: number, event: MouseEvent): void {
-    event.stopPropagation();
-    this.nodoSeleccionado = null;
-    this.colabSvc.notificarEdicionNodo(null); // Limpiar seleccion colaborativa
-    this.transicionSeleccionada = null;
-    this.calleSeleccionada = this.sel!.calles[ci];
-    this.calleSelIdx = ci;
-  }
-
-  // ── Auto-change callback (called from template via ngModelChange) ──
-  onNodeChange(): void {
-    if (this.isRemoteUpdate) return;
-    if (this.nodoSeleccionado) {
-      this.generateLayout();
-      this.broadcastPolicyState();
-      this.triggerAutoSave();
+    if (this.canvas) {
+      this.canvas.generateLayout();
     }
   }
-  onNodeLaneChange(newCi: number): void {
-    if (this.isRemoteUpdate) return;
-    if (newCi !== this.editCalleIdx) {
-      this.moveNodeToLane(newCi);
+
+  persistPositions(): void {
+    if (this.canvas) {
+      this.canvas.persistPositions();
     }
-    this.broadcastPolicyState();
-    this.triggerAutoSave();
-  }
-  onTransChange(): void {
-    if (this.isRemoteUpdate) return;
-    this.broadcastPolicyState();
-    this.triggerAutoSave();
-  }
-  onCalleChange(): void {
-    // Force update reference so Angular detects change
-    if (this.sel && this.calleSelIdx >= 0) {
-      this.sel.calles = [...this.sel.calles];
-    }
-    this.broadcastPolicyState();
-    this.triggerAutoSave();
   }
 
-  onCanvasBgClick(event: MouseEvent): void {
-    const t = event.target as HTMLElement;
-    if (t.closest('.node-card') || t.closest('.sidebar-left') || t.closest('.sidebar-right')) return;
-    this.nodoSeleccionado = null;
-    this.colabSvc.notificarEdicionNodo(null); // Limpiar seleccion colaborativa
-    this.transicionSeleccionada = null;
-  }
-
-  // guardarNodoDesdePanel removed — now using direct binding + auto-save
-
-  moveNodeToLane(targetCi: number): void {
-    if (!this.sel || targetCi === this.editCalleIdx) return;
-    const node = this.sel.calles[this.editCalleIdx].actividades.splice(this.editActIdx, 1)[0];
-    // Clear position so it gets recalculated in the new lane
-    node.posX = undefined;
-    node.posY = undefined;
-    this.sel.calles[targetCi].actividades.push(node);
-    this.editCalleIdx = targetCi;
-    this.editActIdx = this.sel.calles[targetCi].actividades.length - 1;
-    this.generateLayout();
-  }
-
-  // ── Drag ──
-  onNodoMouseDown(e: MouseEvent, ci: number, ai: number): void {
-    if (this.connMode.active) return;
-    const act = this.sel!.calles[ci].actividades[ai];
-    if (!act) return;
-    
-    // Si otro usuario lo está bloqueando, no permitir arrastrar
-    if (this.nodosBloqueados()[act.id]) {
-      this.showToast('Nodo bloqueado por ' + this.nodosBloqueados()[act.id].nombre, 'error');
-      return;
-    }
-    
-    e.preventDefault();
-    const pos = this.nodePositions[act.id];
-    if (!pos) return;
-    this.dragNodeId = act.id;
-    this.dragOriginCi = ci;
-    this.dragOriginAi = ai;
-    this.dragOffsetX = e.clientX - pos.x;
-    this.dragOffsetY = e.clientY - pos.y;
-    this.isDragging = false;
-    const sx = e.clientX, sy = e.clientY;
-    const check = (me: MouseEvent) => {
-      if (Math.abs(me.clientX - sx) > 4 || Math.abs(me.clientY - sy) > 4) {
-        this.isDragging = true;
-        // Al empezar a arrastrar, notificar selección
-        this.colabSvc.notificarEdicionNodo(act.id);
-        document.removeEventListener('mousemove', check);
-      }
-    };
-    document.addEventListener('mousemove', check);
-  }
-
-  private lastSyncTime = 0;
-
-  onCanvasMouseMove(e: MouseEvent): void {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const scroll = (e.currentTarget as HTMLElement);
-    this.mouseX = e.clientX - rect.left + scroll.scrollLeft;
-    this.mouseY = e.clientY - rect.top + scroll.scrollTop;
-
-    if (this.isResizingLane && this.resizeLaneIdx !== -1 && this.sel) {
-      const dx = e.clientX - this.resizeStartX;
-      const newW = Math.max(200, this.resizeStartW + dx);
-      const oldW = this.sel.calles[this.resizeLaneIdx].ancho || this.LW;
-      const deltaStep = newW - oldW;
-
-      this.sel.calles[this.resizeLaneIdx].ancho = newW;
-      
-      // Desplazar todos los nodos de las calles siguientes para que mantengan su posición visual relativa
-      for (let i = this.resizeLaneIdx + 1; i < this.sel.calles.length; i++) {
-        for (const act of this.sel.calles[i].actividades) {
-          if (act.posX != null) act.posX += deltaStep;
-        }
-      }
-      
-      this.generateLayout();
-      return;
-    }
-
-    if (this.isCreatingConn && this.tempConnSource) {
-      // Temp connection line follows mouse
-      return;
-    }
-
-    if (this.isDraggingConn && this.dragConnId && this.dragConnEnd) {
-      this.hoveredLaneIdx = Math.floor(this.mouseX / this.LW);
-      this.actualizarCaminosConexion();
-      this.cdr.detectChanges();
-      return;
-    }
-
-    if (!this.isDragging || !this.dragNodeId) return;
-
-    const newX = this.mouseX - (this.NW / 2);
-    const newY = this.mouseY - (this.NH / 2);
-    const snappedX = Math.round(newX / 12) * 12;
-    const snappedY = Math.round(newY / 12) * 12;
-
-    this.nodePositions[this.dragNodeId] = { x: snappedX, y: snappedY };
-    this.actualizarCaminosConexion();
-    this.cdr.detectChanges(); // IMPORTANTE: Forzar actualización de líneas de conexión durante el arrastre
-
-    const now = Date.now();
-    if (now - this.lastSyncTime > 16 && !this.isRemoteUpdate) {
-      this.colabSvc.notificarMovimientoNodo(this.dragNodeId, snappedX, snappedY);
-      this.lastSyncTime = now;
-    }
-
-    // Guides
-    this.guides = [];
-    const others = this.getAllActividades().filter(a => a.id !== this.dragNodeId);
-    for (const other of others) {
-      const oPos = this.getNodoPos(other.id);
-      const ow = other.ancho || this.NW;
-      if (Math.abs(snappedX + this.NW/2 - (oPos.x + ow/2)) < 6) this.guides.push({ x: oPos.x + ow/2 });
-      if (Math.abs(snappedY + this.NH/2 - (oPos.y + this.NH/2)) < 6) this.guides.push({ y: oPos.y + this.NH/2 });
-    }
-    
-    this.hoveredLaneIdx = Math.floor(this.mouseX / this.LW);
-    if (this.hoveredLaneIdx < 0) this.hoveredLaneIdx = 0;
-    if (this.sel && this.hoveredLaneIdx >= this.sel.calles.length) this.hoveredLaneIdx = this.sel.calles.length - 1;
-  }
-
-  onCanvasMouseUp(): void {
-    if (this.isResizingLane) {
-      this.isResizingLane = false;
-      this.broadcastPolicyState();
-      this.triggerAutoSave();
-      return;
-    }
-
-    if (this.isCreatingConn && this.sel && this.tempConnSource) {
-      if (this.hoveredNodeId && this.hoveredNodeId !== this.tempConnSource.id) {
-        // Create connection
-        const newTrans: Transicion = {
-          id: crypto.randomUUID(), origenId: this.tempConnSource.id, destinoId: this.hoveredNodeId,
-          tipoRuta: 'SECUENCIAL', condicion: '', etiqueta: '', prioridad: 0,
-          color: '#475569', tipoLinea: 'solida', grosor: 2,
-          origenAnchor: 'auto',
-          destinoAnchor: 'auto',
-          enrutamiento: 'bezier'
-        };
-        this.sel.transiciones.push(newTrans);
-        this.broadcastPolicyState();
-        this.triggerAutoSave();
-        this.showToast('Conexión creada', 'success');
-      }
-      this.isCreatingConn = false;
-      this.tempConnSource = null;
-      return;
-    }
-
-    if (this.isDraggingConn && this.sel && this.dragConnId && this.dragConnEnd) {
-      // Find node under mouse
-      let foundNodeId = '';
-      for (const c of this.sel.calles) {
-        for (const a of c.actividades) {
-          const pos = this.getNodoPos(a.id);
-          const w = a.ancho || this.NW;
-          const h = a.alto || this.NH;
-          if (this.mouseX >= pos.x && this.mouseX <= pos.x + w && this.mouseY >= pos.y && this.mouseY <= pos.y + h) {
-            foundNodeId = a.id; break;
-          }
-        }
-        if (foundNodeId) break;
-      }
-
-      if (foundNodeId) {
-        const t = this.sel.transiciones.find(tx => tx.id === this.dragConnId);
-        if (t) {
-          const pos = this.getNodoPos(foundNodeId);
-          const a = this.getAllActividades().find(act => act.id === foundNodeId);
-          const w = a?.ancho || this.NW;
-          const h = a?.alto || this.NH;
-          
-          // Detect closest anchor
-          const distTop = Math.hypot(this.mouseX - (pos.x + w/2), this.mouseY - pos.y);
-          const distBot = Math.hypot(this.mouseX - (pos.x + w/2), this.mouseY - (pos.y + h));
-          const distL   = Math.hypot(this.mouseX - pos.x, this.mouseY - (pos.y + h/2));
-          const distR   = Math.hypot(this.mouseX - (pos.x + w), this.mouseY - (pos.y + h/2));
-          
-          const min = Math.min(distTop, distBot, distL, distR);
-          let anchor: 'top' | 'bottom' | 'left' | 'right' = 'top';
-          if (min === distTop) anchor = 'top';
-          else if (min === distBot) anchor = 'bottom';
-          else if (min === distL)   anchor = 'left';
-          else if (min === distR)   anchor = 'right';
-
-          if (this.dragConnEnd === 'origen') {
-            t.origenId = foundNodeId;
-            t.origenAnchor = 'auto';
-          } else {
-            t.destinoId = foundNodeId;
-            t.destinoAnchor = 'auto';
-          }
-          this.broadcastPolicyState();
-          this.triggerAutoSave();
-        }
-      }
-      this.isDraggingConn = false;
-      this.dragConnId = '';
-      this.dragConnEnd = null;
-      return;
-    }
-
-    if (this.isDragging && this.sel && this.dragNodeId) {
-      const targetLane = this.hoveredLaneIdx;
-      if (targetLane >= 0 && targetLane !== this.dragOriginCi) {
-        const node = this.sel.calles[this.dragOriginCi].actividades.splice(this.dragOriginAi, 1)[0];
-        // Move to new lane
-        this.sel.calles[targetLane].actividades.push(node);
-      }
-      this.persistPositions();
-      this.generateLayout();
-      this.broadcastPolicyState();
-      this.triggerAutoSave();
-      setTimeout(() => this.isDragging = false, 50);
-    }
-    this.guides = [];
-    this.dragNodeId = '';
-    this.hoveredLaneIdx = -1;
-    this.dragOriginCi = -1;
-  }
-
-  onLaneResizeMouseDown(e: MouseEvent, ci: number): void {
-    e.stopPropagation(); e.preventDefault();
-    this.isResizingLane = true;
-    this.resizeLaneIdx = ci;
-    this.resizeStartX = e.clientX;
-    this.resizeStartW = this.sel?.calles[ci].ancho || this.LW;
-  }
-
-  onHandleMouseDown(e: MouseEvent, act: Actividad, anchor: 'top' | 'bottom' | 'left' | 'right'): void {
-    e.stopPropagation(); e.preventDefault();
-    this.isCreatingConn = true;
-    this.tempConnSource = act;
-    this.tempConnAnchor = anchor;
-  }
-
-  onConnHandleMouseDown(e: MouseEvent, transId: string, end: 'origen' | 'destino'): void {
-    e.stopPropagation(); e.preventDefault();
-    this.isDraggingConn = true;
-    this.dragConnId = transId;
-    this.dragConnEnd = end;
-  }
-
-  setAnchor(trans: Transicion, end: 'origen' | 'destino', anchor: 'top' | 'bottom' | 'left' | 'right'): void {
-    if (end === 'origen') trans.origenAnchor = anchor;
-    else trans.destinoAnchor = anchor;
-    this.broadcastPolicyState();
-    this.triggerAutoSave();
-  }
-
-  private persistPositions(): void {
-    if (!this.sel) return;
-    this.sel.calles.forEach((calle, ci) => {
-      const laneX = this.getLaneX(ci);
-      const laneW = calle.ancho || this.LW;
-      const minX = laneX + 20; // Margen interno
-      const maxX = laneX + laneW - 20;
-
-      for (const act of calle.actividades) {
-        const pos = this.nodePositions[act.id];
-        if (pos) {
-          const w = act.ancho || this.NW;
-          // Ajustar posX para que no quede entre dos calles
-          let x = pos.x;
-          if (x < minX) x = minX;
-          if (x + w > maxX) x = maxX - w;
-          
-          act.posX = x;
-          act.posY = pos.y;
-          // Actualizar el tracker visual para que no haya salto al soltar
-          this.nodePositions[act.id] = { x, y: pos.y };
-        }
-      }
-    });
-  }
-
-  // ── Connection Mode ──
   startConnMode(tipo: TipoRuta): void {
     this.connMode = { active: true, tipo, sourceId: null };
-    this.nodoSeleccionado = null;
-    this.transicionSeleccionada = null;
-  }
-  cancelConnMode(): void { this.connMode = { active: false, tipo: 'SECUENCIAL', sourceId: null }; }
-
-  getSourceCenter(): { x: number; y: number } | null {
-    if (this.isCreatingConn && this.tempConnSource) {
-      return this.findNodeAnchor(this.tempConnSource.id, this.tempConnAnchor, false);
-    }
-    if (!this.connMode.sourceId || !this.sel) return null;
-    return this.findNodeAnchor(this.connMode.sourceId, 'bottom', false);
   }
 
-  // ── SVG Connections ──
-  getConnectionPaths(): any[] {
-    return this.cachedConnPaths;
+  cancelConnMode(): void {
+    this.connMode = { active: false, tipo: 'SECUENCIAL', sourceId: null };
   }
 
-  actualizarCaminosConexion(movedNodeId?: string): void {
-    if (!this.sel) {
-      this.cachedConnPaths = [];
-      return;
-    }
-
-    // Si se mueve un nodo específico, optimizamos calculando solo las rutas afectadas
-    if (movedNodeId) {
-      this.cachedConnPaths = this.cachedConnPaths.map(conn => {
-        if (conn.origenId === movedNodeId || conn.destinoId === movedNodeId) {
-          return this.calcularRutaParaTransicion(conn.trans);
-        }
-        return conn;
-      }).filter(Boolean);
-      return;
-    }
-
-    this.cachedConnPaths = this.sel.transiciones.map(t => this.calcularRutaParaTransicion(t)).filter(Boolean);
-  }
-
-  private calcularRutaParaTransicion(t: Transicion): any {
-    // Force 'auto' behavior visually if dragging the related nodes
-    const isSourceDragging = this.isDragging && this.dragNodeId === t.origenId;
-    const isTargetDragging = this.isDragging && this.dragNodeId === t.destinoId;
-
-    const fromAnchor = (!t.origenAnchor || t.origenAnchor === 'auto' || isSourceDragging || isTargetDragging) 
-                       ? this.calculateBestAnchor(t.origenId, t.destinoId, false) 
-                       : t.origenAnchor;
-    const toAnchor = (!t.destinoAnchor || t.destinoAnchor === 'auto' || isSourceDragging || isTargetDragging) 
-                     ? this.calculateBestAnchor(t.origenId, t.destinoId, true) 
-                     : t.destinoAnchor;
-
-    const from = this.findNodeAnchor(t.origenId, fromAnchor, false);
-    const to = this.findNodeAnchor(t.destinoId, toAnchor, true);
-    if (!from || !to) return null;
-
-    const x1 = from.x, y1 = from.y;
-    const x2 = to.x, y2 = to.y;
-
-    // Handle dragging visually
-    const dx1 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'origen') ? this.mouseX : x1;
-    const dy1 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'origen') ? this.mouseY : y1;
-    const dx2 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'destino') ? this.mouseX : x2;
-    const dy2 = (this.isDraggingConn && this.dragConnId === t.id && this.dragConnEnd === 'destino') ? this.mouseY : y2;
-
-    const midY = (dy1 + dy2) / 2;
-    const midX = (dx1 + dx2) / 2;
-    
-    let path: string;
-    const anchor1 = fromAnchor;
-    const anchor2 = toAnchor;
-    
-    const isOrthogonal = t.enrutamiento === 'ortogonal';
-
-    if (isOrthogonal) {
-      // Enrutamiento Ortogonal (estilo Draw.io)
-      if (anchor1 === 'bottom' && anchor2 === 'top' && dy2 > dy1) {
-        path = `M ${dx1} ${dy1} L ${dx1} ${midY} L ${dx2} ${midY} L ${dx2} ${dy2}`;
-      } else if (anchor1 === 'right' && anchor2 === 'left' && dx2 > dx1) {
-        path = `M ${dx1} ${dy1} L ${midX} ${dy1} L ${midX} ${dy2} L ${dx2} ${dy2}`;
-      } else if (anchor1 === 'top' && anchor2 === 'bottom' && dy1 > dy2) {
-        path = `M ${dx1} ${dy1} L ${dx1} ${midY} L ${dx2} ${midY} L ${dx2} ${dy2}`;
-      } else if (anchor1 === 'left' && anchor2 === 'right' && dx1 > dx2) {
-        path = `M ${dx1} ${dy1} L ${midX} ${dy1} L ${midX} ${dy2} L ${dx2} ${dy2}`;
-      } else {
-        // Complex routing: move out from source, then along perpendicular, then into target
-        const offset = Math.min(Math.abs(dx1 - dx2), Math.abs(dy1 - dy2), 40) + 10;
-        const p1x = anchor1 === 'right' ? dx1 + offset : anchor1 === 'left' ? dx1 - offset : dx1;
-        const p1y = anchor1 === 'bottom' ? dy1 + offset : anchor1 === 'top' ? dy1 - offset : dy1;
-        const p2x = anchor2 === 'right' ? dx2 + offset : anchor2 === 'left' ? dx2 - offset : dx2;
-        const p2y = anchor2 === 'bottom' ? dy2 + offset : anchor2 === 'top' ? dy2 - offset : dy2;
-        
-        if (Math.abs(p1x - p2x) < Math.abs(p1y - p2y)) {
-           path = `M ${dx1} ${dy1} L ${p1x} ${p1y} L ${p1x} ${p2y} L ${p2x} ${p2y} L ${dx2} ${dy2}`;
-        } else {
-           path = `M ${dx1} ${dy1} L ${p1x} ${p1y} L ${p2x} ${p1y} L ${p2x} ${p2y} L ${dx2} ${dy2}`;
-        }
-      }
-    } else {
-      // Enrutamiento Bezier (Curvas)
-      if (anchor1 === 'bottom' && anchor2 === 'top' && dy2 > dy1) {
-        path = `M ${dx1} ${dy1} C ${dx1} ${midY}, ${dx2} ${midY}, ${dx2} ${dy2}`;
-      } else if (anchor1 === 'right' && anchor2 === 'left' && dx2 > dx1) {
-        path = `M ${dx1} ${dy1} C ${midX} ${dy1}, ${midX} ${dy2}, ${dx2} ${dy2}`;
-      } else if (anchor1 === 'top' && anchor2 === 'bottom' && dy1 > dy2) {
-         path = `M ${dx1} ${dy1} C ${dx1} ${midY}, ${dx2} ${midY}, ${dx2} ${dy2}`;
-      } else if (anchor1 === 'left' && anchor2 === 'right' && dx1 > dx2) {
-         path = `M ${dx1} ${dy1} C ${midX} ${dy1}, ${midX} ${dy2}, ${dx2} ${dy2}`;
-      } else {
-        const offset = Math.min(Math.abs(dx1 - dx2), Math.abs(dy1 - dy2), 50);
-        path = `M ${dx1} ${dy1} C ${anchor1==='right'?dx1+offset:anchor1==='left'?dx1-offset:dx1} ${anchor1==='bottom'?dy1+offset:anchor1==='top'?dy1-offset:dy1},
-                                 ${anchor2==='right'?dx2+offset:anchor2==='left'?dx2-offset:dx2} ${anchor2==='bottom'?dy2+offset:anchor2==='top'?dy2-offset:dy2},
-                                 ${dx2} ${dy2}`;
-      }
-    }
-
-    const dash = t.tipoLinea === 'punteada' ? '4 4' : t.tipoLinea === 'discontinua' ? '10 5' : '';
-    return {
-      id: t.id, path, origenId: t.origenId, destinoId: t.destinoId,
-      x1: dx1, y1: dy1, x2: dx2, y2: dy2,
-      label: t.etiqueta || '', labelX: midX, labelY: midY - 8,
-      color: t.color || '#475569', dash, width: t.grosor || 2, trans: t,
-    };
-  }
-
-  private calculateBestAnchor(sourceId: string, targetId: string, isDest: boolean): 'top' | 'bottom' | 'left' | 'right' {
-    const sPos = this.getNodoPos(sourceId);
-    const tPos = this.getNodoPos(targetId);
-    const sNode = this.actividadesMap.get(sourceId);
-    const tNode = this.actividadesMap.get(targetId);
-    if (!sPos || !tPos || !sNode || !tNode) return isDest ? 'top' : 'bottom';
-
-    const sCenterX = sPos.x + (sNode.ancho || this.NW) / 2;
-    const sCenterY = sPos.y + (sNode.alto || this.NH) / 2;
-    const tCenterX = tPos.x + (tNode.ancho || this.NW) / 2;
-    const tCenterY = tPos.y + (tNode.alto || this.NH) / 2;
-
-    const dx = tCenterX - sCenterX;
-    const dy = tCenterY - sCenterY;
-
-    // Smart Anchor Selection: O(1) usando el mapa de calles
-    const sLaneIdx = this.nodeToLaneMap.get(sourceId);
-    const tLaneIdx = this.nodeToLaneMap.get(targetId);
-    const sameLane = sLaneIdx != null && tLaneIdx != null && sLaneIdx === tLaneIdx;
-    const horizontalBias = sameLane ? 0.6 : 2.5; 
-    
-    if (!sameLane && Math.abs(dy) < 300) {
-       if (isDest) return dx > 0 ? 'left' : 'right';
-       return dx > 0 ? 'right' : 'left';
-    }
-    
-    if (Math.abs(dx) * horizontalBias > Math.abs(dy)) {
-      if (isDest) return dx > 0 ? 'left' : 'right';
-      return dx > 0 ? 'right' : 'left';
-    } else {
-      if (isDest) return dy > 0 ? 'top' : 'bottom';
-      return dy > 0 ? 'bottom' : 'top';
-    }
-  }
-
-  findNodeAnchor(actId: string, anchor?: 'top' | 'bottom' | 'left' | 'right', isDest = false): { x: number; y: number } | null {
-    if (!this.sel) return null;
-    const a = this.actividadesMap.get(actId);
-    if (a) {
-      const pos = this.getNodoPos(actId);
-      const w = a.ancho || this.NW;
-      const h = a.alto || this.NH;
-        const type = anchor || (isDest ? 'top' : 'bottom');
-        
-        // Small padding to ensure arrow touches boundary but doesn't overlap border too much
-        const pad = 2;
-        switch(type) {
-          case 'top':    return { x: pos.x + w/2, y: pos.y - pad };
-          case 'bottom': return { x: pos.x + w/2, y: pos.y + h + pad };
-          case 'left':   return { x: pos.x - pad, y: pos.y + h/2 };
-          case 'right':  return { x: pos.x + w + pad, y: pos.y + h/2 };
-        }
-    }
-    return null;
-  }
-
-  selectTransicion(t: Transicion): void {
-    this.nodoSeleccionado = null;
-    this.calleSeleccionada = null;
-    this.transicionSeleccionada = t;
-    if (!t.color) t.color = '#475569';
-    if (!t.tipoLinea) t.tipoLinea = 'solida';
-    if (!t.grosor) t.grosor = 2;
-    if (!t.enrutamiento) t.enrutamiento = 'ortogonal';
-    if (!t.origenAnchor) t.origenAnchor = 'auto';
-    if (!t.destinoAnchor) t.destinoAnchor = 'auto';
-  }
-
-  getNodeConnections(actId: string): { id: string; fromName: string; toName: string; tipoRuta: string }[] {
-    if (!this.sel) return [];
-    return this.sel.transiciones.filter(t => t.origenId === actId || t.destinoId === actId)
-      .map(t => ({ id: t.id, fromName: this.getNombreActividad(t.origenId), toName: this.getNombreActividad(t.destinoId), tipoRuta: t.tipoRuta }));
+  onNodeChange(): void {
+    this.generateLayout();
+    this.broadcastPolicyState();
+    this.triggerAutoSave();
   }
 
   resetAnchors(): void {
@@ -1190,87 +536,27 @@ templates = signal<FormularioTemplate[]>([]);
     }, 150); // 150ms de gracia para acumular cambios rápidos
   }
 
-  // ── Lane Reorder ──
-  onLaneHeaderDragStart(ci: number): void {
-    this.isDraggingLane = true;
-    this.dragLaneIdx = ci;
-  }
-  onLaneHeaderDragOver(ci: number, e: DragEvent): void {
-    e.preventDefault();
-    this.dragLaneOverIdx = ci;
-  }
-  onLaneHeaderDrop(ci: number): void {
-    if (!this.sel || this.dragLaneIdx < 0 || this.dragLaneIdx === ci) {
-      this.isDraggingLane = false;
-      this.dragLaneIdx = -1;
-      this.dragLaneOverIdx = -1;
-      return;
-    }
 
-    const oldIdx = this.dragLaneIdx;
-    const newIdx = ci;
-    if (oldIdx === newIdx) {
-      this.isDraggingLane = false;
-      this.dragLaneIdx = -1;
-      this.dragLaneOverIdx = -1;
-      return;
-    }
-    
-    this.pushHistorial();
 
-    // 1. Mapear posiciones X actuales por ID de calle antes de mover
-    const oldLaneXMap: Record<string, number> = {};
-    this.sel.calles.forEach((c, i) => {
-      oldLaneXMap[c.id] = this.getLaneX(i);
-    });
-
-    // 2. Reordenar el array
-    const laneToMove = this.sel.calles.splice(oldIdx, 1)[0];
-    this.sel.calles.splice(newIdx, 0, laneToMove);
-
-    // 3. Aplicar el desplazamiento a los nodos
-    this.sel.calles.forEach((c, i) => {
-      c.orden = i;
-      const oldX = oldLaneXMap[c.id];
-      const newX = this.getLaneX(i);
-      const delta = newX - oldX;
-
-      if (delta !== 0) {
-        for (const act of c.actividades) {
-          if (act.posX != null) {
-            act.posX += delta;
-            // IMPORTANTE: También actualizar nodePositions para que generateLayout no lo sobrescriba
-            if (this.nodePositions[act.id]) {
-              this.nodePositions[act.id].x += delta;
-            }
-          }
-        }
-      }
-    });
-
-    this.broadcastPolicyState(); // Sincronizar lane reorder inmediatamente
-    this.triggerAutoSave();
-    this.isDraggingLane = false;
-    this.dragLaneIdx = -1;
-    this.dragLaneOverIdx = -1;
-    // No llamamos a generateLayout() aquí para evitar recalcular lo que ya movimos manualmente
-  }
-  onLaneHeaderDragEnd(): void {
-    this.isDraggingLane = false;
-    this.dragLaneIdx = -1;
-    this.dragLaneOverIdx = -1;
+  // ── Siguiente version calculada desde todas las versiones del mismo nombre ──
+  get siguienteVersion(): number {
+    if (!this.sel) return 1;
+    const mismasVersiones = this.filteredPoliticas.filter(p => p.nombre === this.sel!.nombre);
+    if (mismasVersiones.length === 0) return this.sel.version + 1;
+    return Math.max(...mismasVersiones.map(p => p.version)) + 1;
   }
 
-  // ── Crear nueva versión de política LIVE ──
+  // ── Crear nueva version a partir de cualquier version seleccionada ──
   crearNuevaVersion(): void {
     if (!this.sel) return;
     const tid = this.auth.usuario()?.tenantId;
     if (!tid) return;
+    const nextVer = this.siguienteVersion;
     const body: any = {
       tenantId: tid,
       nombre: this.sel.nombre,
       descripcion: this.sel.descripcion,
-      version: this.sel.version + 1,
+      version: nextVer,
       calles: JSON.parse(JSON.stringify(this.sel.calles)),
       transiciones: JSON.parse(JSON.stringify(this.sel.transiciones)),
     };
@@ -1279,9 +565,9 @@ templates = signal<FormularioTemplate[]>([]);
       next: (created: PoliticaDTO) => {
         this.cargarPoliticas();
         this.seleccionar(created);
-        this.showToast(`Versión ${body.version} creada (borrador)`, 'success');
+        this.showToast(`Version ${nextVer} creada como borrador`, 'success');
       },
-      error: (e: any) => this.showToast(e.error?.message || 'Error al crear versión', 'error'),
+      error: (e: any) => this.showToast(e.error?.message || 'Error al crear version', 'error'),
     });
   }
   activarPolitica(): void {
@@ -1294,7 +580,8 @@ templates = signal<FormularioTemplate[]>([]);
   confirmarEliminar(): void { this.mostrarConfirmEliminar = true; }
   eliminarPolitica(): void {
     if (!this.sel) return;
-    this.politicaService.eliminar(this.sel.id).subscribe({
+    const force = this.sel.estaActiva === true; // force-delete if LIVE
+    this.politicaService.eliminar(this.sel.id, force).subscribe({
       next: () => { this.sel = null; this.nodoSeleccionado = null; this.mostrarConfirmEliminar = false; this.cargarPoliticas(); this.showToast('Política eliminada', 'success'); },
       error: (e: any) => { this.mostrarConfirmEliminar = false; this.showToast(e.error?.message || 'Error al eliminar', 'error'); },
     });
@@ -1335,6 +622,119 @@ templates = signal<FormularioTemplate[]>([]);
     this.generateLayout();
     this.triggerAutoSave();
     this.showToast('Calle eliminada', 'success');
+  }
+
+  // ── Documentos Requeridos y Prerrequisitos ──
+  agregarDocumentoRequerido(val: string): void {
+    if (!this.nodoSeleccionado) return;
+    const trimmed = val.trim();
+    if (!trimmed) return;
+    this.pushHistorial();
+    if (!this.nodoSeleccionado.documentosRequeridos) {
+      this.nodoSeleccionado.documentosRequeridos = [];
+    }
+    this.nodoSeleccionado.documentosRequeridos.push(trimmed);
+    this.broadcastPolicyState();
+    this.triggerAutoSave();
+    this.showToast('Documento requerido añadido', 'success');
+  }
+
+  eliminarDocumentoRequerido(idx: number): void {
+    if (!this.nodoSeleccionado || !this.nodoSeleccionado.documentosRequeridos) return;
+    this.pushHistorial();
+    this.nodoSeleccionado.documentosRequeridos.splice(idx, 1);
+    this.broadcastPolicyState();
+    this.triggerAutoSave();
+    this.showToast('Documento requerido eliminado', 'success');
+  }
+
+  getCleanReqName(req: string): string {
+    if (!req) return '';
+    return req.replace(/^\[(Texto|Número|Fecha|Archivo|Selección)\]\s*/i, '');
+  }
+
+  getReqType(req: string): string {
+    if (!req) return 'archivo';
+    const match = req.match(/^\[(Texto|Número|Fecha|Archivo|Selección)\]/i);
+    return match ? match[1].toLowerCase() : 'archivo';
+  }
+
+  agregarRequisitoInicial(val: string): void {
+    this.agregarRequisitoInicialConTipo('[Archivo]', val);
+  }
+
+  agregarRequisitoInicialConTipo(prefix: string, val: string): void {
+    if (!this.sel) return;
+    const trimmed = val.trim();
+    if (!trimmed) return;
+    this.pushHistorial();
+    if (!this.sel.requisitosIniciales) {
+      this.sel.requisitosIniciales = [];
+    }
+    // Formatear requisito con su tipo, ej: [Texto] Dirección
+    const formatted = `${prefix} ${trimmed}`;
+    
+    // Verificar si ya existe (sin importar el prefijo)
+    const exists = this.sel.requisitosIniciales.some(r => this.getCleanReqName(r).toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      this.showToast('Ya existe un requisito con ese nombre', 'error');
+      return;
+    }
+
+    this.sel.requisitosIniciales = [...this.sel.requisitosIniciales, formatted];
+    this.broadcastPolicyState();
+    this.triggerAutoSave();
+    this.showToast('Requisito inicial añadido', 'success');
+  }
+
+  cargarRequisitosDesdePlantilla(templateId: string): void {
+    if (!this.sel || !templateId) return;
+    const t = this.templates().find(x => x.id === templateId);
+    if (!t) return;
+
+    this.pushHistorial();
+    if (!this.sel.requisitosIniciales) {
+      this.sel.requisitosIniciales = [];
+    }
+
+    const reqs = [...this.sel.requisitosIniciales];
+    let count = 0;
+    t.campos.forEach(c => {
+      const label = c.label.trim();
+      if (!label) return;
+
+      // Traducir tipo
+      let prefix = '[Texto]';
+      if (c.type === 'file') prefix = '[Archivo]';
+      else if (c.type === 'number') prefix = '[Número]';
+      else if (c.type === 'date') prefix = '[Fecha]';
+      else if (c.type === 'select') prefix = '[Selección]';
+
+      const formatted = `${prefix} ${label}`;
+
+      // Verificar si ya existe
+      const exists = reqs.some(r => this.getCleanReqName(r).toLowerCase() === label.toLowerCase());
+      if (!exists) {
+        reqs.push(formatted);
+        count++;
+      }
+    });
+
+    this.sel.requisitosIniciales = reqs;
+    this.broadcastPolicyState();
+    this.triggerAutoSave();
+    this.showToast(`Se cargaron ${count} requisitos de la plantilla "${t.nombre}"`, 'success');
+  }
+
+  eliminarRequisitoInicial(idx: number): void {
+    if (!this.sel || !this.sel.requisitosIniciales) return;
+    this.pushHistorial();
+    const reqs = [...this.sel.requisitosIniciales];
+    reqs.splice(idx, 1);
+    this.sel.requisitosIniciales = reqs;
+    this.broadcastPolicyState();
+    this.triggerAutoSave();
+    this.showToast('Requisito inicial eliminado', 'success');
   }
 
   // ── CRUD: Nodos ──
@@ -1459,8 +859,7 @@ templates = signal<FormularioTemplate[]>([]);
     this.triggerAutoSave();
   }
 
-  onNodeMouseEnter(id: string): void { this.hoveredNodeId = id; }
-  onNodeMouseLeave(): void { this.hoveredNodeId = null; }
+
 
   // ── Simulation Logic ──
   startSimulation(): void {

@@ -1,0 +1,246 @@
+/* Estilos para cursores colaborativos en ProseMirror */
+::ng-deep .collaboration-cursor__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 2px solid;
+  border-right: 2px solid;
+  border-color: currentColor;
+  word-break: normal;
+  pointer-events: none;
+}
+
+::ng-deep .collaboration-cursor__label {
+  position: absolute;
+  top: -1.4em;
+  left: -2px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: normal;
+  user-select: none;
+  color: #fff;
+  padding: 1px 4px;
+  border-radius: 3px 3px 3px 0;
+  background-color: currentColor;
+  white-space: nowrap;
+}
+
+/* Toolbar Premium styles */
+.editor-toolbar button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.editor-toolbar button:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+}
+
+/* Tiptap content overrides - Simulación de hoja A4 en Word */
+/* Tiptap content overrides - Simulación de hojas A4 en Word con paginación */
+::ng-deep .ProseMirror {
+  min-height: 1122px; /* 29.7cm */
+  outline: none;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: #0f172a !important; /* Texto principal oscuro sobre papel blanco */
+
+  /* Degradado lineal repetitivo optimizado en píxeles para evitar subpíxeles y repaints lentos */
+  background: repeating-linear-gradient(
+    to bottom,
+    #ffffff 0px,
+    #ffffff 1106px,
+    #e2e8f0 1106px,
+    #090d16 1108px,
+    #090d16 1120px,
+    #cbd5e1 1122px
+  ) !important;
+  background-size: 100% 1122px !important;
+  background-repeat: repeat-y !important;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 6px !important;
+
+  /* Aceleración de GPU para evitar lag de repintado al hacer scroll y al colaborar en tiempo real */
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+::ng-deep .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #94a3b8;
+  pointer-events: none;
+  height: 0;
+}
+
+::ng-deep .ProseMirror p {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+/* Alineaciones dinámicas de texto */
+::ng-deep .ProseMirror [style*="text-align: left"] {
+  text-align: left !important;
+}
+
+::ng-deep .ProseMirror [style*="text-align: center"] {
+  text-align: center !important;
+}
+
+::ng-deep .ProseMirror [style*="text-align: right"] {
+  text-align: right !important;
+}
+
+::ng-deep .ProseMirror [style*="text-align: justify"] {
+  text-align: justify !important;
+}
+
+/* Resaltado de texto / Marcador */
+::ng-deep .ProseMirror mark {
+  padding: 0.1em 0.2em;
+  border-radius: 0.2em;
+}
+
+/* Cita de bloque (blockquote) */
+::ng-deep .ProseMirror blockquote {
+  border-left: 4px solid #cbd5e1;
+  padding-left: 1rem;
+  color: #475569;
+  font-style: italic;
+  margin: 1.5rem 0;
+}
+
+::ng-deep .ProseMirror pre {
+  background: #020617;
+  color: #e2e8f0;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  margin: 1rem 0;
+}
+
+::ng-deep .ProseMirror ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 1rem 0;
+  color: #0f172a;
+}
+
+::ng-deep .ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin: 1rem 0;
+  color: #0f172a;
+}
+
+::ng-deep .ProseMirror h1 {
+  font-size: 2.25rem;
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  color: #0f172a !important; /* Encabezado H1 en negro/slate-900 */
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+::ng-deep .ProseMirror h2 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #1e293b !important; /* Encabezado H2 en slate-800 */
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+/* ESTILOS DE IMPRESIÓN Y EXPORTACIÓN A PDF */
+@media print {
+  /* Ocultar elementos globales del sistema */
+  ::ng-deep nav,
+  ::ng-deep aside,
+  ::ng-deep main,
+  ::ng-deep app-chatbot,
+  ::ng-deep header {
+    display: none !important;
+  }
+
+  /* Permitir flujo vertical continuo en los contenedores padres */
+  ::ng-deep body,
+  ::ng-deep app-root,
+  ::ng-deep app-funcionario {
+    display: block !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Forzar visibilidad del modal y flujo estático del editor */
+  .fixed.inset-0 {
+    display: block !important;
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    z-index: auto !important;
+  }
+  
+  .fixed.inset-0 > div {
+    max-width: 100% !important;
+    height: auto !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+  }
+  
+  /* Ocultar controles e interfaces no imprimibles del editor */
+  .p-6.border-b, 
+  .editor-toolbar, 
+  .mt-4.pt-4, 
+  .toast-notification,
+  .absolute.inset-0.bg-slate-900\/80,
+  .w-80,
+  div[class*="w-80"] {
+    display: none !important;
+  }
+  
+  .flex-1.flex.flex-col {
+    padding: 0 !important;
+    display: block !important;
+  }
+  
+  .editor-container {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+  
+  ::ng-deep .ProseMirror {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    color: black !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+  }
+}
+
+/* Aceleración por hardware para el contenedor de scroll del editor */
+.editor-container {
+  will-change: scroll-position;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+

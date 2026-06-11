@@ -13,13 +13,23 @@ export interface PendingUpload {
   error?: string;
 }
 
+export interface LocalDraft {
+  tramiteId: string;
+  contenidoHtml: string;
+  estadoBinarioYjsBase64: string;
+  actualizadoEn: number;
+}
+
 export class OfflineDatabase extends Dexie {
   pendingUploads!: Table<PendingUpload, string>;
+  borradoresLocales!: Table<LocalDraft, string>;
 
   constructor() {
     super('BpmOfflineDatabase');
-    this.version(1).stores({
-      pendingUploads: 'id, fileName, estado, addedAt'
+    // Incrementamos la versión de la base de datos para registrar la nueva tabla
+    this.version(2).stores({
+      pendingUploads: 'id, fileName, estado, addedAt',
+      borradoresLocales: 'tramiteId, actualizadoEn'
     });
   }
 }
@@ -71,5 +81,23 @@ export class OfflineStorageService {
 
   async clearAll(): Promise<void> {
     await this.db.pendingUploads.clear();
+  }
+
+  async saveDraft(tramiteId: string, contenidoHtml: string, estadoBinarioYjsBase64: string): Promise<void> {
+    const draft: LocalDraft = {
+      tramiteId,
+      contenidoHtml,
+      estadoBinarioYjsBase64,
+      actualizadoEn: Date.now()
+    };
+    await this.db.borradoresLocales.put(draft);
+  }
+
+  async getDraft(tramiteId: string): Promise<LocalDraft | undefined> {
+    return this.db.borradoresLocales.get(tramiteId);
+  }
+
+  async removeDraft(tramiteId: string): Promise<void> {
+    await this.db.borradoresLocales.delete(tramiteId);
   }
 }

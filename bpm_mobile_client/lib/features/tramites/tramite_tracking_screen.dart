@@ -17,6 +17,7 @@ class TrackingNode {
   final String estado; // PENDIENTE, EN_PROGRESO, COMPLETADA, etc.
   final bool isVirtualStart;
   final bool isVirtualEnd;
+  final bool isTramiteFinalizado;
 
   TrackingNode({
     required this.title,
@@ -29,6 +30,7 @@ class TrackingNode {
     this.estado = 'PENDIENTE',
     this.isVirtualStart = false,
     this.isVirtualEnd = false,
+    this.isTramiteFinalizado = false,
   });
 
   PasoStatus get status {
@@ -39,7 +41,10 @@ class TrackingNode {
     if (e == 'RECHAZADA' || e == 'RECHAZADO' || e == 'CANCELADA' || e == 'CANCELADO') {
       return PasoStatus.rechazado;
     }
-    if (e == 'EN_PROGRESO' || e == 'ASIGNADA' || e == 'PENDIENTE_REVISION' || e == 'INICIADO') {
+    if (isTramiteFinalizado) {
+      return PasoStatus.pendiente;
+    }
+    if (e == 'EN_PROGRESO' || e == 'ASIGNADA' || e == 'PENDIENTE_REVISION' || e == 'INICIADO' || (e == 'PENDIENTE' && !isVirtualEnd)) {
       return PasoStatus.activo;
     }
     return PasoStatus.pendiente;
@@ -61,12 +66,18 @@ final trackingProvider =
         description: 'Guardado en tu dispositivo. Pendiente de sincronización.',
         estado: 'PENDIENTE',
         asignadoEn: tramite.iniciadoEn ?? DateTime.now(),
+        isTramiteFinalizado: false,
       )
     ];
   }
 
   // The offlineId field stores the real tramite ID (e.g. "tramite-cre-60")
   final tramiteId = tramite.codigoSeguimiento ?? tramite.offlineId;
+
+  final isFinalized = tramite.estado.toUpperCase() == 'COMPLETADO' || tramite.estado.toUpperCase() == 'FINALIZADO';
+  final isCancelled = tramite.estado.toUpperCase() == 'CANCELADO';
+  final isRejected = tramite.estado.toUpperCase() == 'RECHAZADO';
+  final isFinished = isFinalized || isCancelled || isRejected;
 
   try {
     final response = await dio.get('/tramites/$tramiteId/tracking');
@@ -76,10 +87,6 @@ final trackingProvider =
       final List<dynamic> timelineData = data['timeline'] ?? [];
 
       if (timelineData.isEmpty) {
-        final isFinalized = tramite.estado.toUpperCase() == 'COMPLETADO' || tramite.estado.toUpperCase() == 'FINALIZADO';
-        final isCancelled = tramite.estado.toUpperCase() == 'CANCELADO';
-        final isRejected = tramite.estado.toUpperCase() == 'RECHAZADO';
-
         String endTitle = 'Fin del Trámite';
         String endDesc = 'El trámite finalizará una vez se completen todos los pasos.';
         String endEstado = 'PENDIENTE';
@@ -106,6 +113,7 @@ final trackingProvider =
             asignadoEn: tramite.iniciadoEn,
             completadoEn: tramite.iniciadoEn,
             isVirtualStart: true,
+            isTramiteFinalizado: isFinished,
           ),
           TrackingNode(
             title: endTitle,
@@ -113,6 +121,7 @@ final trackingProvider =
             estado: endEstado,
             completadoEn: (isFinalized || isCancelled || isRejected) ? (tramite.finalizadoEn ?? DateTime.now()) : null,
             isVirtualEnd: true,
+            isTramiteFinalizado: isFinished,
           )
         ];
       }
@@ -127,6 +136,7 @@ final trackingProvider =
         asignadoEn: tramite.iniciadoEn,
         completadoEn: tramite.iniciadoEn,
         isVirtualStart: true,
+        isTramiteFinalizado: isFinished,
       ));
 
       // 2. Map backend workflow activities
@@ -153,16 +163,13 @@ final trackingProvider =
           estado: paso['estado'] ?? 'PENDIENTE',
           asignadoEn: asignado,
           completadoEn: completado,
+          isTramiteFinalizado: isFinished,
         );
       }).toList();
 
       nodesList.addAll(mappedNodes);
 
       // 3. Append virtual "Fin del Trámite"
-      final isFinalized = tramite.estado.toUpperCase() == 'COMPLETADO' || tramite.estado.toUpperCase() == 'FINALIZADO';
-      final isCancelled = tramite.estado.toUpperCase() == 'CANCELADO';
-      final isRejected = tramite.estado.toUpperCase() == 'RECHAZADO';
-
       String endTitle = 'Fin del Trámite';
       String endDesc = 'El trámite finalizará una vez se completen todos los pasos.';
       String endEstado = 'PENDIENTE';
@@ -187,6 +194,7 @@ final trackingProvider =
         estado: endEstado,
         completadoEn: (isFinalized || isCancelled || isRejected) ? (tramite.finalizadoEn ?? DateTime.now()) : null,
         isVirtualEnd: true,
+        isTramiteFinalizado: isFinished,
       ));
 
       return nodesList;
@@ -196,22 +204,18 @@ final trackingProvider =
   }
 
   // Fallback: show basic info from local model
-  final isFinalized = tramite.estado.toUpperCase() == 'COMPLETADO' || tramite.estado.toUpperCase() == 'FINALIZADO';
-  final isCancelled = tramite.estado.toUpperCase() == 'CANCELADO';
-  final isRejected = tramite.estado.toUpperCase() == 'RECHAZADO';
-
-  String endTitle = 'Fin del Trámite';
-  String endDesc = isFinalized ? 'Trámite finalizado.' : 'Pendiente de finalización.';
-  String endEstado = isFinalized ? 'COMPLETADO' : 'PENDIENTE';
+  String endTitleFallback = 'Fin del Trámite';
+  String endDescFallback = isFinalized ? 'Trámite finalizado.' : 'Pendiente de finalización.';
+  String endEstadoFallback = isFinalized ? 'COMPLETADO' : 'PENDIENTE';
 
   if (isCancelled) {
-    endTitle = 'Trámite Cancelado';
-    endDesc = 'El trámite fue cancelado.';
-    endEstado = 'RECHAZADO';
+    endTitleFallback = 'Trámite Cancelado';
+    endDescFallback = 'El trámite fue cancelado.';
+    endEstadoFallback = 'RECHAZADO';
   } else if (isRejected) {
-    endTitle = 'Trámite Rechazado';
-    endDesc = 'El trámite fue rechazado.';
-    endEstado = 'RECHAZADO';
+    endTitleFallback = 'Trámite Rechazado';
+    endDescFallback = 'El trámite fue rechazado.';
+    endEstadoFallback = 'RECHAZADO';
   }
 
   return [
@@ -222,19 +226,22 @@ final trackingProvider =
       asignadoEn: tramite.iniciadoEn,
       completadoEn: tramite.iniciadoEn,
       isVirtualStart: true,
+      isTramiteFinalizado: isFinished,
     ),
     TrackingNode(
       title: tramite.politicaId,
       description: 'Estado: ${tramite.estado}',
       estado: tramite.estado,
       asignadoEn: tramite.iniciadoEn,
+      isTramiteFinalizado: isFinished,
     ),
     TrackingNode(
-      title: endTitle,
-      description: endDesc,
-      estado: endEstado,
+      title: endTitleFallback,
+      description: endDescFallback,
+      estado: endEstadoFallback,
       completadoEn: (isFinalized || isCancelled || isRejected) ? (tramite.finalizadoEn ?? DateTime.now()) : null,
       isVirtualEnd: true,
+      isTramiteFinalizado: isFinished,
     )
   ];
 });

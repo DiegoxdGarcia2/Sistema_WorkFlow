@@ -127,4 +127,13 @@ public class UsuarioController {
 
         return guardado;
     }
+
+    @PutMapping("/{id}/fcm-token")
+    public void registrarFcmToken(@PathVariable String id, @RequestBody java.util.Map<String, String> payload) {
+        Usuario user = usuarioRepo.findById(id)
+                .orElseThrow(() -> new com.bpm.inteligente.exception.ResourceNotFoundException("Usuario no encontrado: " + id));
+        String token = payload.get("token");
+        user.setFcmToken(token);
+        usuarioRepo.save(user);
+    }
 }

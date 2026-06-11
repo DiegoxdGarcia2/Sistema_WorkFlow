@@ -291,11 +291,25 @@ public class RegistroActividadService {
                 "TRAMITE_PASO_ACTUALIZADO",
                 "Tu trámite '" + (politica != null ? politica.getNombre() : "Desconocido") + "' avanzó a la fase: " + destino.getNombre()
             );
+
+            if (destino.getDocumentosRequeridos() != null && !destino.getDocumentosRequeridos().isEmpty()) {
+                String docMsg = "Se requiere que subas los siguientes documentos para el paso '" + destino.getNombre() + "': " + String.join(", ", destino.getDocumentosRequeridos());
+                notificationService.enviarNotificacionDocumentoRequerido(
+                    tramite,
+                    "DOCUMENTO_REQUERIDO_PASO",
+                    docMsg,
+                    destino.getDocumentosRequeridos(),
+                    destino.getNombre()
+                );
+            }
         }
 
         // Si todas las transiciones llevan a FIN, completar el trámite
         if (algunDestinoEsFin && salientes.stream().allMatch(t ->
                 buscarActividadEnPolitica(politica, t.getDestinoId()).getTipo() == TipoActividad.FIN)) {
+            
+            compilarBorradorSiExiste(tramite.getId());
+
             tramite.setEstado(EstadoTramite.COMPLETADO);
             tramite.setFinalizadoEn(Instant.now());
             Tramite saved = tramiteRepo.save(tramite);
@@ -318,6 +332,9 @@ public class RegistroActividadService {
                 .allMatch(r -> r.getEstado() == EstadoRegistro.HECHO);
 
         if (todosHechos) {
+            
+            compilarBorradorSiExiste(tramite.getId());
+
             tramite.setEstado(EstadoTramite.COMPLETADO);
             tramite.setFinalizadoEn(Instant.now());
             Tramite saved = tramiteRepo.save(tramite);
@@ -332,6 +349,22 @@ public class RegistroActividadService {
             } catch (Exception e) {
                 System.err.println("Error al enviar notificación de completitud de trámite: " + e.getMessage());
             }
+        }
+    }
+
+    private void compilarBorradorSiExiste(String tramiteId) {
+        try {
+            String currentUserId = TenantContext.getCurrentUserId();
+            Usuario supervisor = null;
+            if (currentUserId != null) {
+                supervisor = usuarioRepo.findById(currentUserId).orElse(null);
+            }
+            documentoService.compilarYArchivarDocumentoBorrador(tramiteId, supervisor);
+            log.info("Borrador compilador/archivador invocado con éxito para tramite {}", tramiteId);
+        } catch (ResourceNotFoundException rnfe) {
+            log.debug("No se encontró borrador para el trámite {}, omitiendo compilación.", tramiteId);
+        } catch (Exception e) {
+            log.error("Error al compilar y archivar borrador al finalizar tramite {}: {}", tramiteId, e.getMessage());
         }
     }
 

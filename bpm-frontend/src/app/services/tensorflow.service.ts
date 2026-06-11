@@ -25,9 +25,12 @@ export interface TFPredictResponse {
 })
 export class TensorflowService {
   private http = inject(HttpClient);
-  private aiUrl = environment.aiServiceUrl.replace('/api/ai', '');
 
   predict(req: TFPredictRequest): Observable<TFPredictResponse> {
-    return this.http.post<TFPredictResponse>(`${this.aiUrl}/api/ai/ml/predict-route`, req);
+    return this.http.post<TFPredictResponse>(`${environment.aiServiceUrl}/predict-route`, req);
+  }
+
+  train(): Observable<any> {
+    return this.http.post<any>(`${environment.aiServiceUrl}/train`, {});
   }
 }

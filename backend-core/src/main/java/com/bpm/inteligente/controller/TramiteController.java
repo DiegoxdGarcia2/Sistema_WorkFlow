@@ -12,13 +12,13 @@ import com.bpm.inteligente.service.TramiteService;
 import com.bpm.inteligente.service.SyncQueueProducer;
 import com.bpm.inteligente.dto.SyncRequestDTO;
 import com.bpm.inteligente.dto.SyncResponseDTO;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import com.bpm.inteligente.repository.DocumentoVersionadoRepository;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 
 @RestController
@@ -32,6 +32,7 @@ public class TramiteController {
     private final RegistroActividadService registroService;
     private final SyncQueueProducer syncQueueProducer;
     private final com.bpm.inteligente.repository.UsuarioRepository usuarioRepo;
+    private final DocumentoVersionadoRepository docRepository;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -41,7 +42,8 @@ public class TramiteController {
                 request.getUsuarioId(),
                 request.getClienteId(),
                 request.getDocumentoCliente(),
-                request.getClienteNombre()
+                request.getClienteNombre(),
+                request.getArchivosIniciales()
         );
         PoliticaNegocio politica = politicaService.buscarPorId(tramite.getPoliticaId());
         return DomainMapper.toDTO(tramite, politica.getNombre());
@@ -134,6 +136,19 @@ public class TramiteController {
                     .build();
         }
 
+        boolean tienePrerrequisitos = politica.getRequisitosIniciales() != null && !politica.getRequisitosIniciales().isEmpty();
+
+        if (tienePrerrequisitos) {
+            return com.bpm.inteligente.dto.ai.AiAssignResponse.builder()
+                    .success(true)
+                    .politicaId(politicaId)
+                    .politicaNombre(politica.getNombre())
+                    .tienePrerrequisitos(true)
+                    .requisitosIniciales(politica.getRequisitosIniciales())
+                    .message("He detectado que necesitas el trámite '" + politica.getNombre() + "'. Para poder iniciarlo, por favor sube los documentos requeridos: " + String.join(", ", politica.getRequisitosIniciales()))
+                    .build();
+        }
+
         // 5. Iniciar Tramite
         com.bpm.inteligente.domain.Usuario usuario = usuarioRepo.findById(userId)
                 .orElseThrow(() -> new com.bpm.inteligente.exception.ResourceNotFoundException("Usuario", "id", userId));
@@ -149,7 +164,9 @@ public class TramiteController {
         return com.bpm.inteligente.dto.ai.AiAssignResponse.builder()
                 .success(true)
                 .tramiteId(tramite.getId())
+                .politicaId(politicaId)
                 .politicaNombre(politica.getNombre())
+                .tienePrerrequisitos(false)
                 .message(pyRes.getReason() != null ? pyRes.getReason() : "Trámite asignado e iniciado correctamente.")
                 .build();
     }
@@ -418,5 +435,108 @@ public class TramiteController {
                 .findFirst()
                 .map(Calle::getNombre)
                 .orElse("Departamento desconocido");
+    }
+
+    @GetMapping("/{tramiteId}/prerequisitos")
+    public ResponseEntity<PrerequisitosResponse> getPrerequisitos(@PathVariable String tramiteId) {
+        Tramite tramite = tramiteService.buscarPorId(tramiteId);
+        PoliticaNegocio politica = politicaService.buscarPorId(tramite.getPoliticaId());
+
+        // Requisitos iniciales de la política
+        List<String> requisitosIniciales = politica.getRequisitosIniciales();
+
+        // Documentos requeridos por la actividad actual (paso activo)
+        List<String> documentosRequeridos = new java.util.ArrayList<>();
+        List<RegistroActividad> registros = registroService.listarPorTramite(tramiteId);
+        
+        // El paso activo suele ser el que está en PENDIENTE o EN_PROGRESO
+        RegistroActividad pasoActivo = registros.stream()
+                .filter(r -> r.getEstado() == com.bpm.inteligente.domain.enums.EstadoRegistro.PENDIENTE || 
+                             r.getEstado() == com.bpm.inteligente.domain.enums.EstadoRegistro.EN_PROGRESO)
+                .findFirst()
+                .orElse(null);
+
+        String pasoActivoNombre = null;
+        if (pasoActivo != null) {
+            pasoActivoNombre = pasoActivo.getActividadNombre();
+            // Buscar la actividad correspondiente en la política para obtener sus documentosRequeridos
+            Actividad actividad = resolverActividad(politica, pasoActivo.getActividadId());
+            if (actividad != null && actividad.getDocumentosRequeridos() != null) {
+                documentosRequeridos.addAll(actividad.getDocumentosRequeridos());
+            }
+        }
+
+        // Obtener archivos ya subidos para este trámite
+        List<ArchivoDetalle> archivosSubidos = new java.util.ArrayList<>();
+        
+        // 1. De DocumentoVersionado
+        List<DocumentoVersionado> documentos = docRepository.findByTramiteId(tramiteId);
+        for (DocumentoVersionado doc : documentos) {
+            if (doc.getHistorial() != null && !doc.getHistorial().isEmpty()) {
+                DocumentoVersionado.Revision ultimaRevision = doc.getHistorial().get(doc.getHistorial().size() - 1);
+                archivosSubidos.add(new ArchivoDetalle(
+                        doc.getNombreOriginal(),
+                        ultimaRevision.getS3Key(),
+                        "/api/archivos/download/" + ultimaRevision.getS3Key()
+                ));
+            }
+        }
+
+        // 2. De RegistroActividad (por si se subieron directamente allí en formularios/adjuntos)
+        for (RegistroActividad reg : registros) {
+            if (reg.getArchivos() != null) {
+                for (RegistroActividad.ArchivoInfo arch : reg.getArchivos()) {
+                    boolean yaExiste = archivosSubidos.stream().anyMatch(a -> a.getNombre().equals(arch.getNombre()));
+                    if (!yaExiste) {
+                        archivosSubidos.add(new ArchivoDetalle(
+                                arch.getNombre(),
+                                arch.getId(),
+                                "/api/archivos/download/" + arch.getId()
+                        ));
+                    }
+                }
+            }
+        }
+
+        PrerequisitosResponse response = PrerequisitosResponse.builder()
+                .tramiteId(tramiteId)
+                .requisitosIniciales(requisitosIniciales)
+                .pasoActivo(pasoActivoNombre)
+                .documentosRequeridosPaso(documentosRequeridos)
+                .archivosSubidos(archivosSubidos)
+                .build();
+
+        return ResponseEntity.ok(response);
+    }
+
+    private Actividad resolverActividad(PoliticaNegocio p, String actId) {
+        if (p.getCalles() == null) return null;
+        return p.getCalles().stream()
+                .flatMap(c -> c.getActividades().stream())
+                .filter(a -> actId != null && actId.equals(a.getId()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    @lombok.Data
+    @lombok.Builder
+    @lombok.NoArgsConstructor
+    @lombok.AllArgsConstructor
+    public static class PrerequisitosResponse {
+        private String tramiteId;
+        private List<String> requisitosIniciales;
+        private String pasoActivo;
+        private List<String> documentosRequeridosPaso;
+        private List<ArchivoDetalle> archivosSubidos;
+    }
+
+    @lombok.Data
+    @lombok.Builder
+    @lombok.NoArgsConstructor
+    @lombok.AllArgsConstructor
+    public static class ArchivoDetalle {
+        private String nombre;
+        private String id;
+        private String url;
     }
 }

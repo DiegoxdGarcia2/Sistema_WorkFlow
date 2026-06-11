@@ -1,0 +1,173 @@
+<!-- SCROLLABLE CANVAS AREA -->
+<div class="flex-1 overflow-auto relative dot-grid" 
+     (mousedown)="onCanvasBgClick($event)" (mousemove)="onCanvasMouseMove($event)" (mouseup)="onCanvasMouseUp()">
+  
+  <div *ngIf="sel()" class="relative" [style.width.px]="getCanvasW()" [style.min-height.px]="getCanvasH()">
+    <!-- Lane Headers (table-style) -->
+    <div class="lane-header-row sticky top-0 z-20">
+      <div *ngFor="let calle of sel()!.calles; let ci = index" class="lane-header-cell"
+           [style.width.px]="calle.ancho || LW" [style.color]="calle.color || '#475569'"
+           [ngClass]="{'active': calleSeleccionada()?.id === calle.id, 'opacity-50': isDraggingLane && dragLaneIdx === ci, 'border-l-indigo-400': isDraggingLane && dragLaneOverIdx === ci && dragLaneIdx !== ci}"
+           (click)="seleccionarCalle(ci, $event)">
+        
+        <div class="flex items-center gap-2 overflow-hidden">
+          <div class="cursor-grab shrink-0 p-1 -m-1 flex items-center justify-center transition-colors hover:bg-slate-700/40 rounded" 
+               draggable="true"
+               (dragstart)="onLaneHeaderDragStart(ci)" 
+               (dragover)="onLaneHeaderDragOver(ci, $event)" 
+               (drop)="onLaneHeaderDrop(ci)" 
+               (dragend)="onLaneHeaderDragEnd()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <div class="w-2 h-2 rounded-full shadow-[0_0_12px_rgba(currentColor,0.6)]" [style.background]="calle.color || '#475569'"></div>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-300 truncate pointer-events-none">{{ calle.nombre }}</span>
+          </div>
+        </div>
+        
+        <!-- Resize Handle -->
+        <div class="lane-resize-handle" (mousedown)="onLaneResizeMouseDown($event, ci)"></div>
+
+        <button *ngIf="!sel()!.estaActiva" (click)="eliminarCalle(ci); $event.stopPropagation()" class="w-5 h-5 rounded flex items-center justify-center text-red-500/40 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Lane Backgrounds (table grid) -->
+    <div *ngFor="let calle of sel()!.calles; let ci = index" class="lane-bg"
+         [style.left.px]="getLaneX(ci)" [style.width.px]="calle.ancho || LW" [style.top.px]="0"
+         [style.color]="calle.color || '#475569'"
+         [ngClass]="{'drop-target': hoveredLaneIdx === ci && isDragging && dragOriginCi !== ci}">
+      <div class="lane-fill" [style.background]="calle.color || '#475569'"></div>
+    </div>
+
+    <!-- Base SVG Connections -->
+    <svg class="absolute inset-0 w-full h-full pointer-events-none z-[5]" [style.height.px]="getCanvasH()">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="currentColor"/></marker>
+      </defs>
+      <ng-container *ngFor="let conn of getConnectionPaths(); trackBy: trackByConnId">
+        <!-- Hit area (Invisible but wider for easier clicking) -->
+        <path [attr.d]="conn.path" class="conn-hit" (click)="selectTransicion(conn.trans)" style="pointer-events: stroke"/>
+        <!-- Visible path -->
+        <path [attr.d]="conn.path" class="conn-path"
+              [attr.stroke]="conn.color"
+              [attr.stroke-width]="conn.width"
+              [attr.stroke-dasharray]="conn.dash"
+              [attr.marker-end]="'url(#arrow)'"
+              [style.color]="conn.color"
+              [ngClass]="{'conn-selected': transicionSeleccionada()?.id === conn.id}"/>
+        <!-- Label -->
+        <text *ngIf="conn.label" [attr.x]="conn.labelX" [attr.y]="conn.labelY" fill="#94a3b8" font-size="10" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="500">{{ conn.label }}</text>
+      </ng-container>
+      <!-- Temp connection line -->
+      <line *ngIf="(connMode().active || isCreatingConn) && getSourceCenter()" class="temp-conn-line"
+            [attr.x1]="getSourceCenter()!.x" [attr.y1]="getSourceCenter()!.y"
+            [attr.x2]="mouseX" [attr.y2]="mouseY"
+            stroke="#6366f1" stroke-width="2" stroke-dasharray="4 4"/>
+    </svg>
+
+    <!-- Nodes -->
+    <ng-container *ngFor="let calle of sel()!.calles; let ci = index; trackBy: trackById">
+      <div *ngFor="let act of calle.actividades; let ai = index; trackBy: trackById"
+           class="node-card rounded-2xl z-10 absolute cursor-move select-none transition-all duration-300 ease-out"
+           [id]="'node-' + act.id"
+           [ngClass]="{'selected': nodoSeleccionado()?.id === act.id, 'dragging': isDragging && dragNodeId === act.id, 'conn-source': connMode().sourceId === act.id, 'sim-active': activeSimNodes().includes(act.id), 'locked': nodosBloqueados()[act.id]}"
+           [style.left.px]="getNodoPos(act.id).x" [style.top.px]="getNodoPos(act.id).y"
+           [style.width.px]="act.ancho || NW"
+           [style.min-height.px]="act.alto || NH"
+           [style.background]="act.color ? act.color + '20' : 'rgba(15,23,42,0.92)'"
+           [style.backdrop-filter]="'blur(20px)'"
+           [style.border-color]="nodosBloqueados()[act.id] ? nodosBloqueados()[act.id].color : (act.color || 'rgba(51,65,85,0.6)')"
+           [style.border-width]="nodosBloqueados()[act.id] ? '2px' : '1px'"
+           (mousedown)="onNodoMouseDown($event, ci, ai)" (click)="isSimulating() ? avanzarSimulacion(act.id) : seleccionarNodo(ci, ai, $event)"
+           (mouseenter)="onNodeMouseEnter(act.id)" (mouseleave)="onNodeMouseLeave()">
+        
+        <div *ngIf="activeSimNodes().includes(act.id)" class="sim-badge">ACTIVO</div>
+        
+        <!-- ML Finding Badge -->
+        <ng-container *ngIf="getFindingForNode(act.id) as finding">
+          <div class="absolute -top-3 left-4 px-2 py-0.5 rounded-full text-[9px] font-bold text-white shadow-lg z-20 flex items-center gap-1 border border-white/20"
+               [ngClass]="{
+                 'bg-red-500': finding.severity === 'CRITICAL',
+                 'bg-amber-500': finding.severity === 'WARNING',
+                 'bg-blue-500': finding.severity === 'INFO'
+               }"
+               [title]="finding.message">
+             <span>{{ finding.severity === 'CRITICAL' ? '⚠️ CRÍTICO' : '⚡ LENTO' }}</span>
+          </div>
+        </ng-container>
+        
+        <!-- Locked Badge -->
+        <ng-container *ngIf="nodosBloqueados()[act.id] as lock">
+          <div class="absolute -top-3 -right-3 px-2 py-0.5 rounded-full text-[9px] font-bold text-white shadow-lg z-20 flex items-center gap-1"
+               [style.background]="lock.color">
+             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+             {{ lock.nombre }}
+          </div>
+        </ng-container>
+
+        <!-- Handles -->
+        <div class="node-handle node-handle-top" (mousedown)="onHandleMouseDown($event, act, 'top')"></div>
+        <div class="node-handle node-handle-bottom" (mousedown)="onHandleMouseDown($event, act, 'bottom')"></div>
+        <div class="node-handle node-handle-left" (mousedown)="onHandleMouseDown($event, act, 'left')"></div>
+        <div class="node-handle node-handle-right" (mousedown)="onHandleMouseDown($event, act, 'right')"></div>
+        <!-- Content -->
+        <div class="flex items-center gap-2.5 px-4 pt-3 pb-2">
+          <div class="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md" [style.background]="getAccentBg(act.tipo)" [style.color]="getAccent(act.tipo)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle *ngIf="act.tipo==='INICIO'" cx="12" cy="12" r="5" fill="currentColor"/>
+              <rect *ngIf="act.tipo==='FIN'" x="8" y="8" width="8" height="8" rx="1" fill="currentColor"/>
+              <path *ngIf="act.tipo==='TAREA'" d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline *ngIf="act.tipo==='TAREA'" points="14 2 14 8 20 8"/>
+              <path *ngIf="act.tipo==='DECISION'" d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0L12 14l-2.6 2.6a2 2 0 0 1-2.8 0L2 12l4.6-4.6a2 2 0 0 1 2.8 0L12 10l2.6-2.6a2 2 0 0 1 2.8 0Z"/>
+              <path *ngIf="act.tipo==='FORK'" d="M7 7l10 10M17 7l-5 5"/>
+              <path *ngIf="act.tipo==='JOIN'" d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path *ngIf="act.tipo==='JOIN'" d="M21 3v5h-5"/>
+            </svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="font-bold text-slate-100 truncate" [ngClass]="{'text-[10px]': act.fontSize==='sm', 'text-[11px]': !act.fontSize || act.fontSize==='md', 'text-sm': act.fontSize==='lg'}">{{ act.nombre }}</p>
+            <p class="text-[9px] font-semibold uppercase tracking-[0.15em] mt-0.5" [style.color]="getAccent(act.tipo)">{{ getCategory(act.tipo) }}</p>
+          </div>
+        </div>
+      </div>
+    </ng-container>
+
+    <!-- Interaction Layer (High Z-Index for Handles and Guides) -->
+    <svg class="absolute inset-0 w-full h-full pointer-events-none z-[40]" [style.height.px]="getCanvasH()">
+      <!-- Alignment Guides -->
+      <ng-container *ngFor="let g of guides">
+        <line *ngIf="g.x !== undefined" [attr.x1]="g.x" y1="0" [attr.x2]="g.x" [attr.y2]="getCanvasH()" class="alignment-guide"/>
+        <line *ngIf="g.y !== undefined" x1="0" [attr.y1]="g.y" [attr.x2]="getCanvasW()" [attr.y2]="g.y" class="alignment-guide"/>
+      </ng-container>
+
+      <ng-container *ngFor="let conn of getConnectionPaths(); trackBy: trackByConnId">
+         <ng-container *ngIf="transicionSeleccionada()?.id === conn.id">
+           <circle class="conn-endpoint-handle" [attr.cx]="conn.x1" [attr.cy]="conn.y1" r="6" 
+                   [style.fill]="conn.color" style="pointer-events: all; stroke: white; stroke-width: 2;"
+                   (mousedown)="onConnHandleMouseDown($event, conn.id, 'origen')"/>
+           <circle class="conn-endpoint-handle" [attr.cx]="conn.x2" [attr.cy]="conn.y2" r="6" 
+                   [style.fill]="conn.color" style="pointer-events: all; stroke: white; stroke-width: 2;"
+                   (mousedown)="onConnHandleMouseDown($event, conn.id, 'destino')"/>
+         </ng-container>
+      </ng-container>
+    </svg>
+
+    <!-- Info bar -->
+    <div class="fixed bottom-4 left-[296px] z-20 px-3 py-1.5 rounded-lg backdrop-blur-xl bg-slate-900/70 border border-slate-800 text-[10px] text-slate-400 font-mono">
+      {{ contarNodos(sel()) }} nodos · {{ sel()!.transiciones.length }} enlaces · {{ sel()!.calles.length }} calles
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div *ngIf="!sel()" class="h-full flex items-center justify-center">
+    <div class="text-center">
+      <div class="w-20 h-20 mx-auto rounded-3xl bg-slate-900/60 border border-slate-800 flex items-center justify-center mb-5 shadow-2xl">
+        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-slate-600"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>
+      </div>
+      <h2 class="text-lg font-bold text-slate-300 mb-1">Selecciona una Política</h2>
+      <p class="text-sm text-slate-500 max-w-xs">Elige una política de la barra lateral o crea una nueva.</p>
+    </div>
+  </div>
+
+</div>

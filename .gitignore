@@ -14,12 +14,15 @@ brain/
 .gemini/
 AGENT.md
 agent_workspace_blueprint.md
+gtk3/
 
 # ── Seguridad ──
 .env
 *.env.local
 *.env.development.local
 *.pem
+*firebase-service-account.json
+*google-services.json
 
 # ── IDEs ──
 .idea/
@@ -66,3 +69,6 @@ backend-core/uploads/
 bpm-frontend/proxy.conf.json
 Lanzar-BPM.bat
 pdf_text.txt
+docs/
+backend-core/test_ai.py
+

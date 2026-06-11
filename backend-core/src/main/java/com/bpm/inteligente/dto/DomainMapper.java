@@ -23,6 +23,7 @@ public final class DomainMapper {
                 .estaActiva(dto.isEstaActiva())
                 .calles(dto.getCalles())
                 .transiciones(dto.getTransiciones())
+                .requisitosIniciales(dto.getRequisitosIniciales())
                 .build();
     }
 
@@ -37,6 +38,7 @@ public final class DomainMapper {
                 .estaActiva(entity.isEstaActiva())
                 .calles(entity.getCalles())
                 .transiciones(entity.getTransiciones())
+                .requisitosIniciales(entity.getRequisitosIniciales())
                 .creadoPor(entity.getCreadoPor())
                 .creadoEn(entity.getCreadoEn())
                 .modificadoPor(entity.getModificadoPor())
@@ -63,7 +65,7 @@ public final class DomainMapper {
     }
 
 
-    public static RegistroActividadDTO toDTO(RegistroActividad entity, String actividadNombre, String clienteNombre, String politicaId) {
+    public static RegistroActividadDTO toDTO(RegistroActividad entity, String actividadNombre, String clienteNombre, String politicaId, java.util.List<String> documentosRequeridos) {
         return RegistroActividadDTO.builder()
                 .id(entity.getId())
                 .tramiteId(entity.getTramiteId())
@@ -79,6 +81,7 @@ public final class DomainMapper {
                 .completadoEn(entity.getCompletadoEn())
                 .clienteNombre(clienteNombre)
                 .politicaId(politicaId)
+                .documentosRequeridos(documentosRequeridos != null ? documentosRequeridos : new java.util.ArrayList<>())
                 .build();
     }
 

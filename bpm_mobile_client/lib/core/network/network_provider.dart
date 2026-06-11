@@ -91,7 +91,7 @@ final clientIdProvider = NotifierProvider<ClientIdNotifier, String?>(() => Clien
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
-      baseUrl: kIsWeb ? 'http://localhost:8080/api' : 'http://10.0.2.2:8080/api', 
+      baseUrl: kIsWeb ? 'http://localhost:8080/api' : 'http://192.168.100.31:8080/api', 
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       headers: {

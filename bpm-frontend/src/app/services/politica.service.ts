@@ -46,7 +46,8 @@ export class PoliticaService {
     return this.http.patch<PoliticaDTO>(`${this.baseUrl}/${id}/activar`, {});
   }
 
-  eliminar(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/${id}`);
+  eliminar(id: string, force = false): Observable<void> {
+    const params: Record<string, string> = force ? { force: 'true' } : {};
+    return this.http.delete<void>(`${this.baseUrl}/${id}`, { params });
   }
 }

@@ -7,7 +7,7 @@ import { ColaboracionService } from '../../services/colaboracion.service';
 import { AuthService } from '../../services/auth.service';
 import { environment } from '../../../environments/environment';
 
-type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE';
+type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE' | 'TRAMITE';
 
 @Component({
   selector: 'app-repositorio',
@@ -45,10 +45,19 @@ type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE';
           </button>
         }
 
-        @if (nivel() === 'CLIENTE') {
+        @if (nivel() === 'CLIENTE' || nivel() === 'TRAMITE') {
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-600"><path d="m9 18 6-6-6-6"/></svg>
+          <button (click)="goTo('CLIENTE')" 
+                  class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all"
+                  [class]="nivel() === 'CLIENTE' ? 'bg-indigo-500/20 text-indigo-400' : 'text-slate-400 hover:text-white hover:bg-white/5'">
+            {{ seleccionCliente() }}
+          </button>
+        }
+
+        @if (nivel() === 'TRAMITE') {
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-600"><path d="m9 18 6-6-6-6"/></svg>
           <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold bg-indigo-500/20 text-indigo-400">
-            {{ seleccionCliente() }}
+            {{ seleccionTramite() }}
           </div>
         }
       </div>
@@ -95,14 +104,55 @@ type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE';
                     <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                   </div>
                   <h3 class="text-lg font-black text-white tracking-tight mb-2 truncate">{{ cli }}</h3>
-                  <p class="text-xs font-medium text-slate-500">{{ getArchivosCount(cli) }} Archivos</p>
+                  <p class="text-xs font-medium text-slate-500">{{ getTramitesCount(cli) }} Trámites / {{ getArchivosCount(cli) }} Archivos</p>
                 </div>
               }
             </div>
           }
 
-          <!-- NIVEL 3: ARCHIVOS -->
+          <!-- NIVEL 3: TRAMITES -->
           @if (nivel() === 'CLIENTE') {
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in slide-in-from-bottom-4 duration-300">
+              @for (tra of tramitesActuales(); track tra) {
+                @if (parseTramiteLabel(tra); as parsed) {
+                  <div (click)="entrarTramite(tra)" 
+                       class="group p-6 rounded-3xl bg-slate-900/40 border border-slate-800/60 hover:bg-sky-500/5 hover:border-sky-500/30 transition-all cursor-pointer shadow-xl ring-1 ring-white/5 flex flex-col justify-between">
+                    <div>
+                      <div class="flex items-center justify-between mb-6">
+                        <div class="w-12 h-12 rounded-2xl bg-sky-500/10 flex items-center justify-center text-sky-400 group-hover:scale-110 transition-transform shadow-[0_0_15px_rgba(56,189,248,0.2)]">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                        </div>
+                        <span class="px-2.5 py-1 text-[10px] font-black rounded-lg uppercase tracking-wider border"
+                              [class]="parsed.enCurso ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'">
+                          {{ parsed.enCurso ? 'En Curso' : 'Completado' }}
+                        </span>
+                      </div>
+                      <h3 class="text-base font-black text-white tracking-tight mb-2 truncate" [title]="parsed.politica">
+                        {{ parsed.politica }}
+                      </h3>
+                      <div class="text-[11px] font-mono text-indigo-400 mb-4 flex items-center gap-1.5">
+                        <span class="text-slate-500 font-sans">Código:</span>
+                        <span class="bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 font-bold">#{{ parsed.codigo }}</span>
+                      </div>
+                    </div>
+                    <div class="space-y-2 text-xs text-slate-400 border-t border-white/5 pt-4 mt-2">
+                      <div class="flex items-center gap-2" [title]="parsed.fechas">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-500 shrink-0"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                        <span class="truncate">{{ parsed.fechas }}</span>
+                      </div>
+                      <div class="flex items-center gap-2 text-slate-500 font-medium">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                        <span>{{ getArchivosCountForTramite(tra) }} Archivos</span>
+                      </div>
+                    </div>
+                  </div>
+                }
+              }
+            </div>
+          }
+
+          <!-- NIVEL 4: ARCHIVOS -->
+          @if (nivel() === 'TRAMITE') {
             <!-- INFO COLABORACION PREMIUM -->
             <div class="mb-6 p-5 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
@@ -369,6 +419,7 @@ export class RepositorioComponent implements OnInit, OnDestroy {
   nivel = signal<NivelActual>('ROOT');
   seleccionPolitica = signal<string | null>(null);
   seleccionCliente = signal<string | null>(null);
+  seleccionTramite = signal<string | null>(null);
 
   // Colaboración
   mostrarEditorColaborativo = signal(false);
@@ -394,11 +445,19 @@ export class RepositorioComponent implements OnInit, OnDestroy {
     return Object.keys(this.data()[pol] || {}).sort();
   });
 
-  archivosActuales = computed(() => {
+  tramitesActuales = computed(() => {
     const pol = this.seleccionPolitica();
     const cli = this.seleccionCliente();
     if (!pol || !cli) return [];
-    return this.data()[pol][cli] || [];
+    return Object.keys(this.data()[pol][cli] || {}).sort();
+  });
+
+  archivosActuales = computed(() => {
+    const pol = this.seleccionPolitica();
+    const cli = this.seleccionCliente();
+    const tra = this.seleccionTramite();
+    if (!pol || !cli || !tra) return [];
+    return this.data()[pol][cli][tra] || [];
   });
 
   ngOnInit() {
@@ -569,8 +628,59 @@ export class RepositorioComponent implements OnInit, OnDestroy {
   getArchivosCount(cliente: string) {
     const pol = this.seleccionPolitica();
     if (!pol) return 0;
-    const arr = this.data()[pol][cliente];
+    const tramitesMap = this.data()[pol][cliente] || {};
+    let count = 0;
+    for (const key of Object.keys(tramitesMap)) {
+      count += tramitesMap[key].length;
+    }
+    return count;
+  }
+
+  getTramitesCount(cliente: string) {
+    const pol = this.seleccionPolitica();
+    if (!pol) return 0;
+    return Object.keys(this.data()[pol][cliente] || {}).length;
+  }
+
+  getArchivosCountForTramite(tramite: string) {
+    const pol = this.seleccionPolitica();
+    const cli = this.seleccionCliente();
+    if (!pol || !cli) return 0;
+    const arr = this.data()[pol][cli][tramite];
     return arr ? arr.length : 0;
+  }
+
+  parseTramiteLabel(label: string) {
+    let politica = 'Trámite';
+    let codigo = 'S/C';
+    let fechas = 'Fecha desconocida';
+    let enCurso = false;
+
+    // Extract code in [#...]
+    const codeMatch = label.match(/\[#([^\]]+)\]/);
+    if (codeMatch) {
+      codigo = codeMatch[1];
+    }
+
+    // Extract dates in (Desde ...) at the end of the label
+    const datesMatch = label.match(/\(Desde (.*)\)\s*$/);
+    if (datesMatch) {
+      fechas = 'Desde ' + datesMatch[1];
+      if (fechas.includes('En Curso')) {
+        enCurso = true;
+      }
+    }
+
+    // Extract policy name (everything between "Trámite de " and " [#")
+    const polMatch = label.match(/Trámite de (.*?) \[#/);
+    if (polMatch) {
+      politica = polMatch[1];
+    } else {
+      // Fallback: remove date and code patterns
+      politica = label.replace(/\[#.*?\]/, '').replace(/\(Desde.*?\)/, '').trim();
+    }
+
+    return { politica, codigo, fechas, enCurso };
   }
 
   entrarPolitica(pol: string) {
@@ -583,13 +693,22 @@ export class RepositorioComponent implements OnInit, OnDestroy {
     this.nivel.set('CLIENTE');
   }
 
+  entrarTramite(tra: string) {
+    this.seleccionTramite.set(tra);
+    this.nivel.set('TRAMITE');
+  }
+
   goTo(target: NivelActual) {
     this.nivel.set(target);
     if (target === 'ROOT') {
       this.seleccionPolitica.set(null);
       this.seleccionCliente.set(null);
+      this.seleccionTramite.set(null);
     } else if (target === 'POLITICA') {
       this.seleccionCliente.set(null);
+      this.seleccionTramite.set(null);
+    } else if (target === 'CLIENTE') {
+      this.seleccionTramite.set(null);
     }
   }
 

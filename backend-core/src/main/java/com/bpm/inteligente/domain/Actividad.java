@@ -39,4 +39,7 @@ public class Actividad {
     private Map<String, Object> esquemaFormulario;
 
     private String plantillaId;
+
+    @Builder.Default
+    private java.util.List<String> documentosRequeridos = new java.util.ArrayList<>();
 }

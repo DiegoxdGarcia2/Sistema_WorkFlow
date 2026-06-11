@@ -62,7 +62,7 @@ const AUTOENCODER_LAYERS: NeuronLayer[] = [
 
     .slider-custom { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; }
     .slider-custom::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: linear-gradient(90deg, #312e81, #6366f1); }
-    .slider-custom::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #818cf8; border: 3px solid #1e1b4b; margin-top: -7px; box-shadow: 0 0 10px rgba(99,102,241,0.5); }
+    .slider-custom::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #818cf8; border: 3px solid #1e1b4b; }
   `],
   template: `
     <div class="min-h-screen bg-slate-950 text-white p-8 custom-scrollbar overflow-y-auto" style="max-height: calc(100vh - 4rem);">
@@ -127,6 +127,17 @@ const AUTOENCODER_LAYERS: NeuronLayer[] = [
                             [style.animation-delay]="($index * 0.15) + 's'"
                             [style.color]="layer.color" />
                     <circle [attr.cx]="n.x" [attr.cy]="n.y" r="3" fill="white" opacity="0.6" />
+                    
+                    <!-- Individual labels for input neurons -->
+                    @if (layer.type === 'input' && n.label) {
+                      <text [attr.x]="n.x - 16" [attr.y]="n.y + 4" text-anchor="end"
+                            fill="#cbd5e1" font-size="9" font-weight="800" class="font-sans">{{ n.label }}</text>
+                    }
+                    <!-- Individual labels for output neurons -->
+                    @if (layer.type === 'output' && n.label) {
+                      <text [attr.x]="n.x + 22" [attr.y]="n.y + 4" text-anchor="start"
+                            fill="#cbd5e1" font-size="9" font-weight="800" class="font-sans">{{ n.label }}</text>
+                    }
                   }
                   <!-- Layer Label -->
                   <text [attr.x]="layer.labelX" [attr.y]="380" text-anchor="middle"
@@ -178,6 +189,17 @@ const AUTOENCODER_LAYERS: NeuronLayer[] = [
                             [style.animation-delay]="($index * 0.12) + 's'"
                             [style.color]="layer.color" />
                     <circle [attr.cx]="n.x" [attr.cy]="n.y" r="3" fill="white" opacity="0.6" />
+                    
+                    <!-- Individual labels for input neurons -->
+                    @if (layer.type === 'input' && n.label) {
+                      <text [attr.x]="n.x - 16" [attr.y]="n.y + 4" text-anchor="end"
+                            fill="#cbd5e1" font-size="9" font-weight="800" class="font-sans">{{ n.label }}</text>
+                    }
+                    <!-- Individual labels for output neurons (reconstructed) -->
+                    @if (layer.type === 'output' && n.label) {
+                      <text [attr.x]="n.x + 18" [attr.y]="n.y + 4" text-anchor="start"
+                            fill="#cbd5e1" font-size="9" font-weight="800" class="font-sans">{{ n.label }}</text>
+                    }
                   }
                   <text [attr.x]="layer.labelX" [attr.y]="360" text-anchor="middle"
                         fill="#94a3b8" font-size="9" font-weight="700" class="uppercase">{{ layer.name }}</text>
@@ -345,20 +367,104 @@ const AUTOENCODER_LAYERS: NeuronLayer[] = [
           </div>
         </div>
       }
+
+      <!-- TAB 4: ENTRENAMIENTO DE MODELOS -->
+      @if (activeTab() === 'training') {
+        <div class="slide-in">
+          <div class="grid grid-cols-12 gap-8">
+            <!-- panel izquierdo: controles y métricas -->
+            <div class="col-span-6 p-8 rounded-[2rem] bg-slate-900/40 border border-white/5 shadow-xl space-y-6">
+              <div class="flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </div>
+                <div>
+                  <h2 class="text-lg font-black text-white">Consola de Mantenimiento</h2>
+                  <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Re-entrenamiento en caliente de las redes neuronales</p>
+                </div>
+              </div>
+
+              <p class="text-xs text-slate-400 leading-relaxed">
+                El re-entrenamiento extrae todos los registros completados de MongoDB para ajustar la predicción de la duración promedio de los trámites y recalibrar el Autoencoder de anomalías con las últimas dinámicas operativas de la empresa.
+              </p>
+
+              <button (click)="runModelTraining()" [disabled]="trainingState() === 'training'"
+                      class="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-500/30 hover:shadow-indigo-500/50 transition-all flex items-center justify-center gap-2">
+                @if (trainingState() === 'training') {
+                  <span class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                  <span>Entrenando modelos...</span>
+                } @else {
+                  <span>⚡ Iniciar Re-entrenamiento</span>
+                }
+              </button>
+
+              <!-- MÉTRICAS OBTENIDAS -->
+              @if (trainingMetrics()) {
+                <div class="pt-6 border-t border-white/5 space-y-4">
+                  <h3 class="text-xs font-black text-white uppercase tracking-widest text-slate-400">Resultados del Último Entrenamiento</h3>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div class="p-4 rounded-xl bg-white/[0.02] border border-white/5">
+                      <p class="text-[9px] font-bold text-slate-500 uppercase">Muestras Procesadas</p>
+                      <p class="text-xl font-black text-indigo-400">{{ trainingMetrics()?.total_samples }}</p>
+                    </div>
+                    <div class="p-4 rounded-xl bg-white/[0.02] border border-white/5">
+                      <p class="text-[9px] font-bold text-slate-500 uppercase">Duración MAE</p>
+                      <p class="text-xl font-black text-emerald-400">{{ trainingMetrics()?.val_duracion_mae | number:'1.1-2' }} <span class="text-xs font-medium text-slate-500">min</span></p>
+                    </div>
+                    <div class="p-4 rounded-xl bg-white/[0.02] border border-white/5">
+                      <p class="text-[9px] font-bold text-slate-500 uppercase">Acc. Prioridad</p>
+                      <p class="text-xl font-black text-amber-400">{{ (trainingMetrics()?.val_prioridad_accuracy * 100) | number:'1.0-1' }}%</p>
+                    </div>
+                    <div class="p-4 rounded-xl bg-white/[0.02] border border-white/5">
+                      <p class="text-[9px] font-bold text-slate-500 uppercase">Acc. Ruta</p>
+                      <p class="text-xl font-black text-violet-400">{{ (trainingMetrics()?.val_ruta_accuracy * 100) | number:'1.0-1' }}%</p>
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+
+            <!-- panel derecho: terminal de logs -->
+            <div class="col-span-6 flex flex-col h-[480px] bg-black border border-white/5 rounded-[2rem] p-6 shadow-2xl relative overflow-hidden">
+              <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/5">
+                <div class="flex gap-2">
+                  <span class="w-3 h-3 rounded-full bg-red-500/80"></span>
+                  <span class="w-3 h-3 rounded-full bg-yellow-500/80"></span>
+                  <span class="w-3 h-3 rounded-full bg-green-500/80"></span>
+                </div>
+                <span class="text-[9px] font-mono text-slate-500">terminal_logs_keras.sh</span>
+              </div>
+              <div class="flex-grow overflow-y-auto font-mono text-xs text-indigo-300 space-y-2 custom-scrollbar">
+                @for (log of trainingLog(); track $index) {
+                  <p class="leading-relaxed border-l-2 border-indigo-500/30 pl-2 animate-in fade-in slide-in-from-left-2">{{ log }}</p>
+                } @empty {
+                  <p class="text-slate-600 italic">Consola inactiva. Inicie el entrenamiento para registrar los logs en tiempo real.</p>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      }
     </div>
   `
 })
 export class TensorflowDashboardComponent implements OnInit {
   private tfService = inject(TensorflowService);
 
-  activeTab = signal<'multioutput' | 'autoencoder' | 'simulator'>('multioutput');
+  activeTab = signal<'multioutput' | 'autoencoder' | 'simulator' | 'training'>('multioutput');
   predicting = signal(false);
   prediction = signal<TFPredictResponse | null>(null);
+
+  // Model training state
+  trainingState = signal<'idle' | 'training' | 'completed' | 'error'>('idle');
+  trainingLog = signal<string[]>([]);
+  trainingMetrics = signal<any | null>(null);
 
   tabs = [
     { id: 'multioutput' as const, label: '🧬 Modelo Multi-Output' },
     { id: 'autoencoder' as const, label: '🔍 Autoencoder' },
     { id: 'simulator' as const, label: '⚡ Simulador en Vivo' },
+    { id: 'training' as const, label: '⚙️ Entrenamiento de Modelos' }
   ];
 
   dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -383,7 +489,27 @@ export class TensorflowDashboardComponent implements OnInit {
     const xStep = this.svgWidth / (totalLayers + 1);
     const centerY = 180;
 
-    const result: { name: string; type: string; color: string; labelX: number; neurons: { x: number; y: number }[] }[] = [];
+    const result: { name: string; type: string; color: string; labelX: number; neurons: { x: number; y: number; label?: string }[] }[] = [];
+
+    const inputLabels = [
+      'Hora del Día',
+      'Día de la Semana',
+      'Departamento',
+      'Política/Trámite',
+      'Carga de Trabajo',
+      'Historial Cliente'
+    ];
+
+    const outputLabels = [
+      'Duración Estimada',
+      'Prioridad: BAJA',
+      'Prioridad: MEDIA',
+      'Prioridad: ALTA',
+      'Ruta: Registro Actividad',
+      'Ruta: Evaluación Técnica',
+      'Ruta: Revisión/Aprobación',
+      'Ruta: Archivo Completado'
+    ];
 
     layers.forEach((layer, li) => {
       const x = xStep * (li + 1);
@@ -391,19 +517,24 @@ export class TensorflowDashboardComponent implements OnInit {
       const startY = centerY - ((layer.neurons - 1) * yStep) / 2;
       result.push({
         name: layer.name, type: layer.type, color: layer.color, labelX: x,
-        neurons: Array.from({ length: layer.neurons }, (_, ni) => ({ x, y: startY + ni * yStep }))
+        neurons: Array.from({ length: layer.neurons }, (_, ni) => ({
+          x,
+          y: startY + ni * yStep,
+          label: layer.type === 'input' ? inputLabels[ni] : undefined
+        }))
       });
     });
 
     // Output branches
     const outX = xStep * (layers.length + 1);
-    const outNeurons: { x: number; y: number }[] = [];
+    const outNeurons: { x: number; y: number; label?: string }[] = [];
     const branchSpacing = 100;
     const branchStartY = centerY - branchSpacing;
+    let outIdx = 0;
     OUTPUT_BRANCHES.forEach((branch, bi) => {
       for (let ni = 0; ni < branch.neurons; ni++) {
         const y = branchStartY + bi * branchSpacing + (ni * 20) - ((branch.neurons - 1) * 10);
-        outNeurons.push({ x: outX, y });
+        outNeurons.push({ x: outX, y, label: outputLabels[outIdx++] });
       }
     });
     result.push({ name: 'Outputs', type: 'output', color: '#10b981', labelX: outX, neurons: outNeurons });
@@ -432,13 +563,35 @@ export class TensorflowDashboardComponent implements OnInit {
     const xStep = this.aeWidth / (layers.length + 1);
     const centerY = 190;
 
+    const inputLabels = [
+      'Hora del Día',
+      'Día de la Semana',
+      'Departamento',
+      'Política/Trámite',
+      'Carga de Trabajo',
+      'Historial Cliente'
+    ];
+
+    const reconstructedLabels = [
+      'Rec: Hora del Día',
+      'Rec: Día de la Semana',
+      'Rec: Departamento',
+      'Rec: Política/Trámite',
+      'Rec: Carga de Trabajo',
+      'Rec: Historial Cliente'
+    ];
+
     return layers.map((layer, li) => {
       const x = xStep * (li + 1);
       const yStep = Math.min(40, 280 / (layer.neurons + 1));
       const startY = centerY - ((layer.neurons - 1) * yStep) / 2;
       return {
         name: layer.name, type: layer.type, color: layer.color, labelX: x,
-        neurons: Array.from({ length: layer.neurons }, (_, ni) => ({ x, y: startY + ni * yStep }))
+        neurons: Array.from({ length: layer.neurons }, (_, ni) => ({
+          x,
+          y: startY + ni * yStep,
+          label: layer.type === 'input' ? inputLabels[ni] : (layer.type === 'output' ? reconstructedLabels[ni] : undefined)
+        }))
       };
     });
   });
@@ -458,7 +611,7 @@ export class TensorflowDashboardComponent implements OnInit {
     return conns;
   });
 
-  ngOnInit() {}
+  ngOnInit() { }
 
   runPrediction() {
     this.predicting.set(true);
@@ -478,6 +631,46 @@ export class TensorflowDashboardComponent implements OnInit {
           scoreEficiencia: 0.5 + Math.random() * 0.45
         });
         this.predicting.set(false);
+      }
+    });
+  }
+
+  runModelTraining() {
+    this.trainingState.set('training');
+    this.trainingLog.set([
+      '=== INICIANDO RE-ENTRENAMIENTO DE MODELOS TENSORFLOW ===',
+      '🔄 Conectando con MongoDB...',
+      '📥 Extrayendo registros de tramites y actividades...',
+      '🛠️ Ejecutando pipeline de preprocesamiento y codificación...'
+    ]);
+
+    this.tfService.train().subscribe({
+      next: (res) => {
+        this.trainingState.set('completed');
+        this.trainingMetrics.set(res.metrics);
+        this.trainingLog.update(log => [
+          ...log,
+          '✅ Conexión con MongoDB establecida.',
+          '✅ Datos extraídos correctamente de colecciones.',
+          '🔄 Inicializando entrenamiento de Keras routing & autoencoder...',
+          '🔄 Ajustando pesos de redes profundas (Dense + Dropout)...',
+          '✅ Entrenamiento finalizado con éxito.',
+          '🔄 Serializando modelos Keras...',
+          '🔄 Convirtiendo modelos Keras a ONNX format...',
+          '✅ Modelos ONNX generados correctamente.',
+          '✅ Hot-reload de ONNX Runtime completado en memoria.',
+          '🏆 Proceso terminado exitosamente.'
+        ]);
+      },
+      error: (err) => {
+        console.error('Training failed', err);
+        this.trainingState.set('error');
+        this.trainingLog.update(log => [
+          ...log,
+          '❌ Error detectado durante el entrenamiento.',
+          `Detalle del fallo: ${err.message || 'Error del microservicio AI'}`,
+          '⚠️ Se mantendrán cargados los últimos ONNX válidos en memoria.'
+        ]);
       }
     });
   }

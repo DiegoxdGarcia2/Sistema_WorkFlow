@@ -5,6 +5,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import type { EChartsOption } from 'echarts';
 
 import { MlAnalysisService, InsightsResult } from '../../services/ml-analysis.service';
+import { AiAssistantService } from '../../services/ai-assistant.service';
 
 @Component({
   selector: 'app-ml-analytics',
@@ -133,9 +134,17 @@ import { MlAnalysisService, InsightsResult } from '../../services/ml-analysis.se
                 <div class="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">✨</div>
                 <h3 class="font-bold text-white tracking-tight">Análisis de IA</h3>
               </div>
-              <button (click)="cargarInsights()" class="text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/10 hover:bg-indigo-500/20 p-2 rounded-xl" title="Regenerar">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-              </button>
+              <div class="flex items-center gap-2">
+                <button (click)="narrarInsights()" 
+                        class="text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/10 hover:bg-indigo-500/20 p-2 rounded-xl flex items-center gap-1.5"
+                        [title]="isNarrating ? 'Detener Narración' : 'Escuchar Conclusiones'">
+                  <span>{{ isNarrating ? '⏹️' : '🔊' }}</span>
+                  <span class="text-[9px] font-bold uppercase tracking-wider">Escuchar</span>
+                </button>
+                <button (click)="cargarInsights()" class="text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/10 hover:bg-indigo-500/20 p-2 rounded-xl" title="Regenerar">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </button>
+              </div>
             </div>
 
             <!-- Scrollable Content -->
@@ -183,9 +192,25 @@ import { MlAnalysisService, InsightsResult } from '../../services/ml-analysis.se
 export class MlAnalyticsComponent implements OnInit {
   svc = inject(MlAnalysisService);
   private sanitizer = inject(DomSanitizer);
+  private aiSvc = inject(AiAssistantService);
 
   insights = this.svc.lastInsights;
   error = signal<string | null>(null);
+  isNarrating = false;
+
+  narrarInsights() {
+    if (this.isNarrating) {
+      this.aiSvc.detenerHablar();
+      this.isNarrating = false;
+    } else {
+      const text = this.insights()?.insightsNaturales || '';
+      const cleanText = text.replace(/<[^>]*>/g, '').replace(/\*/g, '');
+      if (cleanText) {
+        this.aiSvc.hablar(cleanText);
+        this.isNarrating = true;
+      }
+    }
+  }
 
   chartOptions = computed<EChartsOption>(() => {
     const data = this.insights();

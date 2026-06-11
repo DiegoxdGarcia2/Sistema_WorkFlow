@@ -1,8 +1,9 @@
 import { Injectable, signal, NgZone } from '@angular/core';
 import { Client, Message, StompHeaders } from '@stomp/stompjs';
 import { AuthService } from './auth.service';
-import { Subject, throttleTime } from 'rxjs';
+import { Subject, throttleTime, Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { HttpClient } from '@angular/common/http';
 
 export interface ColaboradorDTO {
   id: string;
@@ -48,6 +49,7 @@ export class ColaboracionService {
   public docEdits$ = new Subject<SocketMessageDTO>();
   public docCursors$ = new Subject<SocketMessageDTO>();
   public docLogs$ = new Subject<SocketMessageDTO>();
+  public yjsUpdates$ = new Subject<SocketMessageDTO>();
 
   // ── Throttling para eventos de arrastre (docs/WEBSOCKET_RULES.md) ──
   private dragSubject = new Subject<{ nodoId: string; posX: number; posY: number }>();
@@ -60,23 +62,24 @@ export class ColaboracionService {
 
   constructor(
     private authSvc: AuthService,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private http: HttpClient
   ) {
     // ── throttleTime(80ms) para drag → emisión consistente cada 80ms ──
     this.dragSubject.pipe(throttleTime(80)).subscribe(({ nodoId, posX, posY }) => {
       this.emitNodeMoved(nodoId, posX, posY);
     });
 
-    this.cursorSubject.pipe(throttleTime(150)).subscribe(({ x, y }) => {
+    this.cursorSubject.pipe(throttleTime(80)).subscribe(({ x, y }) => {
       this.emitCursorMoved(x, y);
     });
 
     // ── Throttling para edición colaborativa de documentos ──
-    this.docEditSubject.pipe(throttleTime(150, undefined, { leading: true, trailing: true })).subscribe((content) => {
+    this.docEditSubject.pipe(throttleTime(80, undefined, { leading: true, trailing: true })).subscribe((content) => {
       this.emitDocEdit(content);
     });
 
-    this.docCursorSubject.pipe(throttleTime(200)).subscribe((pos) => {
+    this.docCursorSubject.pipe(throttleTime(80)).subscribe((pos) => {
       this.emitDocCursor(pos);
     });
   }
@@ -331,13 +334,25 @@ export class ColaboracionService {
   }
 
   desconectarDocRoom() {
-    if (this.clientDoc && this.clientDoc.connected && this.currentDocRoom) {
+    if (this.clientDoc) {
       const me = this.getMe();
-      this.clientDoc.publish({
-        destination: `/app/documento/${this.currentDocRoom}/leave`,
-        body: JSON.stringify(me)
-      });
+      try {
+        if (this.clientDoc.connected && this.currentDocRoom) {
+          this.clientDoc.publish({
+            destination: `/app/documento/${this.currentDocRoom}/leave`,
+            body: JSON.stringify(me)
+          });
+        }
+      } catch (e) {
+        console.warn('Error al enviar mensaje de salida del documento:', e);
+      }
+
+      // Desvincular callbacks para evitar reconexión o disparos de eventos asíncronos tardíos
+      this.clientDoc.onConnect = () => {};
+      this.clientDoc.onWebSocketClose = () => {};
+      this.clientDoc.onStompError = () => {};
       this.clientDoc.deactivate();
+      this.clientDoc = null;
     }
     this.currentDocRoom = null;
     this.colaboradoresDoc.set([]);
@@ -359,6 +374,9 @@ export class ColaboracionService {
         break;
       case 'DOC_LOG':
         this.docLogs$.next(msg);
+        break;
+      case 'YJS_UPDATE':
+        this.yjsUpdates$.next(msg);
         break;
     }
   }
@@ -414,5 +432,24 @@ export class ColaboracionService {
       destination: `/app/documento/${this.currentDocRoom}/cursor`,
       body: JSON.stringify(msg)
     });
+  }
+
+  enviarYjsUpdate(docId: string, syncType: string, base64Data: string) {
+    if (!this.clientDoc || !this.clientDoc.connected) return;
+
+    const msg: SocketMessageDTO = {
+      type: 'YJS_UPDATE',
+      colaborador: this.getMe(),
+      payload: { syncType, base64Data }
+    };
+
+    this.clientDoc.publish({
+      destination: `/app/documento/${docId}/edit`,
+      body: JSON.stringify(msg)
+    });
+  }
+
+  obtenerEditoresActivos(docId: string): Observable<ColaboradorDTO[]> {
+    return this.http.get<ColaboradorDTO[]>(`${environment.apiUrl}/colaboracion/documento/${docId}/colaboradores`);
   }
 }

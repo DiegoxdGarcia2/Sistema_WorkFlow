@@ -497,6 +497,7 @@ export class VoiceFillerModalComponent implements OnDestroy {
     const formData = new FormData();
     formData.append('file', audioBlob, 'form_voice.webm');
     formData.append('fields', JSON.stringify(schema));
+    formData.append('local_transcription', this.transcription || '');
 
     // Llamada directa HTTP para mayor control y timeout explícito
     this.http.post<{ transcription: string, values: any }>(

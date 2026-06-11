@@ -52,10 +52,22 @@ def cargar_datos(politica_id: Optional[str] = None, tenant_id: Optional[str] = N
         return pd.DataFrame()
         
     query = {"estado": "HECHO", "asignadoEn": {"$ne": None}, "completadoEn": {"$ne": None}}
-    if politica_id:
-        query["politicaId"] = politica_id
     if tenant_id:
         query["tenantId"] = tenant_id
+
+    if politica_id:
+        # Resolver trámites asociados a la política
+        tramites_coll = get_collection("tramites")
+        if tramites_coll is not None:
+            tramite_query = {"politicaId": politica_id}
+            if tenant_id:
+                tramite_query["tenantId"] = tenant_id
+            cursor_tramites = tramites_coll.find(tramite_query, {"_id": 1})
+            tramite_ids = [str(t["_id"]) for t in cursor_tramites]
+            query["tramiteId"] = {"$in": tramite_ids}
+        else:
+            query["tramiteId"] = {"$in": []}
+
         
     # Usar projection para traer solo lo necesario
     cursor = coll.find(
@@ -169,49 +181,52 @@ def entrenar_predictor(df: pd.DataFrame) -> Dict[str, Any]:
         "confianza": 0.0,
         "factoresRelevantes": []
     }
-    
-    if df.empty or 'tramiteId' not in df.columns:
-        return placeholder
-        
-    # Necesitamos agrupar a nivel de trámite para predecir cuánto tarda un trámite completo
-    # Eliminamos registros sin tramiteId
-    df_tramites = df.dropna(subset=['tramiteId']).copy()
-    
-    if df_tramites.empty:
-        return placeholder
-        
-    # Extraer features por trámite
-    # 1. Total de duración (Target)
-    # 2. Conteo de tareas (Feature)
-    # 3. Departamento más frecuente (Feature categórica)
-    # 4. Hora del día de inicio del trámite (Feature)
-    
-    tramites_stats = df_tramites.groupby('tramiteId').agg(
-        duracion_total_min=('duracion_minutos', 'sum'),
-        num_tareas=('actividadId', 'count'),
-        inicio_tramite=('asignadoEn', 'min')
-    ).reset_index()
-    
-    # Obtener el departamento dominante para cada trámite
-    departamentos = df_tramites.groupby('tramiteId')['departamentoId'].agg(lambda x: x.mode()[0] if not x.mode().empty else "UNKNOWN").reset_index()
-    tramites_stats = pd.merge(tramites_stats, departamentos, on='tramiteId')
-    
-    # Extraer feature temporal
-    tramites_stats['hora_inicio'] = tramites_stats['inicio_tramite'].dt.hour
-    
-    # Necesitamos suficientes datos para entrenar (ej. 5 trámites)
-    if len(tramites_stats) < 5:
-        # Fallback analítico si no hay datos para ML
-        mean_dur = tramites_stats['duracion_total_min'].mean()
-        dias_promedio = float(mean_dur / (60.0 * 24.0)) if (len(tramites_stats) > 0 and not pd.isna(mean_dur)) else 0.0
-        return {
-            "duracionEstimadaDias": round(dias_promedio, 2),
-            "confianza": 0.0,
-            "factoresRelevantes": ["Datos insuficientes para ML. Se usa promedio simple."]
-        }
-        
-    # Preparar datos para ML
     try:
+        if df.empty or 'tramiteId' not in df.columns:
+            return placeholder
+            
+        # Necesitamos agrupar a nivel de trámite para predecir cuánto tarda un trámite completo
+        # Eliminamos registros sin tramiteId
+        df_tramites = df.dropna(subset=['tramiteId']).copy()
+        
+        if df_tramites.empty:
+            return placeholder
+            
+        # Extraer features por trámite
+        # 1. Total de duración (Target)
+        # 2. Conteo de tareas (Feature)
+        # 3. Departamento más frecuente (Feature categórica)
+        # 4. Hora del día de inicio del trámite (Feature)
+        
+        tramites_stats = df_tramites.groupby('tramiteId').agg(
+            duracion_total_min=('duracion_minutos', 'sum'),
+            num_tareas=('actividadId', 'count'),
+            inicio_tramite=('asignadoEn', 'min')
+        ).reset_index()
+        
+        # Obtener el departamento dominante para cada trámite
+        departamentos = df_tramites.groupby('tramiteId')['departamentoId'].agg(lambda x: x.mode()[0] if not x.mode().empty else "UNKNOWN").reset_index()
+        tramites_stats = pd.merge(tramites_stats, departamentos, on='tramiteId')
+        
+        # Extraer feature temporal
+        tramites_stats['hora_inicio'] = tramites_stats['inicio_tramite'].dt.hour
+        
+        # Necesitamos suficientes datos para entrenar (ej. 5 trámites)
+        if len(tramites_stats) < 5:
+            # Fallback analítico si no hay datos para ML
+            mean_dur = tramites_stats['duracion_total_min'].mean()
+            dias_promedio = float(mean_dur / (60.0 * 24.0)) if (len(tramites_stats) > 0 and not pd.isna(mean_dur)) else 0.0
+            return {
+                "duracionEstimadaDias": round(dias_promedio, 2),
+                "confianza": 0.0,
+                "factoresRelevantes": ["Datos insuficientes para ML. Se usa promedio simple."]
+            }
+            
+        import numpy as np
+        # Codificar de forma cíclica la hora de inicio
+        tramites_stats['hora_sin'] = np.sin(2 * np.pi * tramites_stats['hora_inicio'] / 24.0)
+        tramites_stats['hora_cos'] = np.cos(2 * np.pi * tramites_stats['hora_inicio'] / 24.0)
+        
         # Codificar variables categóricas
         le = LabelEncoder()
         # Manejar posibles valores nulos
@@ -220,7 +235,7 @@ def entrenar_predictor(df: pd.DataFrame) -> Dict[str, Any]:
         tramites_stats['departamentoId'] = tramites_stats['departamentoId'].astype(str)
         tramites_stats['dep_encoded'] = le.fit_transform(tramites_stats['departamentoId'])
         
-        X = tramites_stats[['num_tareas', 'dep_encoded', 'hora_inicio']]
+        X = tramites_stats[['num_tareas', 'dep_encoded', 'hora_sin', 'hora_cos']]
         y = tramites_stats['duracion_total_min']
         
         # Entrenar modelo
@@ -237,7 +252,7 @@ def entrenar_predictor(df: pd.DataFrame) -> Dict[str, Any]:
         
         # Extraer importancia de features
         importancias = model.feature_importances_
-        nombres_features = ['Cantidad de Tareas', 'Departamento Asignado', 'Hora de Inicio']
+        nombres_features = ['Cantidad de Tareas', 'Departamento Asignado', 'Hora (Seno)', 'Hora (Coseno)']
         
         factores = []
         for i, imp in enumerate(importancias):

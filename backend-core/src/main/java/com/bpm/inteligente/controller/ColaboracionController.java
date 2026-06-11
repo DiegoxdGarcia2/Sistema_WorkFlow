@@ -120,4 +120,11 @@ public class ColaboracionController {
         // Retransmitir log de actividad (join, edit, undo, redo, format) a la sala
         colaboracionService.publishToDocRoom(docId, message);
     }
+
+    @org.springframework.web.bind.annotation.GetMapping("/api/colaboracion/documento/{docId}/colaboradores")
+    @org.springframework.web.bind.annotation.ResponseBody
+    public Set<ColaboradorDTO> getDocColaboradores(@org.springframework.web.bind.annotation.PathVariable String docId) {
+        return colaboracionService.getDocColaboradores(docId);
+    }
 }
+

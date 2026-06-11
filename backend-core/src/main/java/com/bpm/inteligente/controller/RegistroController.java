@@ -92,6 +92,7 @@ public class RegistroController {
         String actNombre = "Actividad desconocida";
         String clienteNombre = null;
         String politicaId = null;
+        List<String> documentosRequeridos = null;
         try {
             Tramite tramite = tramiteService.buscarPorId(registro.getTramiteId());
             if (tramite != null) {
@@ -99,17 +100,20 @@ public class RegistroController {
                 politicaId = tramite.getPoliticaId();
                 PoliticaNegocio politica = politicaService.buscarPorId(tramite.getPoliticaId());
                 if (politica != null && politica.getCalles() != null) {
-                    actNombre = politica.getCalles().stream()
+                    Actividad actObj = politica.getCalles().stream()
                             .flatMap(c -> c.getActividades().stream())
                             .filter(a -> a.getId().equals(registro.getActividadId()))
                             .findFirst()
-                            .map(Actividad::getNombre)
-                            .orElse("Actividad desconocida");
+                            .orElse(null);
+                    if (actObj != null) {
+                        actNombre = actObj.getNombre();
+                        documentosRequeridos = actObj.getDocumentosRequeridos();
+                    }
                 }
             }
         } catch (Exception e) {
             // Silently fall back to defaults
         }
-        return DomainMapper.toDTO(registro, actNombre, clienteNombre, politicaId);
+        return DomainMapper.toDTO(registro, actNombre, clienteNombre, politicaId, documentosRequeridos);
     }
 }

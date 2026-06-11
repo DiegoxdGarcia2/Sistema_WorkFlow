@@ -34,6 +34,11 @@ public class TramiteService {
      */
     @Transactional
     public Tramite iniciar(String politicaId, String usuarioId, String clienteId, String documentoCliente, String clienteNombre) {
+        return iniciar(politicaId, usuarioId, clienteId, documentoCliente, clienteNombre, null);
+    }
+
+    @Transactional
+    public Tramite iniciar(String politicaId, String usuarioId, String clienteId, String documentoCliente, String clienteNombre, List<RegistroActividad.ArchivoInfo> archivosIniciales) {
         PoliticaNegocio politica = politicaService.buscarPorId(politicaId);
         Usuario usuario = usuarioRepo.findById(usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario", "id", usuarioId));
@@ -114,10 +119,20 @@ public class TramiteService {
             }
         }
 
+        // Generar un código de seguimiento único corto y amigable (ej. IME-58472)
+        String initials = getPolicyInitials(politica.getNombre());
+        String randomDigits = String.format("%05d", new java.util.Random().nextInt(100000));
+        String code = initials + "-" + randomDigits;
+        while (tramiteRepo.existsByCodigoSeguimiento(code)) {
+            randomDigits = String.format("%05d", new java.util.Random().nextInt(100000));
+            code = initials + "-" + randomDigits;
+        }
+
         // 3. Crear el trámite con datos del cliente si vienen (o datos seguros recuperados del cliente)
         Tramite tramite = Tramite.builder()
                 .politicaId(politicaId)
                 .tenantId(politica.getTenantId())
+                .codigoSeguimiento(code)
                 .estado(EstadoTramite.INICIADO)
                 .clienteId(clienteId)
                 .documentoCliente(documentoCliente)
@@ -137,6 +152,7 @@ public class TramiteService {
                 .asignadoEn(java.time.Instant.now())
                 .ejecutadoPorId(isCliente ? null : usuario.getId())
                 .ejecutadoPor(isCliente ? null : (usuario.getNombre() + " " + (usuario.getApellido() != null ? usuario.getApellido() : "")))
+                .archivos(archivosIniciales != null ? archivosIniciales : new java.util.ArrayList<>())
                 .build();
         registroRepo.save(primerRegistro);
 
@@ -146,6 +162,17 @@ public class TramiteService {
                 "TRAMITE_INICIADO",
                 "Tu trámite de '" + politica.getNombre() + "' ha sido iniciado con éxito."
         );
+
+        if (politica.getRequisitosIniciales() != null && !politica.getRequisitosIniciales().isEmpty()) {
+            String reqMsg = "Se requiere que subas los siguientes documentos de prerrequisitos: " + String.join(", ", politica.getRequisitosIniciales());
+            notificationService.enviarNotificacionDocumentoRequerido(
+                    tramite,
+                    "PREREQUISITOS_REQUERIDOS",
+                    reqMsg,
+                    politica.getRequisitosIniciales(),
+                    null
+            );
+        }
 
         return tramite;
     }
@@ -350,5 +377,24 @@ public class TramiteService {
                 .findFirst()
                 .orElseThrow(() -> new BusinessRuleException(
                         "La política no tiene una actividad de tipo INICIO."));
+    }
+
+    private String getPolicyInitials(String nombre) {
+        if (nombre == null || nombre.trim().isEmpty()) {
+            return "TR";
+        }
+        StringBuilder initials = new StringBuilder();
+        for (String word : nombre.split("\\s+")) {
+            if (!word.isEmpty() && Character.isUpperCase(word.charAt(0))) {
+                initials.append(word.charAt(0));
+            } else if (!word.isEmpty() && word.length() > 2) {
+                initials.append(Character.toUpperCase(word.charAt(0)));
+            }
+        }
+        String res = initials.toString().replaceAll("[^A-Z]", "");
+        if (res.length() > 4) {
+            res = res.substring(0, 4);
+        }
+        return res.isEmpty() ? "TR" : res;
     }
 }

@@ -55,12 +55,15 @@ def preparar_features(df_tramites, df_registros):
         inicio = reg.get("asignadoEn")
         fin = reg.get("completadoEn")
         
-        if not inicio or not fin:
+        if pd.isna(inicio) or pd.isna(fin):
             continue
             
         duracion_minutos = (fin - inicio).total_seconds() / 60.0
+        if np.isnan(duracion_minutos) or np.isinf(duracion_minutos):
+            continue
+            
         if duracion_minutos < 0:
-            duracion_minutos = 0
+            duracion_minutos = 0.0
             
         # Features
         hora_del_dia = inicio.hour
@@ -163,7 +166,7 @@ def entrenar_modelos(df):
     )
     
     print("Entrenando Modelo Multi-Output...")
-    model_mo.fit(
+    history_mo = model_mo.fit(
         X_train, 
         {"duracion_output": y_dur_train, "prioridad_output": y_pri_train, "ruta_output": y_ruta_train},
         validation_data=(X_test, {"duracion_output": y_dur_test, "prioridad_output": y_pri_test, "ruta_output": y_ruta_test}),
@@ -174,20 +177,28 @@ def entrenar_modelos(df):
     
     # --- MODELO 2: AUTOENCODER (Detección de Anomalías) ---
     print("Entrenando Autoencoder para Anomalías...")
-    autoencoder = Sequential([
-        Input(shape=(X.shape[1],)),
-        Dense(16, activation='relu'),
-        Dense(8, activation='relu'),
-        Dense(4, activation='relu'),
-        Dense(8, activation='relu'),
-        Dense(16, activation='relu'),
-        Dense(X.shape[1], activation='linear')
-    ])
+    input_ae = Input(shape=(X.shape[1],), name="input_features")
+    x_ae = Dense(16, activation='relu')(input_ae)
+    x_ae = Dense(8, activation='relu')(x_ae)
+    x_ae = Dense(4, activation='relu')(x_ae)
+    x_ae = Dense(8, activation='relu')(x_ae)
+    x_ae = Dense(16, activation='relu')(x_ae)
+    output_ae = Dense(X.shape[1], activation='linear', name="output_features")(x_ae)
+    autoencoder = Model(inputs=input_ae, outputs=output_ae)
     
     autoencoder.compile(optimizer='adam', loss='mse')
-    autoencoder.fit(X_train, X_train, epochs=20, batch_size=32, validation_data=(X_test, X_test), verbose=0)
+    history_ae = autoencoder.fit(X_train, X_train, epochs=20, batch_size=32, validation_data=(X_test, X_test), verbose=0)
     
-    return model_mo, autoencoder, scaler, le_depto, le_politica, le_actividad
+    # Extraer métricas finales de val/train
+    metrics = {
+        "total_samples": int(df.shape[0]),
+        "val_duracion_mae": float(history_mo.history.get('val_duracion_output_mae', history_mo.history.get('val_duracion_output_mean_absolute_error', [0.0]))[-1]),
+        "val_prioridad_accuracy": float(history_mo.history.get('val_prioridad_output_accuracy', [0.0])[-1]),
+        "val_ruta_accuracy": float(history_mo.history.get('val_ruta_output_accuracy', [0.0])[-1]),
+        "val_anomaly_loss": float(history_ae.history.get('val_loss', [0.0])[-1])
+    }
+    
+    return model_mo, autoencoder, scaler, le_depto, le_politica, le_actividad, metrics
 
 def exportar_artefactos(model_mo, autoencoder, scaler, le_depto, le_politica, le_actividad):
     print("[4/5] Exportando Modelos y Scalers...")
@@ -222,9 +233,10 @@ def main():
     if df_features.shape[0] < 50:
         print("Advertencia: Muy pocos datos. El modelo podría hacer overfitting.")
         
-    model_mo, autoencoder, scaler, le_depto, le_politica, le_actividad = entrenar_modelos(df_features)
+    model_mo, autoencoder, scaler, le_depto, le_politica, le_actividad, metrics = entrenar_modelos(df_features)
     
     exportar_artefactos(model_mo, autoencoder, scaler, le_depto, le_politica, le_actividad)
+    print("Métricas de entrenamiento:", metrics)
     
     print("=" * 60)
     print("  ENTRENAMIENTO FINALIZADO")

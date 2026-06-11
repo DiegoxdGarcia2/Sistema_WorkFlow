@@ -16,6 +16,12 @@ import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
+
 import java.time.Duration;
 import java.util.logging.Logger;
 
@@ -25,6 +31,40 @@ import java.util.logging.Logger;
 public class RedisConfig {
 
     private static final Logger log = Logger.getLogger(RedisConfig.class.getName());
+
+    @Value("${spring.data.redis.host:localhost}")
+    private String redisHost;
+
+    @Value("${spring.data.redis.port:6379}")
+    private int redisPort;
+
+    @Value("${spring.data.redis.password:}")
+    private String redisPassword;
+
+    @Bean
+    public LettuceConnectionFactory redisConnectionFactory() {
+        RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
+        redisConfig.setHostName(redisHost);
+        redisConfig.setPort(redisPort);
+        if (redisPassword != null && !redisPassword.trim().isEmpty()) {
+            redisConfig.setPassword(redisPassword);
+        }
+
+        GenericObjectPoolConfig<?> poolConfig = new GenericObjectPoolConfig<>();
+        poolConfig.setMaxTotal(16);
+        poolConfig.setMaxIdle(8);
+        poolConfig.setMinIdle(2);
+        poolConfig.setMaxWait(Duration.ofMillis(2000));
+
+        LettucePoolingClientConfiguration clientConfig = LettucePoolingClientConfiguration.builder()
+                .poolConfig(poolConfig)
+                .commandTimeout(Duration.ofSeconds(2))
+                .shutdownTimeout(Duration.ofMillis(100))
+                .build();
+
+        return new LettuceConnectionFactory(redisConfig, clientConfig);
+    }
+
 
     @Bean
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {

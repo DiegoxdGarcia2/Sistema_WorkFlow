@@ -13,6 +13,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RepositorioDTO {
-    // Key: PoliticaNombre -> Key: ClienteNombre -> List of DocumentoVersionado
-    private Map<String, Map<String, List<DocumentoVersionado>>> agrupacion;
+    // Key: PoliticaNombre -> Key: ClienteNombre -> Key: TramiteLabel -> List of DocumentoVersionado
+    private Map<String, Map<String, Map<String, List<DocumentoVersionado>>>> agrupacion;
 }

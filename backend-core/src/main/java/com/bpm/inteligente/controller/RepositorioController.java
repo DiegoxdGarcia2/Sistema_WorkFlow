@@ -58,8 +58,8 @@ public class RepositorioController {
         Map<String, Tramite> tramiteMap = tramites.stream()
             .collect(Collectors.toMap(Tramite::getId, t -> t, (a, b) -> a));
 
-        // Key: PoliticaNombre -> Key: ClienteNombre -> List<DocumentoVersionado>
-        Map<String, Map<String, List<DocumentoVersionado>>> agrupacion = new HashMap<>();
+        // Key: PoliticaNombre -> Key: ClienteNombre -> Key: TramiteLabel -> List<DocumentoVersionado>
+        Map<String, Map<String, Map<String, List<DocumentoVersionado>>>> agrupacion = new HashMap<>();
 
         for (DocumentoVersionado doc : documentos) {
             Tramite t = tramiteMap.get(doc.getTramiteId());
@@ -69,11 +69,26 @@ public class RepositorioController {
             String clienteNombre = t.getClienteNombre() != null && !t.getClienteNombre().trim().isEmpty() 
                                    ? t.getClienteNombre() : "Cliente Desconocido";
 
-            agrupacion.putIfAbsent(politicaNombre, new HashMap<>());
-            Map<String, List<DocumentoVersionado>> clientesMap = agrupacion.get(politicaNombre);
+            String rawCodigo = t.getCodigoSeguimiento() != null ? t.getCodigoSeguimiento() : t.getId();
+            String shortCodigo = rawCodigo.length() > 8 ? rawCodigo.substring(0, 8) : rawCodigo;
             
-            clientesMap.putIfAbsent(clienteNombre, new ArrayList<>());
-            clientesMap.get(clienteNombre).add(doc);
+            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+                    .withZone(java.time.ZoneId.systemDefault());
+            
+            String fechaInicioStr = t.getIniciadoEn() != null ? formatter.format(t.getIniciadoEn()) : "Fecha Desconocida";
+            String fechaFinStr = t.getFinalizadoEn() != null ? " al " + formatter.format(t.getFinalizadoEn()) : " (En Curso)";
+            
+            String tramiteLabel = String.format("Trámite de %s [#%s] (Desde %s%s)", 
+                    politicaNombre, shortCodigo, fechaInicioStr, fechaFinStr);
+
+            agrupacion.putIfAbsent(politicaNombre, new HashMap<>());
+            Map<String, Map<String, List<DocumentoVersionado>>> clientesMap = agrupacion.get(politicaNombre);
+            
+            clientesMap.putIfAbsent(clienteNombre, new HashMap<>());
+            Map<String, List<DocumentoVersionado>> tramitesMap = clientesMap.get(clienteNombre);
+            
+            tramitesMap.putIfAbsent(tramiteLabel, new ArrayList<>());
+            tramitesMap.get(tramiteLabel).add(doc);
         }
 
         return ResponseEntity.ok(RepositorioDTO.builder().agrupacion(agrupacion).build());

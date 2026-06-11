@@ -21,7 +21,7 @@ export class WorkflowService {
   historial = signal<RegistroActividadDTO[]>([]);
   tramites = signal<TramiteDTO[]>([]);
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) { }
 
   limpiarEstado() {
     this.tareasPendientes.set([]);
@@ -60,7 +60,7 @@ export class WorkflowService {
 
   cargarBandejaUnificada(userId: string, deptoId?: string): Observable<RegistroActividadDTO[]> {
     const personales$ = this.http.get<RegistroActividadDTO[]>(`${this.registrosUrl}/pendientes/${userId}`);
-    
+
     if (!deptoId) {
       return personales$.pipe(tap(data => this.tareasPendientes.set(data)));
     }
@@ -82,6 +82,10 @@ export class WorkflowService {
     return this.http
       .get<RegistroActividadDTO[]>(`${this.registrosUrl}/bandeja-departamento/${deptoId}`)
       .pipe(tap(data => this.tareasPendientes.set(data)));
+  }
+
+  obtenerBandejaDepartamento(deptoId: string): Observable<RegistroActividadDTO[]> {
+    return this.http.get<RegistroActividadDTO[]>(`${this.registrosUrl}/bandeja-departamento/${deptoId}`);
   }
 
   tomarTarea(registroId: string, userId: string): Observable<RegistroActividadDTO> {

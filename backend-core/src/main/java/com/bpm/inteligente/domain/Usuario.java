@@ -50,6 +50,9 @@ public class Usuario implements UserDetails {
     private RolUsuario rol;
     private String clienteId;
 
+    @Indexed
+    private String fcmToken;
+
     @Builder.Default
     private boolean activo = true;
 

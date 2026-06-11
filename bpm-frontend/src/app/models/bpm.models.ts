@@ -44,6 +44,7 @@ export interface Actividad {
   posY?: number;
 
   plantillaId?: string; // ID de la plantilla de formulario vinculada
+  documentosRequeridos?: string[];
 }
 
 export interface Calle {
@@ -86,6 +87,7 @@ export interface PoliticaDTO {
   estaActiva: boolean;
   calles: Calle[];
   transiciones: Transicion[];
+  requisitosIniciales?: string[];
   creadoPor?: string;
   creadoEn: string;
   modificadoPor?: string;
@@ -137,6 +139,7 @@ export interface RegistroActividadDTO {
   completadoEn: string | null;
   clienteNombre?: string;
   politicaId?: string;
+  documentosRequeridos?: string[];
 }
 
 // ── Requests ──
@@ -147,6 +150,7 @@ export interface IniciarTramiteRequest {
   clienteId?: string;
   documentoCliente?: string;
   clienteNombre?: string;
+  archivosIniciales?: any[];
 }
 
 // ── Cliente ──

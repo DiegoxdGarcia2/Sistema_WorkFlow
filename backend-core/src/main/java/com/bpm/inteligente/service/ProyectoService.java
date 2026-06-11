@@ -6,6 +6,8 @@ import com.bpm.inteligente.exception.ResourceNotFoundException;
 import com.bpm.inteligente.repository.ProyectoRepository;
 import com.bpm.inteligente.repository.TenantRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +23,7 @@ public class ProyectoService {
     private final TenantRepository tenantRepo;
 
     @Transactional
+    @CacheEvict(value = {"proyectos", "proyectos_por_tenant"}, allEntries = true)
     public Proyecto crear(Proyecto proyecto) {
         if (!tenantRepo.existsById(proyecto.getTenantId())) {
             throw new ResourceNotFoundException("Tenant", "id", proyecto.getTenantId());
@@ -38,6 +41,7 @@ public class ProyectoService {
     }
 
     @Transactional
+    @CacheEvict(value = {"proyectos", "proyectos_por_tenant"}, allEntries = true)
     public Proyecto actualizar(String proyectoId, Proyecto datos) {
         Proyecto existente = buscarPorId(proyectoId);
         existente.setNombre(datos.getNombre());
@@ -50,6 +54,7 @@ public class ProyectoService {
     }
 
     @Transactional
+    @CacheEvict(value = {"proyectos", "proyectos_por_tenant"}, allEntries = true)
     public void eliminar(String proyectoId) {
         if (!proyectoRepo.existsById(proyectoId)) {
             throw new ResourceNotFoundException("Proyecto", "id", proyectoId);
@@ -57,11 +62,13 @@ public class ProyectoService {
         proyectoRepo.deleteById(proyectoId);
     }
 
+    @Cacheable(value = "proyectos", key = "#id")
     public Proyecto buscarPorId(String id) {
         return proyectoRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Proyecto", "id", id));
     }
 
+    @Cacheable(value = "proyectos_por_tenant", key = "#tenantId")
     public List<Proyecto> listarPorTenant(String tenantId) {
         return proyectoRepo.findByTenantIdOrderByCreadoEnDesc(tenantId);
     }

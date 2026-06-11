@@ -125,12 +125,14 @@ class TramitesListScreen extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Notificaciones Recientes',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
+                    const Expanded(
+                      child: Text(
+                        'Notificaciones Recientes',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
+                        ),
                       ),
                     ),
                     if (notifications.isNotEmpty)
@@ -478,13 +480,16 @@ class TramitesListScreen extends ConsumerWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
             icon: const Icon(Icons.auto_awesome),
             label: const Text('Asistente IA', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-            onPressed: () {
-              showModalBottomSheet(
+            onPressed: () async {
+              final result = await showModalBottomSheet<bool>(
                 context: context,
                 isScrollControlled: true,
                 backgroundColor: Colors.transparent,
                 builder: (context) => const AssistantBottomSheet(),
               );
+              if (result == true) {
+                await ref.read(syncWorkerProvider).pullTramites();
+              }
             },
           ),
         ),
