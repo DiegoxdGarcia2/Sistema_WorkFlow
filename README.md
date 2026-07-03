@@ -7,6 +7,9 @@
 ### 🪐 ACCESO RÁPIDO A LA PLATAFORMA EN PRODUCCIÓN
 ## 🔗 [¡ENTRAR A BPM INTELIGENTE AQUÍ!](https://bpm-frontend-238791343286.us-central1.run.app)
 
+admin@cre.com
+admin123
+
 ---
 
 </div>
