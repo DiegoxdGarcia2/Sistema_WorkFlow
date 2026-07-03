@@ -294,7 +294,7 @@ export class EditorColaborativoComponent implements OnInit, OnDestroy {
 
               if (serverBytes.length > 0) {
                 Y.applyUpdate(this.ydoc, serverBytes, this.provider);
-                console.log('✅ [YJS] Aplicada actualización inicial del servidor');
+                console.log('[YJS] Aplicada actualización inicial del servidor');
               }
             } else if (res.contenidoHtml) {
               // Fallback si no hay binario pero hay HTML previo

@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import jakarta.servlet.DispatcherType;
+
 /**
  * Configuración de seguridad Enterprise.
  *   - STATELESS: No se crean sesiones HTTP.
@@ -44,9 +46,11 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
+                .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/tenants").permitAll() // Público para login y dashboards
                 .requestMatchers("/api/archivos/download/**").permitAll() // URLs públicas y ofuscadas por UUID
+                .requestMatchers("/api/archivos/test-s3").permitAll() // Diagnóstico S3
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/ws-bpm/**", "/ws-bpm-sockjs/**").permitAll()
@@ -69,8 +73,10 @@ public class SecurityConfig {
             origins.add(corsAllowedOrigin);
         }
         configuration.setAllowedOrigins(origins);
+        // Also allow any Cloud Run service as origin (for direct WebSocket connections)
+        configuration.setAllowedOriginPatterns(Arrays.asList("https://*.run.app"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Tenant-Id", "X-User-Id"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Tenant-Id", "X-User-Id", "Upgrade", "Connection"));
         configuration.setExposedHeaders(Arrays.asList("Authorization"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

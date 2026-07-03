@@ -36,7 +36,7 @@ _cors_origins = [
     "http://localhost:4200",
     "http://localhost:8080",
 ]
-for env_key in ("CORS_ORIGIN", "BACKEND_ORIGIN"):
+for env_key in ("CORS_ORIGIN", "BACKEND_ORIGIN", "CORS_ALLOWED_ORIGIN"):
     val = os.getenv(env_key, "")
     if val:
         _cors_origins.append(val)
@@ -48,6 +48,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 # ── Seguridad inter-servicios ────────────────────────────────────

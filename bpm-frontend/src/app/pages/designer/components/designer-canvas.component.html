@@ -43,7 +43,7 @@
     </div>
 
     <!-- Base SVG Connections -->
-    <svg class="absolute inset-0 w-full h-full pointer-events-none z-[5]" [style.height.px]="getCanvasH()">
+    <svg class="absolute inset-0 w-full h-full pointer-events-none z-[5] text-slate-400" [style.height.px]="getCanvasH()">
       <defs>
         <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="currentColor"/></marker>
       </defs>
@@ -59,7 +59,7 @@
               [style.color]="conn.color"
               [ngClass]="{'conn-selected': transicionSeleccionada()?.id === conn.id}"/>
         <!-- Label -->
-        <text *ngIf="conn.label" [attr.x]="conn.labelX" [attr.y]="conn.labelY" fill="#94a3b8" font-size="10" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="500">{{ conn.label }}</text>
+        <text *ngIf="conn.label" [attr.x]="conn.labelX" [attr.y]="conn.labelY" class="fill-slate-400 font-medium" font-size="10" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif">{{ conn.label }}</text>
       </ng-container>
       <!-- Temp connection line -->
       <line *ngIf="(connMode().active || isCreatingConn) && getSourceCenter()" class="temp-conn-line"
@@ -77,9 +77,9 @@
            [style.left.px]="getNodoPos(act.id).x" [style.top.px]="getNodoPos(act.id).y"
            [style.width.px]="act.ancho || NW"
            [style.min-height.px]="act.alto || NH"
-           [style.background]="act.color ? act.color + '20' : 'rgba(15,23,42,0.92)'"
+           [style.background]="act.color ? act.color + '20' : 'var(--node-default-bg)'"
            [style.backdrop-filter]="'blur(20px)'"
-           [style.border-color]="nodosBloqueados()[act.id] ? nodosBloqueados()[act.id].color : (act.color || 'rgba(51,65,85,0.6)')"
+           [style.border-color]="nodosBloqueados()[act.id] ? nodosBloqueados()[act.id].color : (act.color || 'var(--node-default-border)')"
            [style.border-width]="nodosBloqueados()[act.id] ? '2px' : '1px'"
            (mousedown)="onNodoMouseDown($event, ci, ai)" (click)="isSimulating() ? avanzarSimulacion(act.id) : seleccionarNodo(ci, ai, $event)"
            (mouseenter)="onNodeMouseEnter(act.id)" (mouseleave)="onNodeMouseLeave()">

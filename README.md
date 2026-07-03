@@ -1,6 +1,21 @@
 # ⚡ BPM Inteligente — Motor de Workflows
 
-Software para la Gestión y Optimización Inteligente de Procesos de Negocio mediante Inteligencia Artificial y Procesamiento de Lenguaje Natural.
+<div align="center">
+
+[![Desplegado en Google Cloud Run](https://img.shields.io/badge/Desplegado%20en-Google%20Cloud%20Run-blue?logo=google-cloud&logoColor=white&style=for-the-badge)](https://bpm-frontend-238791343286.us-central1.run.app)
+
+### 🪐 ACCESO RÁPIDO A LA PLATAFORMA EN PRODUCCIÓN
+## 🔗 [¡ENTRAR A BPM INTELIGENTE AQUÍ!](https://bpm-frontend-238791343286.us-central1.run.app)
+
+---
+
+</div>
+
+> [!IMPORTANT]
+> ### 🚀 Enlaces de Producción (Cloud Run)
+> - **Portal de Usuario / Frontend (Angular 19):** [https://bpm-frontend-238791343286.us-central1.run.app](https://bpm-frontend-238791343286.us-central1.run.app)
+> - **Core API Gateway (Spring Boot + Redis Sidecar):** [https://bpm-backend-core-238791343286.us-central1.run.app](https://bpm-backend-core-238791343286.us-central1.run.app)
+> - **Microservicio de IA (FastAPI):** [https://bpm-ai-microservice-238791343286.us-central1.run.app](https://bpm-ai-microservice-238791343286.us-central1.run.app)
 
 ---
 
@@ -9,12 +24,12 @@ Software para la Gestión y Optimización Inteligente de Procesos de Negocio med
 | Capa | Tecnología |
 |------|------------|
 | **Backend** | Spring Boot 3.4 + Java 17 |
-| **Microservicio IA** | Python (FastAPI) + OpenAI Whisper + Groq NLP |
-| **Base de Datos** | MongoDB Atlas (cloud) |
-| **Caché / Broker** | Redis |
-| **Almacenamiento**| AWS S3 (S3Client, presigners, offline queue) |
-| **Frontend** | Angular 19 + Tailwind CSS v4 + Dexie.js (Offline PWA) + ECharts |
-| **App Móvil** | Flutter + Riverpod + Hive (Offline-First) |
+| **Microservicio IA** | Python (FastAPI) + TensorFlow (ONNX Runtime) + OpenAI Whisper + Groq |
+| **Base de Datos** | MongoDB Atlas (esquemas dinámicos para formularios de trámites) |
+| **Caché / WebSocket PubSub** | Redis ( Alpine Sidecar Container en Cloud Run ) |
+| **Almacenamiento** | AWS S3 ( S3Client, presigners, local storage fallback ) |
+| **Frontend** | Angular 19 (Zoneless) + Tailwind CSS v4 + Dexie.js (Offline PWA) + ECharts |
+| **App Móvil** | Flutter + Riverpod + Hive (Offline-First, Clickable Notifications) |
 | **Metodología** | PUDS (Jacobson, Booch, Rumbaugh) |
 | **Modelado** | UML 2.5+ |
 
@@ -166,17 +181,40 @@ Software 1er Parcial/
 
 ## 🎨 Módulos del Sistema
 
-### 📐 Diseñador de Workflows
-Editor visual node-based (estilo N8n/Zapier) para crear políticas de negocio con calles (swim lanes), nodos y transiciones.
+### 📐 Diseñador de Workflows (BPM)
+Editor visual node-based (estilo N8n/Zapier) para crear políticas de negocio con calles (swim lanes), nodos y transiciones con soporte de temas de branding y contrastes dinámicos.
 
 ### 📋 Panel del Funcionario
-Bandeja de tareas con constructor dinámico de reportes. El funcionario define y llena campos al completar cada tarea.
+Bandeja de tareas inteligente con constructor dinámico de reportes. El funcionario puede consultar predicciones de rutas de IA en tiempo real para agilizar la toma de decisiones.
 
 ### 📍 Portal de Tracking (Cliente)
-Vista pública tipo timeline para que los clientes rastreen el estado de sus trámites. Accesible sin autenticación en `/tracking`.
+Vista pública tipo timeline para que los clientes rastreen el estado de sus trámites mediante códigos UUID únicos de seguimiento. Accesible sin autenticación en `/tracking`.
 
 ### 🛡️ Panel de Administración
-Gestión CRUD de usuarios con control de roles (RBAC) por tenant.
+Gestión de usuarios por Tenant (SaaS), control de roles (RBAC) y un panel interactivo del estado de los modelos de redes neuronales de TensorFlow en tiempo real.
+
+---
+
+## ✨ Características Avanzadas y Actualizaciones Recientes
+
+### 👥 Colaboración Documental en Tiempo Real
+- **Editor tipo Google Docs**: Permite la escritura y edición colaborativa simultánea dentro del repositorio de documentos.
+- **Presencia en Vivo**: Indicador dinámico del cursor y presencia del departamento del funcionario mediante WebSockets STOMP y Redis Pub/Sub para escalabilidad horizontal.
+
+### 🧠 Motor Predictivo de Enrutamiento (TensorFlow / ONNX)
+- **Predicción en Vivo**: Inferencia en tiempo real sobre tiempos estimados de resolución, cálculo de prioridad y recomendación de rutas óptimas de trámites usando ONNX Runtime en el microservicio.
+- **Visualizador de Redes Neuronales**: Dashboard interactivo con gráficos SVG animados en tiempo real que simulan y demuestran la arquitectura de las capas de la red neuronal y autoencoders para detección de anomalías.
+
+### 🎙️ Voice Filler - Asistente de Voz (Whisper + Groq)
+- **Llenado por Voz**: Integración de Whisper y Groq Llama 3 para procesar grabaciones de voz del funcionario, extraer la intención y estructurar automáticamente los campos de texto e inputs de formularios dinámicos directamente en MongoDB.
+
+### 📶 Resiliencia Offline-First
+- **Web PWA**: Service Workers y Dexie.js local para cachear vistas completas e iniciar trámites encolados sin conexión a internet.
+- **App Móvil (Flutter)**: Sincronización transparente de base de datos local Hive a través de un SyncWorker en segundo plano para envío encolado diferido de trámites.
+
+### 🎨 Personalización SaaS & Modo Oscuro Dinámico
+- **Drawer de Branding**: Selector lateral en tiempo real que permite modificar el logotipo, color primario/secundario y cambiar dinámicamente entre modo Claro y Oscuro con variables CSS persistidas en `localStorage`.
+- **Inversión Inteligente Tailwind v4**: Ajuste automático del contraste de las calles del diseñador y los formularios sin necesidad de duplicar clases CSS.
 
 ---
 
@@ -196,6 +234,15 @@ Gestión CRUD de usuarios con control de roles (RBAC) por tenant.
 | `PATCH` | `/api/registros/{id}/tomar` | Tomar tarea |
 | `PATCH` | `/api/registros/completar` | Completar tarea |
 | `GET` | `/api/usuarios/tenant/{id}` | Listar usuarios |
+| `POST` | `/api/archivos/upload` | Subir archivo (multipart, tramiteId opcional) |
+| `POST` | `/api/archivos/upload-cliente` | Subir archivo desde portal cliente |
+| `GET` | `/api/archivos/download/**` | Descargar archivo (redirige a URL firmada de S3) |
+| `POST` | `/api/tramites/{tramiteId}/documentos` | Subir nuevo documento (Versión 1) |
+| `PUT` | `/api/tramites/{tramiteId}/documentos/{docId}` | Subir nueva versión del documento (v2+) |
+| `GET` | `/api/tramites/{tramiteId}/documentos` | Listar documentos activos del trámite |
+| `GET` | `/api/tramites/{tramiteId}/documentos/{docId}/historial` | Historial de versiones y auditoría de cambios |
+| `GET` | `/api/documentos/{docId}/version/{v}/preview` | Obtener URL prefirmada de AWS S3 para vista previa |
+| `DELETE`| `/api/documentos/{docId}` | Eliminación lógica de un documento |
 
 ### Microservicio de IA/ML (FastAPI - 8000)
 | Método | Ruta | Descripción |

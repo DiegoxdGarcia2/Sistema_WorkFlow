@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, signal, effect, untracked, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, effect, untracked, computed, ChangeDetectorRef } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -40,36 +40,36 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
     .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     
     .glass-card {
-      background: rgba(15, 23, 42, 0.6);
+      background: var(--glass-bg, rgba(15, 23, 42, 0.6));
       backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+      box-shadow: var(--glass-shadow, 0 25px 50px -12px rgba(0, 0, 0, 0.5));
     }
     
     .btn-premium {
-      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-      box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
+      background: linear-gradient(135deg, var(--primary-color, #6366f1) 0%, var(--primary-color-hover, #4f46e5) 100%);
+      box-shadow: 0 10px 15px -3px color-mix(in srgb, var(--primary-color, #6366f1) 30%, transparent);
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .btn-premium:hover {
       transform: translateY(-2px);
-      box-shadow: 0 20px 25px -5px rgba(79, 70, 229, 0.4);
+      box-shadow: 0 20px 25px -5px color-mix(in srgb, var(--primary-color, #6366f1) 40%, transparent);
     }
 
     .form-input {
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--input-bg, rgba(15, 23, 42, 0.8));
+      border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
       border-radius: 12px;
       padding: 10px 14px;
       font-size: 14px;
-      color: #e2e8f0;
+      color: var(--color-slate-100, #e2e8f0);
       width: 100%;
       outline: none;
       transition: all 0.2s;
     }
     .form-input:focus {
-      border-color: #6366f1;
-      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+      border-color: var(--primary-color, #6366f1);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color, #6366f1) 20%, transparent);
     }
 
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -83,10 +83,10 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
         <div class="p-6 border-b border-slate-800/50">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 shadow-lg shadow-indigo-500/10">
-              <span class="text-xl">💼</span>
+              <span class="flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-400"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg></span>
             </div>
             <div>
-              <h2 class="text-sm font-black tracking-tight text-white uppercase">WorkSpace</h2>
+              <h2 class="text-sm font-black tracking-tight text-slate-50 uppercase">WorkSpace</h2>
               <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{{ deptoNombre }}</p>
             </div>
           </div>
@@ -182,8 +182,10 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
             @if (vista === 'bandeja' || vista === 'disponible') {
               <div class="grid grid-cols-1 gap-4">
                  @if (getTareas().length === 0) {
-                   <div class="py-20 text-center glass-card rounded-3xl">
-                      <div class="text-5xl mb-4 opacity-20">📭</div>
+                    <div class="py-20 text-center glass-card rounded-3xl">
+                       <div class="flex justify-center mb-4 opacity-30">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+                       </div>
                       <p class="text-slate-400 font-medium">No hay tareas en esta bandeja</p>
                       <p class="text-slate-600 text-xs mt-1">¡Buen trabajo! Estás al día.</p>
                    </div>
@@ -192,7 +194,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                    <div class="glass-card p-6 rounded-3xl flex items-center justify-between group hover:border-indigo-500/50 transition-all duration-300">
                       <div class="flex items-center gap-6">
                          <div class="w-14 h-14 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-2xl border border-indigo-500/20 group-hover:scale-110 transition-all">
-                            {{ vista === 'bandeja' ? '⚡' : '📋' }}
+                            <span class="flex items-center" *ngIf="vista === 'bandeja'"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="inline mr-1"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span><span class="flex items-center" *ngIf="vista !== 'bandeja'"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline mr-1"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></span>
                          </div>
                          <div>
                             <div class="flex items-center gap-2 mb-1">
@@ -236,7 +238,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                <div class="grid grid-cols-1 gap-6">
                  @if (tareasDepartamento().length === 0) {
                    <div class="py-20 text-center glass-card rounded-3xl">
-                      <div class="text-5xl mb-4 opacity-20">👥</div>
+                      <div class="flex justify-center mb-4 opacity-30"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-slate-600"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
                       <p class="text-slate-400 font-medium">No hay trámites activos en tu departamento</p>
                       <p class="text-slate-600 text-xs mt-1">Los documentos aparecerán aquí cuando se inicien trámites.</p>
                    </div>
@@ -244,8 +246,8 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                  @for (t of tareasCoEdicionDeduplicadas(); track t.tramiteId || t.id) {
                    <div class="glass-card p-6 rounded-[2rem] flex flex-col md:flex-row md:items-center justify-between gap-6 group hover:border-indigo-500/50 transition-all duration-300">
                       <div class="flex items-center gap-6 min-w-0 flex-1">
-                         <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-3xl border border-indigo-500/20 group-hover:scale-110 transition-all flex-shrink-0">
-                            📄
+                         <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 group-hover:scale-110 transition-all flex-shrink-0">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-400"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
                          </div>
                          <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-3 mb-1.5 flex-wrap">
@@ -296,7 +298,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                            </button>
                          } @else {
                            <button (click)="unirseAlBorrador(t)" class="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black uppercase tracking-widest transition-all hover:scale-[1.02] shadow-lg shadow-indigo-500/20 flex items-center gap-2">
-                              <span>👥</span> Unirse al Borrador
+                              <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline mr-2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Unirse al Borrador
                            </button>
                          }
                       </div>
@@ -311,7 +313,9 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                  @for (p of politicasActivas; track p.id) {
                    <div class="glass-card p-8 rounded-3xl hover:border-emerald-500/50 transition-all group">
                       <div class="flex justify-between items-start mb-6">
-                         <div class="w-16 h-16 rounded-3xl bg-emerald-500/10 flex items-center justify-center text-3xl border border-emerald-500/20">🚀</div>
+                         <div class="w-16 h-16 rounded-3xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="M4.5 16.5c-1.5 1.26-2.5 3.19-2.5 5.5s3 1.5 4.5 0c1.5-1.5 1.5-4.5 1.5-4.5z"/><path d="m12 12 9-9c.9-.9 2-.5 2 .5V8c0 .9-.5 2-1.5 3l-5.5 5.5-4-4-2 2z"/><path d="m12 12-4 4v3.5a1 1 0 0 0 1 1H12.5l4-4-4.5-4.5z"/></svg>
+                          </div>
                          <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">Version {{ p.version }}</span>
                       </div>
                       <h3 class="text-xl font-bold text-white mb-2">{{ p.nombre }}</h3>
@@ -343,7 +347,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                     <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1">Eficiencia</p>
                     <p class="text-3xl font-black text-sky-400">{{ getRendimiento().eficiencia }}</p>
                     <div class="flex gap-1 mt-3">
-                       <span *ngFor="let i of [1,2,3,4,5]" class="text-xs">⭐</span>
+                       <span *ngFor="let i of [1,2,3,4,5]" class="flex items-center text-xs"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-400"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
                     </div>
                  </div>
               </div>
@@ -380,7 +384,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
         @if (toastMsg) {
           <div class="fixed top-10 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl border shadow-2xl animate-fade flex items-center gap-3"
                [ngClass]="toastType === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'">
-            <span class="text-lg">{{ toastType === 'success' ? '✅' : '❌' }}</span>
+            <span class="flex items-center" *ngIf="toastType === 'success'"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400 inline mr-2"><polyline points="20 6 9 17 4 12"/></svg></span><span class="flex items-center" *ngIf="toastType !== 'success'"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-red-400 inline mr-2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
             <span class="text-xs font-bold">{{ toastMsg }}</span>
           </div>
         }
@@ -394,7 +398,9 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                 <!-- Modal Header -->
                 <div class="p-8 border-b border-white/5 flex items-center justify-between">
                    <div class="flex items-center gap-4">
-                      <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-2xl border border-emerald-500/20">📝</div>
+                      <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                      </div>
                       <div>
                          <h2 class="text-xl font-black text-white">{{ tareaActiva.actividadNombre }}</h2>
                          <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Formulario de Registro de Actividad</p>
@@ -402,7 +408,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                    </div>
                    <div class="flex items-center gap-3">
                       <button (click)="abrirModalVoz()" class="px-4 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all" title="Llenar con Voz">
-                        <span>🎙️</span> Llenar con Voz
+                        <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="inline mr-1"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" x2="12" y1="19" y2="22"/></svg></span> Llenar con Voz
                       </button>
                       <button (click)="cerrarModal()" class="w-10 h-10 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all text-slate-400">&#10005;</button>
                    </div>
@@ -440,7 +446,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                     <!-- Alerta de Anomalía Crítica Detectada por TensorFlow -->
                     @if (prediccionActual()?.isAnomalo) {
                       <div class="p-6 rounded-3xl bg-red-500/10 border border-red-500/25 flex gap-4 items-start animate-pulse">
-                         <div class="text-2xl mt-0.5">⚠️</div>
+                         <div class="flex items-center mt-0.5"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="inline mr-1 text-amber-500"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
                          <div>
                             <h4 class="text-xs font-black uppercase text-red-400 tracking-wider">
                               Alerta de Anomalía Operativa Detectada por TensorFlow
@@ -456,7 +462,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                     <div class="p-6 rounded-3xl bg-indigo-500/5 border border-indigo-500/10 mb-8 flex items-center justify-between gap-4">
                        <div>
                           <h4 class="text-xs font-black uppercase text-indigo-400 mb-1.5 tracking-widest flex items-center gap-2">
-                             <span>📄</span> Borrador Colaborativo del Documento
+                             <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline mr-1 text-slate-400"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></span> Borrador Colaborativo del Documento
                           </h4>
                           <p class="text-[11px] text-slate-400 leading-relaxed">
                              Este trámite permite la redacción y firma colaborativa del borrador en tiempo real antes de su emisión final.
@@ -530,7 +536,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                                   @if (uploadingFiles[f.key]) {
                                     <span class="text-xl animate-spin">⏳</span>
                                   } @else {
-                                    <span class="text-xl">{{ formData[f.key] ? '✅' : '📁' }}</span>
+                                    <span class="flex items-center" *ngIf="formData[f.key]"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400 inline"><polyline points="20 6 9 17 4 12"/></svg></span><span class="flex items-center" *ngIf="!formData[f.key]"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 inline"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/></svg></span>
                                   }
                                   
                                   <div class="min-w-0 flex-1">
@@ -553,7 +559,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                              <div class="h-4 mt-1">
                                @if (getFieldError(f)) {
                                  <p class="text-[9px] text-red-500 font-bold flex items-center gap-1 animate-in slide-in-from-top-1">
-                                   <span>⚠️</span> {{ getFieldError(f) }}
+                                   <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="inline mr-1 text-amber-500"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> {{ getFieldError(f) }}
                                  </p>
                                }
                              </div>
@@ -602,7 +608,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                       } @else {
                         <div class="col-span-2">
                           <button (click)="mostrandoAddExtra = true" class="w-full py-4 rounded-2xl border-2 border-dashed border-slate-800 text-xs text-slate-500 hover:text-indigo-400 hover:border-indigo-500/30 transition-all group">
-                            <span class="inline-block group-hover:scale-110 transition-transform mr-2">➕</span>
+                            <span class="inline-flex items-center group-hover:scale-110 transition-transform mr-2"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="inline"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
                             Añadir Campo Extraordinario
                           </button>
                         </div>
@@ -630,10 +636,10 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                                     <input type="file" (change)="onRequiredFileSelected($event, doc)" class="hidden" [id]="'req-doc-' + $index" [disabled]="subiendoDocRequerido[doc]">
                                     <label [for]="'req-doc-' + $index" *ngIf="!tieneDocumentoRequerido(doc)"
                                            class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer flex items-center gap-1 transition-all">
-                                       <span>{{ subiendoDocRequerido[doc] ? '⏳' : '📤' }}</span>
+                                       <span class="flex items-center" *ngIf="subiendoDocRequerido[doc]"><svg class="animate-spin h-3.5 w-3.5 text-indigo-400 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></span><span class="flex items-center" *ngIf="!subiendoDocRequerido[doc]"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="inline"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
                                        <span>Subir</span>
                                     </label>
-                                    <button *ngIf="tieneDocumentoRequerido(doc)" (click)="eliminarDocumentoRequerido(doc)" class="text-red-500 hover:text-red-400 text-sm p-2">🗑️</button>
+                                    <button *ngIf="tieneDocumentoRequerido(doc)" (click)="eliminarDocumentoRequerido(doc)" class="text-slate-400 hover:text-red-500 transition-colors flex items-center justify-center p-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-red-400/80 hover:text-red-500 transition-colors"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
                                  </div>
                               </div>
                             }
@@ -648,13 +654,13 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                          @for (file of archivosCargados; track $index) {
                            <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between">
                               <div class="flex items-center gap-3">
-                                 <span class="text-xl">📄</span>
+                                 <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline mr-1 text-slate-400"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></span>
                                  <div class="min-w-0">
                                     <p class="text-[11px] font-bold text-slate-200 truncate">{{ file.nombre }}</p>
                                     <p class="text-[9px] text-slate-500">{{ (file.size / 1024 / 1024) | number:'1.1-2' }} MB</p>
                                  </div>
                               </div>
-                              <button (click)="eliminarArchivo($index)" class="text-red-500/50 hover:text-red-500 text-xs">🗑️</button>
+                              <button (click)="eliminarArchivo($index)" class="text-slate-400 hover:text-red-500 transition-colors flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-400/80 hover:text-red-500 transition-colors"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
                            </div>
                          }
                          
@@ -662,12 +668,12 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                                 [class.cursor-not-allowed]="isUploadingGeneral" [class.cursor-pointer]="!isUploadingGeneral">
                             <input type="file" (change)="onFileSelected($event)" class="hidden" [disabled]="isUploadingGeneral">
                             @if (isUploadingGeneral) {
-                              <span class="text-2xl animate-spin">⏳</span>
-                              <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest animate-pulse">Subiendo...</span>
-                            } @else {
-                              <span class="text-2xl">📤</span>
-                              <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Subir Archivo</span>
-                            }
+                               <span class="flex items-center"><svg class="animate-spin h-6 w-6 text-indigo-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></span>
+                               <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest animate-pulse">Subiendo...</span>
+                             } @else {
+                               <span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-400"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+                               <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Subir Archivo</span>
+                             }
                          </label>
                       </div>
                    </div>
@@ -808,7 +814,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                   <div class="relative">
                     <input [(ngModel)]="busquedaCliente" (keyup.enter)="buscarClientes()" placeholder="Buscar por CI o Nombre..." 
                            class="w-full pl-12 pr-32 py-4 rounded-2xl bg-slate-800 border border-slate-700 text-sm text-white focus:border-indigo-500 outline-none transition-all">
-                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">🔍</span>
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline mr-2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
                     <button (click)="buscarClientes()" class="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 rounded-xl bg-indigo-600 text-[10px] font-black text-white uppercase tracking-widest">Buscar</button>
                   </div>
 
@@ -831,7 +837,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                           </div>
                         </div>
                         @if (clienteSeleccionado?.id === c.id) {
-                          <span class="text-indigo-400 text-xs">✓</span>
+                          <span class="text-indigo-400 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400 inline mr-2"><polyline points="20 6 9 17 4 12"/></svg></span>
                         }
                       </div>
                     } @empty {
@@ -851,7 +857,7 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                   @if (clienteSeleccionado && politicaParaIniciar && politicaParaIniciar.requisitosIniciales && politicaParaIniciar.requisitosIniciales.length > 0) {
                      <div class="p-6 rounded-3xl bg-indigo-950/20 border border-indigo-500/20 mb-4 space-y-4">
                         <h4 class="text-xs font-black uppercase text-indigo-400 tracking-widest flex items-center gap-1.5">
-                           <span>🔒</span> Documentos Prerrequisitos Obligatorios
+                           <span><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="inline mr-1.5 text-indigo-400"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> Documentos Prerrequisitos Obligatorios
                         </h4>
                         <p class="text-[11px] text-slate-400 leading-relaxed">
                            Se requiere adjuntar los siguientes documentos iniciales para abrir el caso de {{ politicaParaIniciar.nombre }}.
@@ -879,10 +885,10 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
                                         <input type="file" (change)="onPrereqFileSelected($event, req)" class="hidden" [id]="'prereq-file-' + $index" [disabled]="subiendoPrerequisito[req]">
                                         <label [for]="'prereq-file-' + $index" *ngIf="!tienePrerequisito(req)"
                                                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer flex items-center gap-1 transition-all">
-                                           <span>{{ subiendoPrerequisito[req] ? '⏳' : '📤' }}</span>
+                                           <span class="flex items-center" *ngIf="subiendoPrerequisito[req]"><svg class="animate-spin h-3.5 w-3.5 text-indigo-400 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></span><span class="flex items-center" *ngIf="!subiendoPrerequisito[req]"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="inline"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
                                            <span>Subir</span>
                                         </label>
-                                        <button *ngIf="tienePrerequisito(req)" (click)="eliminarPrerequisito(req)" class="text-red-500 hover:text-red-400 text-sm p-2">🗑️</button>
+                                        <button *ngIf="tienePrerequisito(req)" (click)="eliminarPrerequisito(req)" class="text-slate-400 hover:text-red-500 transition-colors flex items-center justify-center p-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-red-400/80 hover:text-red-500 transition-colors"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
                                      } @else {
                                         <input [type]="getReqType(req) === 'número' ? 'number' : (getReqType(req) === 'fecha' ? 'date' : 'text')"
                                                [value]="prereqInputs[req] || ''"
@@ -977,22 +983,26 @@ import { ColaboracionService, ColaboradorDTO } from '../../services/colaboracion
           align-items: center;
           gap: 12px;
           width: 100%;
-          padding: 10px 16px;
-          border-radius: 14px;
+          padding: 12px 16px;
+          border-radius: 12px;
           font-size: 11px;
-          font-weight: 500;
-          color: #94a3b8;
-          transition: all 0.2s;
+          font-weight: 700;
+          letter-spacing: 0.025em;
+          color: var(--text-secondary, #94a3b8);
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           border: 1px solid transparent;
+          cursor: pointer;
+          background: transparent;
         }
         .nav-item:hover {
-          color: #f1f5f9;
-          background: rgba(255,255,255,0.03);
+          color: var(--text-primary, #f1f5f9);
+          background: color-mix(in srgb, var(--text-primary, #f8fafc) 5%, transparent);
         }
         .nav-item.active {
-          color: #818cf8;
-          background: rgba(99, 102, 241, 0.1);
-          border-color: rgba(99, 102, 241, 0.2);
+          color: #ffffff !important;
+          background: var(--primary-color, #6366f1) !important;
+          border-color: color-mix(in srgb, var(--primary-color, #6366f1) 85%, #ffffff) !important;
+          box-shadow: 0 10px 15px -3px color-mix(in srgb, var(--primary-color, #6366f1) 30%, transparent) !important;
         }
         .nav-item .icon { font-size: 14px; }
       </style>
@@ -1150,6 +1160,8 @@ export class FuncionarioComponent implements OnInit, OnDestroy {
       eficiencia: eficiencia + '%'
     };
   }
+
+  private cdr = inject(ChangeDetectorRef);
 
   constructor(
     public workflowService: WorkflowService,
@@ -1495,7 +1507,7 @@ export class FuncionarioComponent implements OnInit, OnDestroy {
       }
 
       this.showToast('Subiendo archivo...', 'success');
-      this.archivoService.subir(file).subscribe({
+      this.archivoService.subir(file, this.tareaActiva?.tramiteId).subscribe({
         next: (res) => {
           this.archivosCargados.push({
             id: res.id,
@@ -1507,11 +1519,13 @@ export class FuncionarioComponent implements OnInit, OnDestroy {
           });
           this.isUploadingGeneral = false;
           this.showToast('Archivo subido con éxito', 'success');
+          this.cdr.markForCheck();
         },
         error: (err) => {
           console.error('Upload error:', err);
           this.isUploadingGeneral = false;
           this.showToast('Error al subir archivo', 'error');
+          this.cdr.markForCheck();
         }
       });
     }
@@ -1598,7 +1612,7 @@ export class FuncionarioComponent implements OnInit, OnDestroy {
       }
 
       this.showToast(`Subiendo ${file.name}...`, 'success');
-      this.archivoService.subir(file).subscribe({
+      this.archivoService.subir(file, this.tareaActiva?.tramiteId).subscribe({
         next: (res) => {
           this.formData[key] = {
             id: res.id,
@@ -1610,11 +1624,13 @@ export class FuncionarioComponent implements OnInit, OnDestroy {
           };
           this.uploadingFiles = { ...this.uploadingFiles, [key]: false };
           this.showToast('Archivo subido correctamente', 'success');
+          this.cdr.markForCheck();
         },
         error: (err) => {
           console.error('Dynamic upload error:', err);
           this.uploadingFiles = { ...this.uploadingFiles, [key]: false };
           this.showToast('Error al subir el archivo', 'error');
+          this.cdr.markForCheck();
         }
       });
     }
@@ -1876,7 +1892,7 @@ export class FuncionarioComponent implements OnInit, OnDestroy {
       this.subiendoPrerequisito[req] = true;
 
       this.showToast(`Subiendo ${file.name}...`, 'success');
-      this.archivoService.subir(file).subscribe({
+      this.archivoService.subir(file, this.tareaActiva?.tramiteId).subscribe({
         next: (res) => {
           this.prereqFilesList.push({
             id: res.id,
@@ -1889,11 +1905,13 @@ export class FuncionarioComponent implements OnInit, OnDestroy {
           });
           this.subiendoPrerequisito[req] = false;
           this.showToast(`Prerrequisito "${req}" subido con éxito`, 'success');
+          this.cdr.markForCheck();
         },
         error: (err) => {
           console.error('Prereq upload error:', err);
           this.subiendoPrerequisito[req] = false;
           this.showToast('Error al subir el prerrequisito', 'error');
+          this.cdr.markForCheck();
         }
       });
     }
@@ -1920,7 +1938,7 @@ export class FuncionarioComponent implements OnInit, OnDestroy {
       this.subiendoDocRequerido[doc] = true;
 
       this.showToast(`Subiendo ${file.name}...`, 'success');
-      this.archivoService.subir(file).subscribe({
+      this.archivoService.subir(file, this.tareaActiva?.tramiteId).subscribe({
         next: (res) => {
           this.archivosCargados.push({
             id: res.id,
@@ -1933,11 +1951,13 @@ export class FuncionarioComponent implements OnInit, OnDestroy {
           });
           this.subiendoDocRequerido[doc] = false;
           this.showToast(`Documento "${doc}" subido con éxito`, 'success');
+          this.cdr.markForCheck();
         },
         error: (err) => {
           console.error('Required upload error:', err);
           this.subiendoDocRequerido[doc] = false;
           this.showToast('Error al subir el documento requerido', 'error');
+          this.cdr.markForCheck();
         }
       });
     }
@@ -1945,6 +1965,7 @@ export class FuncionarioComponent implements OnInit, OnDestroy {
 
   showToast(msg: string, type: 'success' | 'error') {
     this.toastMsg = msg; this.toastType = type;
-    setTimeout(() => this.toastMsg = '', 3000);
+    this.cdr.markForCheck();
+    setTimeout(() => { this.toastMsg = ''; this.cdr.markForCheck(); }, 3000);
   }
 }

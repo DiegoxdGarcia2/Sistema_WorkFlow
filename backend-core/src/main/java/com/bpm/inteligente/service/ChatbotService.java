@@ -46,6 +46,10 @@ public class ChatbotService {
     @Value("${ai.microservice.url:http://localhost:8000}")
     private String aiMicroserviceUrl;
 
+    /** Secreto para autenticación inter-servicios */
+    @Value("${ai.microservice.secret:dev_secret_local_only}")
+    private String aiApiSecret;
+
     private final RestTemplate restTemplate = new RestTemplate();
     private final WebClient.Builder webClientBuilder;
 
@@ -90,6 +94,7 @@ public class ChatbotService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-API-Secret", aiApiSecret);
 
             // Payload enriquecido con contexto del sistema
             Map<String, Object> payload = new HashMap<>();
@@ -150,6 +155,7 @@ public class ChatbotService {
                     .uri(url)
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.TEXT_EVENT_STREAM)
+                    .header("X-API-Secret", aiApiSecret)
                     .bodyValue(payload)
                     .retrieve()
                     .bodyToFlux(String.class);

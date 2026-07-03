@@ -13,6 +13,7 @@ import { AnalysisResult } from '../../../services/ml-analysis.service';
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './designer-canvas.component.html',
+  styleUrls: ['./designer-canvas.component.css'],
   encapsulation: ViewEncapsulation.None
 })
 export class DesignerCanvasComponent implements OnInit, OnDestroy {

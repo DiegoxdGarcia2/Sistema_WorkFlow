@@ -19,7 +19,7 @@ type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE' | 'TRAMITE';
       <!-- HEADER & BREADCRUMBS -->
       <div class="flex items-center justify-between mb-8">
         <div>
-          <h1 class="text-3xl font-black text-white tracking-tight flex items-center gap-3">
+          <h1 class="text-3xl font-black text-slate-50 tracking-tight flex items-center gap-3">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-indigo-400"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
             Repositorio Documental
           </h1>
@@ -28,10 +28,10 @@ type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE' | 'TRAMITE';
       </div>
 
       <!-- BREADCRUMBS GLASSMORPHISM -->
-      <div class="mb-8 p-4 rounded-2xl bg-slate-900/50 backdrop-blur-xl border border-white/5 shadow-xl flex items-center gap-3">
+      <div class="mb-8 p-4 rounded-2xl bg-slate-900/50 backdrop-blur-xl border border-slate-800 shadow-xl flex items-center gap-3">
         <button (click)="goTo('ROOT')" 
                 class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all"
-                [class]="nivel() === 'ROOT' ? 'bg-indigo-500/20 text-indigo-400' : 'text-slate-400 hover:text-white hover:bg-white/5'">
+                [class]="nivel() === 'ROOT' ? 'bg-indigo-500/20 text-indigo-400' : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           Inicio
         </button>
@@ -40,7 +40,7 @@ type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE' | 'TRAMITE';
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-600"><path d="m9 18 6-6-6-6"/></svg>
           <button (click)="goTo('POLITICA')" 
                   class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all"
-                  [class]="nivel() === 'POLITICA' ? 'bg-indigo-500/20 text-indigo-400' : 'text-slate-400 hover:text-white hover:bg-white/5'">
+                  [class]="nivel() === 'POLITICA' ? 'bg-indigo-500/20 text-indigo-400' : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'">
             {{ seleccionPolitica() }}
           </button>
         }
@@ -49,7 +49,7 @@ type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE' | 'TRAMITE';
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-600"><path d="m9 18 6-6-6-6"/></svg>
           <button (click)="goTo('CLIENTE')" 
                   class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all"
-                  [class]="nivel() === 'CLIENTE' ? 'bg-indigo-500/20 text-indigo-400' : 'text-slate-400 hover:text-white hover:bg-white/5'">
+                  [class]="nivel() === 'CLIENTE' ? 'bg-indigo-500/20 text-indigo-400' : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'">
             {{ seleccionCliente() }}
           </button>
         }
@@ -81,13 +81,13 @@ type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE' | 'TRAMITE';
                   <div class="w-14 h-14 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-6 group-hover:scale-110 transition-transform shadow-[0_0_15px_rgba(99,102,241,0.2)]">
                     <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
                   </div>
-                  <h3 class="text-lg font-black text-white tracking-tight mb-2">{{ pol }}</h3>
+                  <h3 class="text-lg font-black text-slate-50 tracking-tight mb-2">{{ pol }}</h3>
                   <p class="text-xs font-medium text-slate-500">{{ getClientesForPolitica(pol).length }} Clientes Registrados</p>
                 </div>
               }
               @if (politicas().length === 0) {
                 <div class="col-span-full py-20 text-center">
-                  <div class="text-5xl opacity-20 mb-4">📁</div>
+                  <div class="flex justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-slate-600 mb-2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/></svg></div>
                   <p class="text-slate-400 font-medium">El repositorio está vacío.</p>
                 </div>
               }
@@ -103,7 +103,7 @@ type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE' | 'TRAMITE';
                   <div class="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 mb-6 group-hover:scale-110 transition-transform shadow-[0_0_15px_rgba(16,185,129,0.2)]">
                     <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                   </div>
-                  <h3 class="text-lg font-black text-white tracking-tight mb-2 truncate">{{ cli }}</h3>
+                  <h3 class="text-lg font-black text-slate-50 tracking-tight mb-2 truncate">{{ cli }}</h3>
                   <p class="text-xs font-medium text-slate-500">{{ getTramitesCount(cli) }} Trámites / {{ getArchivosCount(cli) }} Archivos</p>
                 </div>
               }
@@ -127,7 +127,7 @@ type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE' | 'TRAMITE';
                           {{ parsed.enCurso ? 'En Curso' : 'Completado' }}
                         </span>
                       </div>
-                      <h3 class="text-base font-black text-white tracking-tight mb-2 truncate" [title]="parsed.politica">
+                      <h3 class="text-base font-black text-slate-50 tracking-tight mb-2 truncate" [title]="parsed.politica">
                         {{ parsed.politica }}
                       </h3>
                       <div class="text-[11px] font-mono text-indigo-400 mb-4 flex items-center gap-1.5">
@@ -135,7 +135,7 @@ type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE' | 'TRAMITE';
                         <span class="bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 font-bold">#{{ parsed.codigo }}</span>
                       </div>
                     </div>
-                    <div class="space-y-2 text-xs text-slate-400 border-t border-white/5 pt-4 mt-2">
+                    <div class="space-y-2 text-xs text-slate-400 border-t border-slate-800/50 pt-4 mt-2">
                       <div class="flex items-center gap-2" [title]="parsed.fechas">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-500 shrink-0"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
                         <span class="truncate">{{ parsed.fechas }}</span>
@@ -244,42 +244,42 @@ type NivelActual = 'ROOT' | 'POLITICA' | 'CLIENTE' | 'TRAMITE';
                 <div class="flex items-center justify-between mb-4 p-2 rounded-xl bg-slate-900/60 border border-white/5 shadow-md">
                   <div class="flex items-center gap-1.5">
                     <!-- Bold -->
-                    <button (click)="formatText('bold')" title="Negrita" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all">
+                    <button (click)="formatText('bold')" title="Negrita" class="p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-all">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 12a4 4 0 0 0 0-8H6v8h8Z"/><path d="M15 20a4 4 0 0 0 0-8H6v8h9Z"/></svg>
                     </button>
                     <!-- Italic -->
-                    <button (click)="formatText('italic')" title="Cursiva" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all">
+                    <button (click)="formatText('italic')" title="Cursiva" class="p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-all">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/><line x1="15" x2="9" y1="4" y2="20"/></svg>
                     </button>
                     <!-- Divider -->
                     <div class="w-px h-5 bg-white/10 mx-1"></div>
                     <!-- H1 -->
-                    <button (click)="formatText('heading1')" title="Título Grande" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all font-bold text-xs font-mono">
+                    <button (click)="formatText('heading1')" title="Título Grande" class="p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-all font-bold text-xs font-mono">
                       H1
                     </button>
                     <!-- H2 -->
-                    <button (click)="formatText('heading2')" title="Subtítulo" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all font-bold text-xs font-mono">
+                    <button (click)="formatText('heading2')" title="Subtítulo" class="p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-all font-bold text-xs font-mono">
                       H2
                     </button>
                     <!-- Divider -->
                     <div class="w-px h-5 bg-white/10 mx-1"></div>
                     <!-- Bullet List -->
-                    <button (click)="formatText('list')" title="Lista de Viñetas" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all">
+                    <button (click)="formatText('list')" title="Lista de Viñetas" class="p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-all">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
                     </button>
                     <!-- Code block -->
-                    <button (click)="formatText('code')" title="Bloque de Código" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all">
+                    <button (click)="formatText('code')" title="Bloque de Código" class="p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-all">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                     </button>
                   </div>
 
                   <div class="flex items-center gap-1.5">
                     <!-- Undo -->
-                    <button (click)="triggerUndo()" [disabled]="undoStack.length <= 1" title="Deshacer (Ctrl+Z)" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all">
+                    <button (click)="triggerUndo()" [disabled]="undoStack.length <= 1" title="Deshacer (Ctrl+Z)" class="p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 disabled:opacity-30 disabled:hover:bg-transparent transition-all">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
                     </button>
                     <!-- Redo -->
-                    <button (click)="triggerRedo()" [disabled]="redoStack.length === 0" title="Rehacer (Ctrl+Y)" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all">
+                    <button (click)="triggerRedo()" [disabled]="redoStack.length === 0" title="Rehacer (Ctrl+Y)" class="p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 disabled:opacity-30 disabled:hover:bg-transparent transition-all">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
                     </button>
                   </div>

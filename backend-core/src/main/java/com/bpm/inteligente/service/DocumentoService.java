@@ -37,12 +37,17 @@ public class DocumentoService {
     private final RegistroActividadRepository registroRepo;
     private final PoliticaNegocioService politicaService;
     private final S3StorageService s3StorageService;
+    private final S3KeyBuilderService s3KeyBuilder;
     private final DocumentoBorradorRepository borradorRepo;
     private final ColaboracionService colaboracionService;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Value("${ai.microservice.url:http://localhost:8000}")
     private String aiMicroserviceUrl;
+
+    /** Secreto para autenticación inter-servicios */
+    @Value("${ai.microservice.secret:dev_secret_local_only}")
+    private String aiApiSecret;
 
     /**
      * Sube un nuevo documento a S3 y lo registra en MongoDB.
@@ -60,11 +65,9 @@ public class DocumentoService {
         // 2. Validar acceso dinámico por "Calles"
         validarAccesoCalleActiva(tramite, usuario);
 
-        // 3. Crear key de almacenamiento S3
-        // s3://bucket-bpm/tenants/{tenantId}/clientes/{clienteId}/politicas/{politicaId}/tramites/{tramiteId}/v1_{nombreOriginal}
-        String clienteId = tramite.getClienteId() != null ? tramite.getClienteId() : "sin-cliente";
-        String s3Key = String.format("tenants/%s/clientes/%s/politicas/%s/tramites/%s/v1_%s",
-                tramite.getTenantId(), clienteId, tramite.getPoliticaId(), tramite.getId(), nombreOriginal);
+        // 3. Crear key de almacenamiento S3 con nombres legibles
+        // s3://bucket-bpm/tenants/CRE/clientes/Diego_Garcia/politicas/Instalacion_Medidor/tramites/CRE-MED-001/v1_{nombreOriginal}
+        String s3Key = s3KeyBuilder.buildKey(tramite, "v1_" + nombreOriginal);
 
         // 4. Subir a S3
         s3StorageService.uploadFile(s3Key, contenido, contentType);
@@ -115,9 +118,7 @@ public class DocumentoService {
         validarAccesoCalleActiva(tramite, usuario);
 
         int nuevaVersion = documento.getVersionActual() + 1;
-        String clienteId = tramite.getClienteId() != null ? tramite.getClienteId() : "sin-cliente";
-        String s3Key = String.format("tenants/%s/clientes/%s/politicas/%s/tramites/%s/v%d_%s",
-                tramite.getTenantId(), clienteId, tramite.getPoliticaId(), tramite.getId(), nuevaVersion, documento.getNombreOriginal());
+        String s3Key = s3KeyBuilder.buildKey(tramite, "v" + nuevaVersion + "_" + documento.getNombreOriginal());
 
         // 3. Subir nueva versión a S3
         s3StorageService.uploadFile(s3Key, contenido, contentType);
@@ -393,9 +394,15 @@ public class DocumentoService {
         byte[] pdfBytes;
         try {
             String url = aiMicroserviceUrl + "/api/ai/documentos/compilar-pdf";
-            Map<String, String> request = Map.of("contenido_html", borrador.getContenidoHtml());
+            Map<String, String> requestBody = Map.of("contenido_html", borrador.getContenidoHtml());
             log.info("Llamando a microservicio WeasyPrint en: {}", url);
-            pdfBytes = restTemplate.postForObject(url, request, byte[].class);
+
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("X-API-Secret", aiApiSecret);
+            org.springframework.http.HttpEntity<Map<String, String>> entity = new org.springframework.http.HttpEntity<>(requestBody, headers);
+
+            pdfBytes = restTemplate.postForObject(url, entity, byte[].class);
             if (pdfBytes == null || pdfBytes.length == 0) {
                 throw new BusinessRuleException("El microservicio WeasyPrint retornó un PDF vacío.");
             }
@@ -420,8 +427,7 @@ public class DocumentoService {
         draftName = draftName.replaceAll("[\\\\/:*?\"<>|]", "_");
         String nombreOriginal = draftName.toLowerCase().endsWith(".pdf") ? draftName : draftName + ".pdf";
 
-        String s3Key = String.format("tenants/%s/clientes/%s/politicas/%s/tramites/%s/v1_%s",
-                tramite.getTenantId(), clienteId, tramite.getPoliticaId(), tramite.getId(), nombreOriginal);
+        String s3Key = s3KeyBuilder.buildKey(tramite, "v1_" + nombreOriginal);
 
         try {
             s3StorageService.uploadFile(s3Key, pdfBytes, "application/pdf");

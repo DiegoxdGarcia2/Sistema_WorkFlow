@@ -1,46 +1,105 @@
-/* ─── BPM Theme Design System (Dynamic Mode) ─── */
+/* ─── BPM Theme-Aware Design System ─── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 
 :root {
-  /* Default Primary Preset Variables */
-  --color-indigo-600: var(--primary-color, #4f46e5);
-  --color-indigo-500: var(--primary-color, #6366f1);
-  --color-indigo-400: var(--primary-color, #818cf8);
-  --color-indigo-300: var(--primary-color, #a5b4fc);
+  /* Default: Premium Dark Theme base variables */
+  --primary-color: #6366f1; /* Indigo default */
+  --secondary-color: #0ea5e9; /* Sky default */
+  
+  --bg-primary: #020617;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  
+  --glass-bg: rgba(15, 23, 42, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  
+  --input-bg: rgba(15, 23, 42, 0.8);
+  --border-color: rgba(255, 255, 255, 0.1);
 
-  /* Default Secondary Preset Variables */
-  --color-sky-500: var(--secondary-color, #0ea5e9);
-  --color-sky-400: var(--secondary-color, #38bdf8);
+  /* ECharts dynamic configuration */
+  --chart-text: #94a3b8;
+  --chart-grid: rgba(255, 255, 255, 0.05);
 
-  /* Component Glass Variables */
-  --glass-bg: rgba(15, 23, 42, 0.65);
-  --border-color: rgba(255, 255, 255, 0.08);
-  --glass-shadow: rgba(0, 0, 0, 0.37);
-  --premium-glow-1: rgba(79, 70, 229, 0.08);
-  --premium-glow-2: rgba(14, 165, 233, 0.05);
+  /* Canvas specific variables */
+  --canvas-dot: rgba(255, 255, 255, 0.1);
+  --lane-fill-opacity: 0.18;
+  --lane-border: rgba(255, 255, 255, 0.22);
+  --node-default-bg: rgba(15, 23, 42, 0.92);
+  --node-default-border: rgba(255, 255, 255, 0.15);
+
+  /* Override Tailwind v4 color variables for indigo and sky to map to primary/secondary colors */
+  --color-indigo-50: color-mix(in srgb, var(--primary-color) 8%, #ffffff);
+  --color-indigo-100: color-mix(in srgb, var(--primary-color) 15%, #ffffff);
+  --color-indigo-200: color-mix(in srgb, var(--primary-color) 25%, #ffffff);
+  --color-indigo-300: color-mix(in srgb, var(--primary-color) 40%, #ffffff);
+  --color-indigo-400: color-mix(in srgb, var(--primary-color) 60%, #ffffff);
+  --color-indigo-500: var(--primary-color);
+  --color-indigo-600: color-mix(in srgb, var(--primary-color) 85%, #000000);
+  --color-indigo-700: color-mix(in srgb, var(--primary-color) 70%, #000000);
+  --color-indigo-800: color-mix(in srgb, var(--primary-color) 55%, #000000);
+  --color-indigo-900: color-mix(in srgb, var(--primary-color) 40%, #000000);
+  --color-indigo-950: color-mix(in srgb, var(--primary-color) 25%, #000000);
+
+  --color-sky-50: color-mix(in srgb, var(--secondary-color) 8%, #ffffff);
+  --color-sky-100: color-mix(in srgb, var(--secondary-color) 15%, #ffffff);
+  --color-sky-200: color-mix(in srgb, var(--secondary-color) 25%, #ffffff);
+  --color-sky-300: color-mix(in srgb, var(--secondary-color) 40%, #ffffff);
+  --color-sky-400: color-mix(in srgb, var(--secondary-color) 60%, #ffffff);
+  --color-sky-500: var(--secondary-color);
+  --color-sky-600: color-mix(in srgb, var(--secondary-color) 85%, #000000);
+  --color-sky-700: color-mix(in srgb, var(--secondary-color) 70%, #000000);
+  --color-sky-800: color-mix(in srgb, var(--secondary-color) 55%, #000000);
+  --color-sky-900: color-mix(in srgb, var(--secondary-color) 40%, #000000);
+  --color-sky-950: color-mix(in srgb, var(--secondary-color) 25%, #000000);
 }
 
+/* Light Theme Variables & Slate Inversion */
 html.theme-light {
-  /* Light Mode Slate Scale Overrides */
-  --color-slate-950: #f8fafc;
-  --color-slate-900: #ffffff;
-  --color-slate-800: #f1f5f9;
-  --color-slate-700: #e2e8f0;
-  --color-slate-600: #cbd5e1;
-  --color-slate-505: #94a3b8;
-  --color-slate-500: #94a3b8;
-  --color-slate-400: #64748b;
-  --color-slate-300: #475569;
-  --color-slate-200: #334155;
-  --color-slate-100: #1e293b;
-  --color-slate-50: #0f172a;
+  --bg-primary: #f8fafc;
+  --text-primary: #020617;
+  --text-secondary: #475569;
+  
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --glass-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.05);
+  
+  --input-bg: rgba(255, 255, 255, 0.95);
+  --border-color: rgba(15, 23, 42, 0.08);
 
-  /* Component Glass Variables (Light Mode) */
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --border-color: rgba(0, 0, 0, 0.06);
-  --glass-shadow: rgba(15, 23, 42, 0.05);
-  --premium-glow-1: rgba(79, 70, 229, 0.03);
-  --premium-glow-2: rgba(14, 165, 233, 0.02);
+  --chart-text: #475569;
+  --chart-grid: rgba(15, 23, 42, 0.05);
+
+  /* Canvas specific variables */
+  --canvas-dot: rgba(15, 23, 42, 0.08);
+  --lane-fill-opacity: 0.12;
+  --lane-border: rgba(15, 23, 42, 0.22);
+  --node-default-bg: rgba(255, 255, 255, 0.95);
+  --node-default-border: rgba(15, 23, 42, 0.15);
+
+  /* Invert slate colors for light mode to preserve Tailwind classes */
+  --color-slate-950: #f8fafc;
+  --color-slate-900: #f1f5f9;
+  --color-slate-800: #e2e8f0;
+  --color-slate-700: #cbd5e1;
+  --color-slate-600: #94a3b8;
+  --color-slate-500: #64748b; /* High-contrast labels */
+  --color-slate-400: #475569; /* High-contrast labels */
+  --color-slate-300: #334155;
+  --color-slate-200: #1e293b;
+  --color-slate-100: #0f172a;
+  --color-slate-50: #020617;
+
+  /* Mix indigo/sky text scales with black in Light Mode so they are readable on white bg */
+  --color-indigo-300: color-mix(in srgb, var(--primary-color) 80%, #000000);
+  --color-indigo-400: color-mix(in srgb, var(--primary-color) 90%, #000000);
+  --color-sky-300: color-mix(in srgb, var(--secondary-color) 80%, #000000);
+  --color-sky-400: color-mix(in srgb, var(--secondary-color) 90%, #000000);
+
+  /* Override text-white where it shouldn't show as white in Light Mode */
+  .text-white:not(.btn, .badge, [class*="bg-indigo"], [class*="bg-sky"], [class*="bg-emerald"], [class*="bg-red"], [class*="bg-gradient"]) {
+    color: var(--color-slate-50) !important;
+  }
 }
 
 html, body {
@@ -48,8 +107,8 @@ html, body {
   margin: 0;
   padding: 0;
   font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: var(--color-slate-950, #020617);
-  color: var(--color-slate-50, #f8fafc);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   overflow-x: hidden;
   overflow-y: auto;
   transition: background-color 0.3s ease, color 0.3s ease;
@@ -72,16 +131,16 @@ html, body {
 .glass {
   background: var(--glass-bg);
   backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 8px 32px 0 var(--glass-shadow);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
   transition: background 0.3s ease, border 0.3s ease, box-shadow 0.3s ease;
 }
 
 .bg-premium {
-  background: radial-gradient(circle at top left, var(--premium-glow-1), transparent 40%),
-              radial-gradient(circle at bottom right, var(--premium-glow-2), transparent 40%),
-              var(--color-slate-950, #020617);
-  transition: background-color 0.3s ease;
+  background: radial-gradient(circle at top left, color-mix(in srgb, var(--primary-color) 8%, transparent), transparent 40%),
+              radial-gradient(circle at bottom right, color-mix(in srgb, var(--secondary-color) 5%, transparent), transparent 40%),
+              var(--bg-primary);
+  transition: background 0.3s ease;
 }
 
 /* ─── Typography ─── */
@@ -110,3 +169,24 @@ h1, h2, h3, h4, .font-heading {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(99, 102, 241, 0.3);
 }
+
+/* ─── Designer Canvas Layout Fix ─── */
+app-designer-canvas {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Scoping corrected: styles moved to designer-canvas.component.css */
+
+/* ─── Light Mode Overrides for Translucent White Borders & Dividers ─── */
+html.theme-light .border-white\/5 { border-color: rgba(15, 23, 42, 0.08) !important; }
+html.theme-light .border-white\/10 { border-color: rgba(15, 23, 42, 0.14) !important; }
+html.theme-light .border-white\/20 { border-color: rgba(15, 23, 42, 0.22) !important; }
+html.theme-light .border-white\/30 { border-color: rgba(15, 23, 42, 0.35) !important; }
+
+/* In case of dividing lines */
+html.theme-light .divide-white\/5 > * + * { border-color: rgba(15, 23, 42, 0.08) !important; }
+html.theme-light .divide-white\/10 > * + * { border-color: rgba(15, 23, 42, 0.14) !important; }
+

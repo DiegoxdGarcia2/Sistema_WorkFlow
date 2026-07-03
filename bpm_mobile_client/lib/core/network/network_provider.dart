@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'dart:convert';
+import 'app_config.dart';
 
 class AuthTokenNotifier extends Notifier<String?> {
   @override
@@ -91,7 +92,7 @@ final clientIdProvider = NotifierProvider<ClientIdNotifier, String?>(() => Clien
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
-      baseUrl: kIsWeb ? 'http://localhost:8080/api' : 'http://192.168.100.31:8080/api', 
+      baseUrl: AppConfig.apiUrl, 
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       headers: {

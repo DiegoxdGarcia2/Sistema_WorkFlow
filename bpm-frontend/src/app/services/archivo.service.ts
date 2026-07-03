@@ -10,9 +10,12 @@ export class ArchivoService {
 
   constructor(private http: HttpClient) {}
 
-  subir(file: File): Observable<any> {
+  subir(file: File, tramiteId?: string): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
+    if (tramiteId) {
+      formData.append('tramiteId', tramiteId);
+    }
     return this.http.post(`${this.baseUrl}/upload`, formData);
   }
 

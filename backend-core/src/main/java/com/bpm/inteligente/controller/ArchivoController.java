@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.HandlerMapping;
 
 import com.bpm.inteligente.service.S3StorageService;
+import com.bpm.inteligente.service.S3KeyBuilderService;
 import com.bpm.inteligente.domain.DocumentoVersionado;
 import com.bpm.inteligente.repository.DocumentoVersionadoRepository;
 
@@ -29,11 +30,13 @@ import java.util.UUID;
 public class ArchivoController {
 
     private final S3StorageService s3StorageService;
+    private final S3KeyBuilderService s3KeyBuilder;
     private final DocumentoVersionadoRepository documentoRepository;
     private final TramiteRepository tramiteRepository;
 
-    public ArchivoController(S3StorageService s3StorageService, DocumentoVersionadoRepository documentoRepository, TramiteRepository tramiteRepository) {
+    public ArchivoController(S3StorageService s3StorageService, S3KeyBuilderService s3KeyBuilder, DocumentoVersionadoRepository documentoRepository, TramiteRepository tramiteRepository) {
         this.s3StorageService = s3StorageService;
+        this.s3KeyBuilder = s3KeyBuilder;
         this.documentoRepository = documentoRepository;
         this.tramiteRepository = tramiteRepository;
     }
@@ -62,13 +65,15 @@ public class ArchivoController {
 
             String key;
             if (tramiteId != null && !tramiteId.trim().isEmpty()) {
-                Tramite tramite = tramiteRepository.findById(tramiteId)
-                        .orElseThrow(() -> new ResourceNotFoundException("Tramite", "id", tramiteId));
-                String clienteId = tramite.getClienteId() != null ? tramite.getClienteId() : "sin-cliente";
-                String uuid = UUID.randomUUID().toString();
-                // tenants/{tenantId}/clientes/{clienteId}/politicas/{politicaId}/tramites/{tramiteId}/{uuid}_{filename}
-                key = String.format("tenants/%s/clientes/%s/politicas/%s/tramites/%s/%s_%s",
-                        tramite.getTenantId(), clienteId, tramite.getPoliticaId(), tramite.getId(), uuid, originalName);
+                Optional<Tramite> tramiteOpt = tramiteRepository.findById(tramiteId);
+                if (tramiteOpt.isPresent()) {
+                    // Genera: tenants/CRE/clientes/Diego_Garcia/politicas/Instalacion_Medidor/tramites/CRE-MED-001/{filename}
+                    key = s3KeyBuilder.buildKey(tramiteOpt.get(), originalName);
+                } else {
+                    // Tramite aún no encontrado (ej: formulario dinámico) → usar ruta genérica con tramiteId
+                    System.out.println("⚠️ Tramite no encontrado para id: " + tramiteId + ". Usando ruta genérica.");
+                    key = "uploads/" + tramiteId + "/" + UUID.randomUUID().toString().substring(0, 8) + "_" + originalName;
+                }
             } else {
                 key = UUID.randomUUID().toString() + ext;
             }
@@ -91,7 +96,9 @@ public class ArchivoController {
                     .build());
         } catch (Exception e) {
             System.err.println("❌ ERROR en subida S3: " + e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(java.util.Map.of("error", "Error al subir archivo: " + e.getMessage()));
         }
     }
 
@@ -117,11 +124,8 @@ public class ArchivoController {
 
             Tramite tramite = tramiteRepository.findById(tramiteId)
                     .orElseThrow(() -> new ResourceNotFoundException("Tramite", "id", tramiteId));
-            String clienteId = tramite.getClienteId() != null ? tramite.getClienteId() : "sin-cliente";
-            String uuid = UUID.randomUUID().toString();
-            // tenants/{tenantId}/clientes/{clienteId}/politicas/{politicaId}/tramites/{tramiteId}/{uuid}_{filename}
-            String key = String.format("tenants/%s/clientes/%s/politicas/%s/tramites/%s/%s_%s",
-                    tramite.getTenantId(), clienteId, tramite.getPoliticaId(), tramite.getId(), uuid, originalName);
+            // Genera: tenants/CRE/clientes/Diego_Garcia/politicas/Instalacion_Medidor/tramites/CRE-MED-001/{filename}
+            String key = s3KeyBuilder.buildKey(tramite, originalName);
 
             s3StorageService.uploadFile(key, file.getBytes(), file.getContentType());
             String localDownloadUrl = "/api/archivos/download/" + key;
@@ -140,7 +144,9 @@ public class ArchivoController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
         } catch (Exception e) {
             System.err.println("❌ ERROR en subida cliente: " + e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(java.util.Map.of("error", "Error al subir archivo cliente: " + e.getMessage()));
         }
     }
 
@@ -201,6 +207,28 @@ public class ArchivoController {
         } catch (Exception e) {
             System.err.println("❌ Error en download S3: " + e.getMessage());
             return ResponseEntity.notFound().build();
+        }
+    }
+
+    @GetMapping("/test-s3")
+    public ResponseEntity<?> testS3() {
+        try {
+            boolean mock = s3StorageService.isMockMode();
+            String testKey = "_test/ping-" + System.currentTimeMillis() + ".txt";
+            if (!mock) {
+                s3StorageService.uploadFile(testKey, "test".getBytes(), "text/plain");
+                s3StorageService.deleteFile(testKey);
+            }
+            return ResponseEntity.ok(java.util.Map.of(
+                "s3_status", mock ? "MOCK_MODE" : "CONNECTED",
+                "mock", mock,
+                "test_upload", mock ? "skipped" : "success"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(java.util.Map.of(
+                "s3_status", "ERROR",
+                "error", e.getMessage()
+            ));
         }
     }
 

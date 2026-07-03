@@ -6,6 +6,7 @@ import 'package:stomp_dart_client/stomp_dart_client.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../core/models/tramite_model.dart';
 import '../../core/network/network_provider.dart';
+import '../../core/network/app_config.dart';
 import '../../core/navigation/navigation_service.dart';
 import '../sync/sync_worker.dart';
 import '../tramites/tramite_tracking_screen.dart';
@@ -130,10 +131,8 @@ class WebsocketNotificationService {
       _client = null;
     }
 
-    // Configurar URL según la plataforma
-    final String wsUrl = kIsWeb 
-        ? 'ws://localhost:8080/ws-bpm' 
-        : 'ws://192.168.100.31:8080/ws-bpm';
+    // Configurar URL según el entorno (producción o local)
+    final String wsUrl = AppConfig.wsUrl;
 
     debugPrint('[WS-Notification] Conectando a $wsUrl para cliente $clienteId...');
 

@@ -118,7 +118,7 @@ export class ChatbotComponent implements AfterViewChecked {
           }
 
           if (data.rutaNavegacion) {
-            console.log('🚚 Chatbot: Navegando a:', data.rutaNavegacion);
+            console.log('[Chatbot] Navegando a:', data.rutaNavegacion);
             this.navigate(data.rutaNavegacion);
           }
           

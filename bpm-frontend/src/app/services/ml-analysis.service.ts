@@ -107,6 +107,11 @@ export class MlAnalysisService {
   }
 
   checkAiHealth(): Observable<any> {
+    // In production, we use a dedicated nginx proxy path to the AI microservice root.
+    // In local dev, we call the Python service directly.
+    if (environment.production) {
+      return this.http.get<any>('/ai-health/');
+    }
     const url = environment.aiServiceUrl.replace('/api/ai', '');
     return this.http.get<any>(`${url}/`);
   }

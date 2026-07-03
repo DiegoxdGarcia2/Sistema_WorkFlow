@@ -39,6 +39,9 @@ public class MegaDatabaseSeeder {
     @Value("${ai.microservice.url:http://localhost:8000}")
     private String aiMicroserviceUrl;
 
+    @Value("${ai.microservice.secret:dev_secret_local_only}")
+    private String aiApiSecret;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
     // Tenant 1: CRE (Electricity)
@@ -783,7 +786,10 @@ public class MegaDatabaseSeeder {
         // Disparar entrenamiento de TensorFlow en el microservicio Python
         try {
             log.info("🧠 Solicitando re-entrenamiento de TensorFlow al microservicio Python...");
-            restTemplate.postForEntity(aiMicroserviceUrl + "/api/ai/ml/train", null, String.class);
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.set("X-API-Secret", aiApiSecret);
+            org.springframework.http.HttpEntity<Void> entity = new org.springframework.http.HttpEntity<>(headers);
+            restTemplate.postForEntity(aiMicroserviceUrl + "/api/ai/train", entity, String.class);
             log.info("✅ Re-entrenamiento de TensorFlow completado con éxito.");
         } catch (Exception e) {
             log.warn("⚠️ No se pudo disparar el entrenamiento de TensorFlow: {}", e.getMessage());

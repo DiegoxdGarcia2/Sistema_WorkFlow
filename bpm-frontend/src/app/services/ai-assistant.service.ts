@@ -18,7 +18,7 @@ export interface AiResponse {
   providedIn: 'root'
 })
 export class AiAssistantService {
-  private apiUrl = `${environment.apiUrl}/ai`;
+  private apiUrl = `${environment.apiUrl}/asistente`;
   private recognition: any;
 
   private isListening = false;

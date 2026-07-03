@@ -12,7 +12,7 @@ import { AuthService } from '../../services/auth.service';
     <div class="space-y-6 animate-in fade-in duration-500">
       <div class="flex items-center justify-between">
         <div>
-          <h2 class="text-2xl font-black text-white tracking-tight">Plantillas de Formularios</h2>
+          <h2 class="text-2xl font-black text-slate-100 tracking-tight">Plantillas de Formularios</h2>
           <p class="text-slate-500 text-sm">Crea y gestiona estructuras de datos reutilizables.</p>
         </div>
         <button (click)="nuevoTemplate()" class="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-xl shadow-indigo-500/20 transition-all active:scale-95 flex items-center gap-2">
@@ -23,21 +23,23 @@ import { AuthService } from '../../services/auth.service';
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         @for (t of fs.templates(); track t.id) {
-          <div class="glass p-6 rounded-[2rem] hover:border-indigo-500/50 transition-all group relative overflow-hidden">
-            <div class="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-all flex gap-2">
-              <button (click)="editarTemplate(t)" class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
-              <button (click)="eliminarTemplate(t.id!)" class="p-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          <div class="p-8 rounded-[2.5rem] glass hover:border-indigo-500/50 hover:shadow-indigo-500/10 transition-all group relative overflow-hidden cursor-pointer shadow-xl flex flex-col min-h-[220px]" (click)="editarTemplate(t)">
+            <div class="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-all flex gap-2 z-20">
+              <button (click)="$event.stopPropagation(); editarTemplate(t)" class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-slate-100 transition-all border border-white/5 shadow-xl cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+              </button>
+              <button (click)="$event.stopPropagation(); eliminarTemplate(t.id!)" class="p-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all border border-red-500/20 shadow-xl cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
               </button>
             </div>
-            <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <div class="w-16 h-16 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-6 group-hover:bg-indigo-500 group-hover:text-white transition-all duration-500">
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
             </div>
-            <h3 class="text-lg font-bold text-white mb-1">{{ t.nombre }}</h3>
-            <p class="text-slate-500 text-xs line-clamp-2 mb-4">{{ t.descripcion || 'Sin descripción' }}</p>
-            <div class="flex items-center gap-2">
-              <span class="text-[10px] px-2 py-1 rounded-lg bg-slate-800 text-slate-400 font-bold uppercase tracking-wider">{{ t.campos.length }} Campos</span>
+            <h3 class="text-xl font-black text-slate-100 mb-2 tracking-tight leading-snug">{{ t.nombre }}</h3>
+            <p class="text-slate-500 text-xs line-clamp-2 mb-6 font-medium leading-relaxed">{{ t.descripcion || 'Sin descripción' }}</p>
+            <div class="flex items-center justify-between mt-auto pt-6 border-t border-white/5">
+              <span class="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em]">{{ t.campos.length }} Campos</span>
+              <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-lg border border-indigo-500/20">Plantilla</span>
             </div>
           </div>
         } @empty {
@@ -62,7 +64,7 @@ import { AuthService } from '../../services/auth.service';
             <!-- Header -->
             <div class="px-10 py-8 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
               <div>
-                <h2 class="text-xl font-black text-white">{{ editandoId ? 'Editar Plantilla' : 'Nueva Plantilla' }}</h2>
+                <h2 class="text-xl font-black text-slate-100">{{ editandoId ? 'Editar Plantilla' : 'Nueva Plantilla' }}</h2>
                 <p class="text-xs text-slate-500 mt-1">Configura los campos y reglas del formulario.</p>
               </div>
               <button (click)="mostrarModal = false" class="w-12 h-12 rounded-2xl flex items-center justify-center text-slate-500 hover:bg-white/5 transition-all">
@@ -76,11 +78,11 @@ import { AuthService } from '../../services/auth.service';
                 <div class="col-span-1 space-y-6">
                   <div>
                     <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Nombre de Plantilla</label>
-                    <input [(ngModel)]="template.nombre" placeholder="Ej. Solicitud de Vacaciones" class="w-full px-5 py-4 rounded-2xl bg-slate-800/40 border border-white/5 text-sm text-white focus:border-indigo-500 outline-none transition-all">
+                    <input [(ngModel)]="template.nombre" placeholder="Ej. Solicitud de Vacaciones" class="w-full px-5 py-4 rounded-2xl bg-slate-800/40 border border-white/5 text-sm text-slate-100 focus:border-indigo-500 outline-none transition-all">
                   </div>
                   <div>
                     <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Descripción</label>
-                    <textarea [(ngModel)]="template.descripcion" rows="4" placeholder="¿Para qué sirve este formulario?" class="w-full px-5 py-4 rounded-2xl bg-slate-800/40 border border-white/5 text-sm text-white focus:border-indigo-500 outline-none transition-all resize-none"></textarea>
+                    <textarea [(ngModel)]="template.descripcion" rows="4" placeholder="¿Para qué sirve este formulario?" class="w-full px-5 py-4 rounded-2xl bg-slate-800/40 border border-white/5 text-sm text-slate-100 focus:border-indigo-500 outline-none transition-all resize-none"></textarea>
                   </div>
                 </div>
 
@@ -101,11 +103,11 @@ import { AuthService } from '../../services/auth.service';
                         <div class="flex-1 grid grid-cols-2 gap-4">
                           <div class="col-span-1">
                             <label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Etiqueta (Label)</label>
-                            <input [(ngModel)]="c.label" placeholder="Ej. Fecha de Salida" (input)="c.key = slugify(c.label)" class="w-full px-4 py-2.5 rounded-xl bg-slate-900/50 border border-white/5 text-xs text-white outline-none">
+                            <input [(ngModel)]="c.label" placeholder="Ej. Fecha de Salida" (input)="c.key = slugify(c.label)" class="w-full px-4 py-2.5 rounded-xl bg-slate-900/50 border border-white/5 text-xs text-slate-100 outline-none">
                           </div>
                           <div class="col-span-1">
                             <label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Tipo de Dato</label>
-                            <select [(ngModel)]="c.type" class="w-full px-4 py-2.5 rounded-xl bg-slate-900/50 border border-white/5 text-xs text-white outline-none">
+                            <select [(ngModel)]="c.type" class="w-full px-4 py-2.5 rounded-xl bg-slate-900/50 border border-white/5 text-xs text-slate-100 outline-none">
                               <option value="text">Texto Corto</option>
                               <option value="textarea">Texto Largo</option>
                               <option value="number">Número</option>
@@ -117,7 +119,7 @@ import { AuthService } from '../../services/auth.service';
                           @if (c.type === 'select') {
                             <div class="col-span-2">
                               <label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Opciones (separadas por coma)</label>
-                              <input [ngModel]="c.options?.join(', ')" (ngModelChange)="setOptions(c, $event)" placeholder="Opción 1, Opción 2..." class="w-full px-4 py-2.5 rounded-xl bg-slate-900/50 border border-white/5 text-xs text-white outline-none">
+                              <input [ngModel]="c.options?.join(', ')" (ngModelChange)="setOptions(c, $event)" placeholder="Opción 1, Opción 2..." class="w-full px-4 py-2.5 rounded-xl bg-slate-900/50 border border-white/5 text-xs text-slate-100 outline-none">
                             </div>
                           }
                           <div class="col-span-2 flex flex-wrap items-center gap-6">
@@ -129,16 +131,16 @@ import { AuthService } from '../../services/auth.service';
                             @if (c.type === 'number') {
                               <div class="flex items-center gap-3">
                                 <span class="text-[9px] font-bold text-slate-500 uppercase">Min</span>
-                                <input type="number" [(ngModel)]="c.validations!.min" class="w-16 px-2 py-1 rounded bg-slate-900/50 border border-white/5 text-[10px] text-white outline-none">
+                                <input type="number" [(ngModel)]="c.validations!.min" class="w-16 px-2 py-1 rounded bg-slate-900/50 border border-white/5 text-[10px] text-slate-100 outline-none">
                                 <span class="text-[9px] font-bold text-slate-500 uppercase">Max</span>
-                                <input type="number" [(ngModel)]="c.validations!.max" class="w-16 px-2 py-1 rounded bg-slate-900/50 border border-white/5 text-[10px] text-white outline-none">
+                                <input type="number" [(ngModel)]="c.validations!.max" class="w-16 px-2 py-1 rounded bg-slate-900/50 border border-white/5 text-[10px] text-slate-100 outline-none">
                               </div>
                             }
                             
                             @if (c.type === 'text' || c.type === 'textarea') {
                               <div class="flex items-center gap-3">
                                 <span class="text-[9px] font-bold text-slate-500 uppercase">Regex</span>
-                                <input [(ngModel)]="c.validations!.pattern" placeholder="^[0-9]+$" class="w-32 px-2 py-1 rounded bg-slate-900/50 border border-white/5 text-[10px] text-white outline-none">
+                                <input [(ngModel)]="c.validations!.pattern" placeholder="^[0-9]+$" class="w-32 px-2 py-1 rounded bg-slate-900/50 border border-white/5 text-[10px] text-slate-100 outline-none">
                               </div>
                             }
                           </div>
@@ -154,7 +156,7 @@ import { AuthService } from '../../services/auth.service';
             </div>
 
             <div class="px-10 py-8 border-t border-white/5 bg-white/[0.02] flex gap-4">
-              <button (click)="mostrarModal = false" class="flex-1 py-4 text-sm font-bold text-slate-500 hover:text-white transition-all">Descartar</button>
+              <button (click)="mostrarModal = false" class="flex-1 py-4 text-sm font-bold text-slate-500 hover:text-slate-100 transition-all">Descartar</button>
               <button (click)="guardar()" class="flex-[2] py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-xl shadow-indigo-500/20 transition-all active:scale-95">
                 Guardar Plantilla
               </button>
@@ -165,7 +167,6 @@ import { AuthService } from '../../services/auth.service';
     </div>
   `,
   styles: [`
-    .glass { background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.08); }
     .custom-scrollbar::-webkit-scrollbar { width: 4px; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
   `]

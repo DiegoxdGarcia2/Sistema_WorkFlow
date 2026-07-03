@@ -58,7 +58,7 @@ public class MlAnalysisService {
      */
     public AnalysisResultDTO analyzeRealData(String politicaId) {
         try {
-            String url = aiMicroserviceUrl + "/api/ai/ml/analyze-bottlenecks";
+            String url = aiMicroserviceUrl + "/api/ai/analyze-bottlenecks";
             log.info("Delegando análisis ML al microservicio Python: {}", url);
 
             HttpHeaders headers = new HttpHeaders();
@@ -93,7 +93,7 @@ public class MlAnalysisService {
      */
     public InsightsResultDTO obtenerInsights(String politicaId) {
         try {
-            UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(aiMicroserviceUrl + "/api/ai/ml/insights");
+            UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(aiMicroserviceUrl + "/api/ai/insights");
             if (politicaId != null && !politicaId.isEmpty() && !politicaId.equals("null")) {
                 builder.queryParam("politicaId", politicaId);
             }

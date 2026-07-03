@@ -23,6 +23,9 @@ gtk3/
 *.pem
 *firebase-service-account.json
 *google-services.json
+cloudrun-env.yaml
+*env.yaml
+login.json
 
 # ── IDEs ──
 .idea/

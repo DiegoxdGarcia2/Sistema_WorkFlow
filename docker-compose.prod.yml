@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:alpine
+    container_name: bpm-redis-prod
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_prod:/data
+    command: redis-server --appendonly yes
+
+  backend-core:
+    build:
+      context: ./backend-core
+      dockerfile: Dockerfile
+    container_name: bpm-backend-core-prod
+    restart: always
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./backend-core/.env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CORS_ALLOWED_ORIGIN=*
+    depends_on:
+      - redis
+
+  ai-microservice:
+    build:
+      context: ./ai-microservice
+      dockerfile: Dockerfile
+    container_name: bpm-ai-microservice-prod
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./ai-microservice/.env
+
+  bpm-frontend:
+    build:
+      context: ./bpm-frontend
+      dockerfile: Dockerfile
+    container_name: bpm-frontend-prod
+    restart: always
+    ports:
+      - "80:80"
+    environment:
+      - PORT=80
+      - BACKEND_URL=http://backend-core:8080
+      - AI_SERVICE_URL=http://ai-microservice:8000
+    depends_on:
+      - backend-core
+      - ai-microservice
+
+volumes:
+  redis_data_prod:

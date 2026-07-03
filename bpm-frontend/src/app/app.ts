@@ -55,7 +55,6 @@ export class App implements OnInit {
   toggleThemePanel() {
     this.showThemePanel = !this.showThemePanel;
   }
-
   setMode(dark: boolean) {
     this.isDark = dark;
     this.applyTheme();
